@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT n.nspname || '.' || c.relname AS \"qualified!\"\n         FROM pg_trigger t\n         JOIN pg_class c ON c.oid = t.tgrelid\n         JOIN pg_namespace n ON n.oid = c.relnamespace\n         JOIN pg_proc p ON p.oid = t.tgfoid\n         JOIN pg_namespace pn ON pn.oid = p.pronamespace\n         WHERE NOT t.tgisinternal AND pn.nspname = 'audit' AND p.proname = 'record'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "qualified!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "66cd0fe6c7a5a44e2dd963929d46d6427cb7f19dbc9af9e90f17cc03ff3b75c5"
+}

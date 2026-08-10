@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.price_proposals (application_id, amount) VALUES ($1, 42.00)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fe2bb12f614c1c0a57c1a572db6406b79067599aa18ec299a2580d94a9393f80"
+}

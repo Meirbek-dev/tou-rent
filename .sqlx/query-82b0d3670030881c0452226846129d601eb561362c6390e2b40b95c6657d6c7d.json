@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH overdue AS (\n             UPDATE core.obligations o\n             SET status = 'overdue', escalated_at = core.now()\n             WHERE o.id IN (\n               SELECT id FROM core.obligations\n               WHERE status = 'pending' AND due_at < core.now() AND escalated_at IS NULL\n               ORDER BY due_at\n               LIMIT $1\n               FOR UPDATE SKIP LOCKED\n             )\n             RETURNING o.id, o.action, o.rule_ref, o.assignee_role, o.tender_id, o.due_at\n           )\n           SELECT overdue.id AS \"obligation_id!\", overdue.action AS \"action!\",\n                  overdue.rule_ref AS \"rule_ref!\", overdue.tender_id,\n                  t.title AS \"tender_title?\", overdue.due_at AS \"due_at!\",\n                  rg.user_id AS \"recipient_id!\"\n           FROM overdue\n           JOIN core.role_grants rg ON rg.role = overdue.assignee_role\n           JOIN core.users u ON u.id = rg.user_id AND u.is_active\n           LEFT JOIN core.tenders t ON t.id = overdue.tender_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "obligation_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "action!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "rule_ref!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "tender_title?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "due_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "recipient_id!",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "82b0d3670030881c0452226846129d601eb561362c6390e2b40b95c6657d6c7d"
+}

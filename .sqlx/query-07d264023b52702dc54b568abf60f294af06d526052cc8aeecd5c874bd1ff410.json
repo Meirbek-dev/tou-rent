@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_board_decisions\n               (special_request_id, decision, rationale, decided_by)\n             VALUES ($1, $2::text::core.special_decision, $3, $4)\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "07d264023b52702dc54b568abf60f294af06d526052cc8aeecd5c874bd1ff410"
+}

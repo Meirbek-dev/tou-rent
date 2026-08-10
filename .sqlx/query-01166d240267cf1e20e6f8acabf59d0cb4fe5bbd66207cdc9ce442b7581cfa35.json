@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.land_applications SET status = 'withdrawn'\n             WHERE id = $1 AND investor_id = $2 AND status = 'submitted'\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "01166d240267cf1e20e6f8acabf59d0cb4fe5bbd66207cdc9ce442b7581cfa35"
+}

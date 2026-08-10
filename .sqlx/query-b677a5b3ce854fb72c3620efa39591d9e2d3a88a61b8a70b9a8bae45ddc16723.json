@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.object_id, o.name, o.address, o.area_m2,\n                    p.cadastral_number, p.designation, d.label_ru AS designation_label,\n                    p.permitted_use, p.min_investment, p.published_at\n             FROM core.land_plots p\n             JOIN core.objects o ON o.id = p.object_id\n             JOIN refdata.land_designations d ON d.code = p.designation ORDER BY o.name LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "object_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "address",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "area_m2",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "cadastral_number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "designation",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "designation_label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "permitted_use",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "min_investment",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 9,
+        "name": "published_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "b677a5b3ce854fb72c3620efa39591d9e2d3a88a61b8a70b9a8bae45ddc16723"
+}

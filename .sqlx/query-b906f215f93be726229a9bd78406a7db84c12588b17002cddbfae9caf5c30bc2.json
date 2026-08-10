@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, kind, title, file_key, source_table, source_id,\n                    occurred_at, retain_until\n             FROM core.dossier_items WHERE tender_id = $1 ORDER BY occurred_at, kind",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "file_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "source_table",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "source_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "occurred_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "retain_until",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "b906f215f93be726229a9bd78406a7db84c12588b17002cddbfae9caf5c30bc2"
+}

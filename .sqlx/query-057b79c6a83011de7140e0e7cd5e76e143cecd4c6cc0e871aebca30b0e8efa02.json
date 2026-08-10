@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.special_board_decisions SET pdf_key = 'k' WHERE special_request_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "057b79c6a83011de7140e0e7cd5e76e143cecd4c6cc0e871aebca30b0e8efa02"
+}

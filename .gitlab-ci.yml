@@ -1,0 +1,391 @@
+# Пайплайн = ревью (арх. § 3, § 8). Защищенный путь: правки - только MR
+# с аппрувом инженера. Все гейты G1–G16 работают в error-режиме: красный
+# гейт означает «не влито», допусков allow_failure не осталось (T31).
+#
+# Пайплайн не прогонялся на живом раннере (self-managed GitLab еще не
+# подключен, A-006/A-063): проверить версии образов и доступность сервисов
+# при первом запуске. Первый прогон - задача T45 (ТЗ v2 § 5, NFR-11).
+
+stages: [check, test, verify]
+
+# Без этого блока GitLab заводит только пайплайны веток: события merge request
+# он обрабатывает лишь тогда, когда о них попросили явно. Отсюда до T74 следовало
+# то, что в проекте с моделью «пайплайн = ревью» никто не замечал: переменная
+# CI_MERGE_REQUEST_TARGET_BRANCH_NAME не заполнялась никогда, и гейты по диффу
+# MR (G4 squawk, G2/SQL, G9 мутации) уходили в ветку «в MR ничего нового» -
+# зеленые и ничего не проверившие. База сравнения теперь считается общим
+# скриптом infra/ci/diff-base.sh и не имеет молчаливого запасного пути.
+#
+# Второе правило снимает задвоение: пока MR открыт, пайплайн ветки не нужен -
+# по тем же коммитам уже идет пайплайн merge request.
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS
+      when: never
+    - if: $CI_COMMIT_BRANCH
+
+default:
+  interruptible: true
+
+variables:
+  # Дев-значения сервисов пайплайна: снаружи CI они недоступны
+  POSTGRES_DB: tou_rent
+  POSTGRES_USER: tou_rent
+  POSTGRES_PASSWORD: tou_rent_ci
+  DATABASE_URL: postgres://tou_rent:tou_rent_ci@postgres:5432/tou_rent
+  TESTKIT_DATABASE_URL: postgres://tou_rent:tou_rent_ci@postgres:5432/tou_rent
+  REDIS_URL: redis://redis:6379
+  # INV-040 (п. 40): без ключа цены не читаются и не пишутся - в CI ключ свой
+  PRICE_ENCRYPTION_KEY: tou_rent_ci_price_key
+  S3_ENDPOINT: http://rustfs:9000
+  S3_ACCESS_KEY: tou_rent
+  S3_SECRET_KEY: tou_rent_ci
+  S3_BUCKET_DOSSIERS: dossiers
+  # Клиент RustFS: в CI им заводятся бакеты перед прогоном. Версия пиньована
+  # по тем же соображениям, что и образы (T70)
+  RC_VERSION: "0.1.31"
+  # Версии инструментов, которые пайплайн ставит сам. Пиньованы по той же
+  # причине, что и образы (T70): иначе релиз у стороннего проекта краснит
+  # гейт без единого коммита в этом репозитории, и отличить «сломали код»
+  # от «сменилось окружение» нельзя
+  SQUAWK_VERSION: "2.62.0"
+  SQLX_CLI_VERSION: "0.8.6"
+  CARGO_MUTANTS_VERSION: "27.1.0"
+  CARGO_DENY_VERSION: "0.20.2"
+  TRIVY_VERSION: "v0.73.0"
+  SCHEMATHESIS_VERSION: "4.24.3"
+  # Тот же bun, что закреплен в package.json (packageManager)
+  BUN_VERSION: "1.3.14"
+  RUST_TOOLCHAIN: "1.97"
+  # Кеш крейтов лежал в `.cargo/registry`, а cargo в этом образе ходит
+  # в /usr/local/cargo: путь кешировался пустым, и каждое задание выкачивало
+  # реестр заново. Теперь домом cargo служит каталог проекта - только он
+  # и попадает в кеш GitLab
+  CARGO_HOME: $CI_PROJECT_DIR/.cargo
+  # Запросы проверяются макросами sqlx по схеме (G3). Заданиям без сервиса
+  # postgres (rust-lint, db-gates, mutants, deps) живой базы взять негде,
+  # а DATABASE_URL выше задан глобально и в них недостижим - на offline-слепок
+  # sqlx сам не переключается и валит сборку. Поэтому проверка идет по `.sqlx`
+  # из репозитория; свежесть слепка стережет `sqlx prepare --check` в rust-test.
+  SQLX_OFFLINE: "true"
+
+.rust:
+  image: rust:1.97
+  # Три кеша с разным сроком жизни вместо одного общего. Реестр крейтов
+  # меняется вместе с Cargo.lock и делится всеми заданиями; собранные
+  # инструменты - вместе со своими версиями; `target/` у каждого задания
+  # свой, иначе параллельные задания перетирают кеш друг друга.
+  cache:
+    - key:
+        prefix: cargo-registry
+        files: [Cargo.lock]
+      paths: [.cargo/registry/index, .cargo/registry/cache, .cargo/git/db]
+    - key: cargo-tools-$SQUAWK_VERSION-$SQLX_CLI_VERSION-$CARGO_MUTANTS_VERSION-$CARGO_DENY_VERSION
+      # Вместе с бинарниками кешируется и опись cargo: по ней проверяется,
+      # что в кеше лежит именно нужная версия
+      paths: [.cargo/bin, .cargo/.crates.toml, .cargo/.crates2.json]
+    - key: cargo-target-$CI_JOB_NAME
+      paths: [target/]
+  before_script:
+    # Дом cargo переехал в каталог проекта (см. CARGO_HOME) - без этого
+    # поставленные инструменты не находятся по PATH
+    - export PATH="$CARGO_HOME/bin:$PATH"
+    # Сборка инструмента из исходников занимает минуты, и повторять ее ради
+    # уже лежащего в кеше бинарника незачем. Версия сверяется: кеш переживает
+    # смену пина, и молча остаться на старой версии нельзя
+    - |
+      cargo_tool() {
+        crate="$1"; version="$2"; shift 2
+        # Опись cargo, а не `--version` у бинарника: подкоманды cargo
+        # рассчитаны на вызов через `cargo <имя>` и напрямую отвечают
+        # на `--version` кто во что горазд
+        if cargo install --list | grep -q "^$crate v$version:"; then
+          echo "$crate $version - из кеша"
+        else
+          cargo install --locked "$crate" --version "$version" "$@"
+        fi
+      }
+
+.bun:
+  image: oven/bun:1.3
+  cache:
+    key:
+      prefix: bun
+      files: [bun.lock]
+    paths: [node_modules/]
+
+# Сервисы для тестов и сквозных прогонов: БД, кеш сессий, объектное хранилище
+.stack-services:
+  services:
+    - name: postgres:19beta2
+      alias: postgres
+    # Та же версия, что на обоих стендах: пайплайн проверяет ту систему,
+    # которая поедет в прод, а не соседнюю (T70)
+    - name: redis:8.10.0
+      alias: redis
+    - name: rustfs/rustfs:1.0.0-rc.1
+      alias: rustfs
+  variables:
+    RUSTFS_VOLUMES: /data
+    RUSTFS_ADDRESS: ":9000"
+    # Консоль в пайплайне не нужна: с хранилищем работает только api
+    RUSTFS_CONSOLE_ENABLE: "false"
+    RUSTFS_ACCESS_KEY: tou_rent
+    RUSTFS_SECRET_KEY: tou_rent_ci
+
+# G1–G2: формат/линт Rust; запрещенные вызовы заданы deny-линтами
+# (Cargo.toml + clippy.toml)
+rust-lint:
+  extends: .rust
+  stage: check
+  script:
+    - rustup component add rustfmt clippy
+    - cargo fmt --all --check
+    - cargo clippy --workspace --all-targets -- -D warnings
+
+# G2, вторая половина (арх. § 8, регламент А.4): глушители линтов и пропуски
+# тестов допустимы только с токеном `ALLOWED-BY-ENGINEER:<ticket>` в той же
+# строке. Компилятор такое не поймает - здесь grep.
+#
+# `.skip(` ищется только в тестовых формах JS (`it.skip`, `test.skip`,
+# `describe.skip`): в Rust `.skip(` - это `Iterator::skip`, к пропуску тестов
+# отношения не имеющий.
+suppressions:
+  stage: check
+  image: alpine:3.24.1
+  script:
+    - |
+      set -eu
+      found=$(
+        {
+          grep -rnE '#\[allow\(|#\[ignore\]' --include='*.rs' crates apps || true
+          grep -rnE 'oxlint-disable|(it|test|describe)\.skip\(' \
+            --include='*.ts' --include='*.tsx' apps packages || true
+        } | grep -v 'ALLOWED-BY-ENGINEER' || true
+      )
+      if [ -n "$found" ]; then
+        echo 'G2: глушители без токена ALLOWED-BY-ENGINEER:'
+        echo "$found"
+        exit 1
+      fi
+      echo 'G2: глушителей без токена нет'
+
+# NFR-09: секретов в репозитории нет. Trivy в job `deps` ищет их по своим
+# правилам, gitleaks - по своим; вместе они закрывают заметно больше.
+secrets:
+  stage: check
+  image: zricethezav/gitleaks:v8.30.1
+  script:
+    - gitleaks detect --source . --redact --verbose --no-banner
+
+# G3–G4: миграции. `sqlx prepare` включается вместе с макросами query!
+# (сейчас они выключены - A-003), поэтому G3 проверяет само это условие:
+# появился query! - обязаны появиться и подготовленные данные .sqlx.
+db-gates:
+  extends: .rust
+  stage: check
+  script:
+    - |
+      if grep -rn --include='*.rs' -E 'sqlx::query(_as|_scalar)?!' crates apps; then
+        test -d .sqlx || { echo "G3: есть query!-макросы, но нет .sqlx (cargo sqlx prepare)"; exit 1; }
+      fi
+    # Крейт называется `squawk`; `squawk-cli` на crates.io не существует,
+    # и установка отказывала - гейт G4 не отработал бы ни разу (T74)
+    - cargo_tool squawk "$SQUAWK_VERSION"
+    # G4: линтуются миграции, добавленные этим MR. Примененные миграции -
+    # защищенный путь и не переписываются, поэтому в выборку не попадают.
+    # База сравнения - infra/ci/diff-base.sh: он либо дает ref, либо падает.
+    # Пустой список файлов теперь означает ровно «новых миграций нет», а не
+    # «базу вычислить не смогли» - раньше эти два случая были неразличимы
+    - BASE=$(sh infra/ci/diff-base.sh)
+    - NEW=$(git diff --diff-filter=A --name-only "$BASE...HEAD" -- 'crates/db/migrations/*.sql')
+    - |
+      if [ -n "$NEW" ]; then squawk $NEW; else echo "G4: новых миграций в диффе нет"; fi
+    # G2 для SQL (NFR-03, ADR-0005): время берется из `core.now()`, а не из
+    # часов процесса. Компилятор это не поймает, а цена ошибки высокая -
+    # отметка, поставленная мимо доменных часов, расходится с журналом
+    # и сроками. Проверяются только миграции, добавленные этим MR:
+    # примененные - защищенный путь, их история не переписывается.
+    # Живой рубеж - тест `clock_single_source` по схеме поднятой БД.
+    - |
+      bare=""
+      for file in $NEW; do
+        # комментарии вырезаются до поиска: в них `now()` упоминается
+        # по делу, а нумерация строк от этого не сбивается
+        hits=$(sed 's/--.*$//' "$file" \
+          | grep -nE '(^|[^.[:alnum:]_])now\(\)' \
+          | grep -v 'core\.now()' || true)
+        if [ -n "$hits" ]; then bare="$bare$file:$hits\n"; fi
+      done
+      if [ -n "$bare" ]; then
+        echo 'G2/SQL: время мимо core.now() (NFR-03) - используйте core.now():'
+        printf '%b' "$bare"
+        exit 1
+      fi
+      echo 'G2/SQL: время в новых миграциях берется из core.now()'
+
+# G5–G7: линт/типы фронта (Vite+, A-001) + «кодоген без диффа»
+#
+# Цепочка кодогена состоит из двух звеньев, и проверяются они порознь:
+#   код (utoipa) → openapi.json - тест `crates/http/tests/openapi_sync.rs`
+#                                 в job `rust-test` (Rust в этом образе нет);
+#   openapi.json → schema.d.ts  - здесь, перегенерацией и сравнением.
+# Раньше второе звено не проверял никто: `vp check` кодоген не запускает,
+# и `git diff --exit-code` сравнивал рабочее дерево само с собой.
+web-check:
+  extends: .bun
+  stage: check
+  script:
+    - bun install --frozen-lockfile
+    - bun run codegen
+    - git diff --exit-code -- packages/api-client # G5, второе звено
+    - bunx vp check
+
+# G14: полнота переводов kk/en относительно ru - в контуре 2 это error
+# (тест apps/web/src/lib/messages.test.ts)
+web-test:
+  extends: .bun
+  stage: test
+  script:
+    - bun install --frozen-lockfile
+    - bunx vp test
+
+# G8 + G12 + G15 + G16: тесты Rust против живой БД - паритет календаря,
+# аудит-инварианты и трассировка INV идут теми же тестами testkit
+rust-test:
+  extends: [.rust, .stack-services]
+  stage: test
+  script:
+    - cargo run -p api -- migrate
+    # G3, вторая половина: слепок `.sqlx` обязан сходиться с живой схемой -
+    # иначе offline-сборки остальных заданий проверяют вчерашнюю базу.
+    # Это тот же принцип, что «кодоген без диффа» у G5, только для SQL.
+    #
+    # SQLX_OFFLINE=false задается тут же и намеренно: с глобальным "true"
+    # проверка пошла бы по тому самому слепку, который проверяет, и всегда
+    # была бы зеленой.
+    - cargo_tool sqlx-cli "$SQLX_CLI_VERSION" --no-default-features --features postgres,rustls
+    - SQLX_OFFLINE=false cargo sqlx prepare --workspace --check -- --all-targets
+    - cargo test --workspace
+
+# G9: мутационное тестирование домена по диффу; выжившая мутация =
+# недостающий тест. Ночью (schedule) прогоняется весь домен.
+#
+# Полный прогон стоит десятки минут, и до T74 он шел на каждый push в ветку:
+# переменная MR не заполнялась, и «ночная» ветка условия была единственной
+# достижимой. Теперь полный домен - это именно расписание, а всякий прочий
+# пайплайн считает дифф от базы, которую дает infra/ci/diff-base.sh.
+mutants:
+  extends: .rust
+  stage: verify
+  script:
+    - cargo_tool cargo-mutants "$CARGO_MUTANTS_VERSION"
+    - |
+      if [ "$CI_PIPELINE_SOURCE" = "schedule" ]; then
+        cargo mutants --package tou-domain --no-shuffle -- --workspace
+      else
+        BASE=$(sh infra/ci/diff-base.sh)
+        git diff "$BASE...HEAD" -- crates/domain > domain.diff
+        if [ -s domain.diff ]; then
+          cargo mutants --in-diff domain.diff --package tou-domain --no-shuffle -- --workspace
+        else
+          echo "G9: домен в этом диффе не менялся"
+        fi
+      fi
+  artifacts:
+    when: always
+    expire_in: 2 weeks
+    paths: [mutants.out/]
+
+# G10: контрактные тесты против поднятого API (Schemathesis по openapi.json)
+contract:
+  extends: [.rust, .stack-services]
+  stage: verify
+  script:
+    - apt-get update && apt-get install -y --no-install-recommends python3-pip curl
+    - pip3 install --break-system-packages "schemathesis==$SCHEMATHESIS_VERSION"
+    # Раскладка архива не документирована, поэтому бинарник ищется в дереве,
+    # а не берется по фиксированному пути
+    - curl -fsSL "https://github.com/rustfs/cli/releases/download/v$RC_VERSION/rustfs-cli-linux-amd64-v$RC_VERSION.tar.gz" | tar -xz -C /tmp
+    - install -m 0755 "$(find /tmp -type f -name rc | head -1)" /usr/local/bin/rc
+    - rc alias set ci "$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+    # Object Lock в пайплайне не включается: бакет живет минуты, а WORM
+    # проверяется на стенде (INV-042, ADR-0004)
+    - rc mb ci/dossiers || true
+    - rc mb ci/public || true
+    - cargo run -p api -- migrate
+    - cargo run -p api &
+    - timeout 120 sh -c 'until curl -sf http://localhost:8080/api/v1/healthz; do sleep 2; done'
+    - schemathesis run packages/api-client/openapi.json --url http://localhost:8080 --checks all
+
+# G11: сквозные сценарии Правил (ТЗ § 10) - Playwright против api + web
+e2e:
+  extends: .stack-services
+  stage: verify
+  image: mcr.microsoft.com/playwright:v1.58.0-noble
+  variables:
+    E2E_BASE_URL: http://localhost:3000
+    # Пароль демо-аккаунтов приходит переменной проекта (Settings → CI/CD →
+    # Variables, masked, не менее 12 символов). Прочие значения в этом файле -
+    # реквизиты сервисов самого пайплайна: они живут внутри job и наружу
+    # не выходят. Пароль учетной записи по смыслу другой, и NFR-09 запрещает
+    # держать его в репозитории. Переменная не заведена - `api seed`
+    # откажется работать с пустым паролем, и job упадет с внятной причиной
+    E2E_PASSWORD: $CI_SEED_PASSWORD
+    SEED_PASSWORD: $CI_SEED_PASSWORD
+    # web-сервер проксирует /api на api (как API_ORIGIN в проде)
+    API_ORIGIN: http://localhost:8080
+    # Комната торгов (FR-603) ходит сокетом. В проде апгрейд проксирует Caddy,
+    # здесь его нет: сокет на свой origin упирается в nitro, который апгрейд
+    # не поддерживает, и сценарий торгов падал бы на пустой ленте ставок.
+    # Переменная сборки уводит сокет прямо в api (A-024)
+    VITE_API_WS_HOST: localhost:8080
+  script:
+    - curl -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain "$RUST_TOOLCHAIN"
+    # rustup ставит toolchain в CARGO_HOME, а он теперь в каталоге проекта -
+    # окружение подхватывается оттуда же, а не из домашнего каталога
+    - . "$CARGO_HOME/env"
+    - curl -fsSL https://bun.sh/install | bash -s "bun-v$BUN_VERSION"
+    - export PATH="$HOME/.bun/bin:$PATH"
+    - bun install --frozen-lockfile
+    # Раскладка архива не документирована, поэтому бинарник ищется в дереве,
+    # а не берется по фиксированному пути
+    - curl -fsSL "https://github.com/rustfs/cli/releases/download/v$RC_VERSION/rustfs-cli-linux-amd64-v$RC_VERSION.tar.gz" | tar -xz -C /tmp
+    - install -m 0755 "$(find /tmp -type f -name rc | head -1)" /usr/local/bin/rc
+    - rc alias set ci "$S3_ENDPOINT" "$S3_ACCESS_KEY" "$S3_SECRET_KEY"
+    # Object Lock в пайплайне не включается: бакет живет минуты, а WORM
+    # проверяется на стенде (INV-042, ADR-0004)
+    - rc mb ci/dossiers || true
+    - rc mb ci/public || true
+    - cargo run -p api -- migrate
+    - cargo run -p api -- seed
+    - cargo run -p api &
+    - bun run --cwd apps/web build && bun run --cwd apps/web start &
+    - timeout 180 sh -c 'until curl -sf http://localhost:3000/ >/dev/null; do sleep 3; done'
+    - bun run --cwd apps/e2e e2e
+  artifacts:
+    when: always
+    expire_in: 2 weeks
+    paths: [apps/e2e/results.xml, apps/e2e/test-results/]
+    reports:
+      junit: apps/e2e/results.xml
+
+# G13: зависимости и образы. Trivy сканирует файловую систему репозитория;
+# сканирование собранных образов идет вместе с job публикации в Registry
+# (отдельный MR, A-029).
+deps:
+  extends: .rust
+  stage: verify
+  script:
+    # Уязвимости и лицензии Rust-дерева проверяет cargo-deny: он же ведет
+    # список принятых предупреждений с обоснованиями (deny.toml), поэтому
+    # отдельный cargo-audit по той же базе RustSec избыточен
+    - cargo_tool cargo-deny "$CARGO_DENY_VERSION"
+    - cargo deny check
+    - curl -fsSL https://bun.sh/install | bash -s "bun-v$BUN_VERSION"
+    - export PATH="$HOME/.bun/bin:$PATH"
+    - bun install --frozen-lockfile
+    - bun audit
+    - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin "$TRIVY_VERSION"
+    - trivy fs --scanners vuln,secret,misconfig --exit-code 1 --severity HIGH,CRITICAL .

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Формат staged-файлов по правилам из vite.config.ts (блок `staged`)
+vp staged

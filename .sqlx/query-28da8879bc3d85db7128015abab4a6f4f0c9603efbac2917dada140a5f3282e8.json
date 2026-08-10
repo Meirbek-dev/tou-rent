@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.lots\n             SET cancelled_at = core.now(), cancel_reason = $2\n             WHERE id = $1 AND cancelled_at IS NULL\n             RETURNING tender_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "28da8879bc3d85db7128015abab4a6f4f0c9603efbac2917dada140a5f3282e8"
+}

@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)\n         VALUES ($1, 'x', 'Т39 подразделение', now()) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        }
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "21346500723bd5096f7540c4e011dd0b1bb2042b174e13b30ea9b8b1ad712a99"
+}

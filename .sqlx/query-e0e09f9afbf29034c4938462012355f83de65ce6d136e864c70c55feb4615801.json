@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"incomplete!\" FROM refdata.special_categories c\n           WHERE c.review_days <= 0\n              OR NOT EXISTS (SELECT 1 FROM refdata.special_category_documents d\n                             WHERE d.category_code = c.code)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "incomplete!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e0e09f9afbf29034c4938462012355f83de65ce6d136e864c70c55feb4615801"
+}

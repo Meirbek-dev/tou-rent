@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.journal_entries (tender_id, entry_kind, application_id, actor_id)\n             VALUES ($1, 'application_withdrawn', $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "da93c14e4ed17dece1094ff2f451b6f5ba706f2f31af622e005961383456e8ed"
+}

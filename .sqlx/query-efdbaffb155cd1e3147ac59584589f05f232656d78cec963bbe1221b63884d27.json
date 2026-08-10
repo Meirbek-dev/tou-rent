@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.contract_checklists (contract_id, item_code)\n             SELECT $1, i.code FROM refdata.checklist_items i\n             WHERE i.applicant_kind IS NULL OR i.applicant_kind::text = $2\n             ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "efdbaffb155cd1e3147ac59584589f05f232656d78cec963bbe1221b63884d27"
+}

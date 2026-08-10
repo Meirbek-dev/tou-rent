@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.investment_acceptances SET accepted_amount = 30000000.00\n             WHERE contract_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c39e483f4fc4bc86856f4f446c3d3a22c65d46455d68f3415a117ebd936ce0bf"
+}

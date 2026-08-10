@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT quorum_present AS \"present!\", quorum_required AS \"required!\"\n           FROM core.sessions_meetings WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "required!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "1d31138782af21289dc795202e30135fa1a9dc1e0fe054f6a759f41bb6f5a18b"
+}

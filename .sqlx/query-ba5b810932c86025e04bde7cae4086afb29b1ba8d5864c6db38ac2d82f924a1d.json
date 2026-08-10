@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT extract(epoch FROM shift)::float8 AS \"shift!\"\n           FROM refdata.clock_offset WHERE id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "shift!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ba5b810932c86025e04bde7cae4086afb29b1ba8d5864c6db38ac2d82f924a1d"
+}

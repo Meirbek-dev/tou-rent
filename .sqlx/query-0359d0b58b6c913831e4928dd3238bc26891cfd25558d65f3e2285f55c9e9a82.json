@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tender_amendments SET doc_key = 'tenders/x.pdf' WHERE tender_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0359d0b58b6c913831e4928dd3238bc26891cfd25558d65f3e2285f55c9e9a82"
+}

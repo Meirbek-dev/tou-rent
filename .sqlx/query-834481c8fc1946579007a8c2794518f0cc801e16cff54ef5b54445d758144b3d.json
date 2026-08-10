@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders SET consequence = 'repeat' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "834481c8fc1946579007a8c2794518f0cc801e16cff54ef5b54445d758144b3d"
+}

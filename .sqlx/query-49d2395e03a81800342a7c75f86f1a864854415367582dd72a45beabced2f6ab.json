@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"logged!\" FROM audit.log\n         WHERE table_name = 'refdata.clock_offset'\n           AND action = 'UPDATE'\n           AND payload->'new'->>'shift' LIKE '%01:12:01%'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "logged!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "49d2395e03a81800342a7c75f86f1a864854415367582dd72a45beabced2f6ab"
+}

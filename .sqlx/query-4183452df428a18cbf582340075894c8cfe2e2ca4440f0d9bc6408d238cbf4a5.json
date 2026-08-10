@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.evasions\n               (contract_id, tender_id, lot_id, application_id, user_id, place,\n                ground, note, declared_by)\n             SELECT c.id, c.tender_id, c.lot_id, c.winner_application_id, c.tenant_id,\n                    c.place, $2, $3, $4\n             FROM core.contracts c WHERE c.id = $1\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4183452df428a18cbf582340075894c8cfe2e2ca4440f0d9bc6408d238cbf4a5"
+}

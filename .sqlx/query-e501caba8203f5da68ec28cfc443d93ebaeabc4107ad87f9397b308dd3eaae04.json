@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (core.now() AT TIME ZONE 'Asia/Almaty')::date AS \"day!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day!",
+        "type_info": "Date"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e501caba8203f5da68ec28cfc443d93ebaeabc4107ad87f9397b308dd3eaae04"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.land_contract_covenants SET code = $2\n             WHERE contract_id = $1 AND code = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6c2b90fb8e830fc0551be54873c4637948853a5ac067f645b50d69c46a6010bd"
+}

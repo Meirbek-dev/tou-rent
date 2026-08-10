@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.land_applications\n                (plot_id, investor_id, project, investment_amount, term_months)\n             VALUES ($1, $2, 'Строительство общежития на 500 мест', 500000000, 120)\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1507edbe654c7644468a4109970c4a27d21340615ad1a8dce0590b5addef0f7a"
+}

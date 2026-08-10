@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT code, ordinal, label_ru, label_kk, label_en, rule_ref\n         FROM refdata.investment_attachments ORDER BY ordinal",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "ordinal",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "label_ru",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "label_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "label_en",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "rule_ref",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "1cc5e8bc0d95324a95610be9561a724d597046d580df12691c91440034485e64"
+}

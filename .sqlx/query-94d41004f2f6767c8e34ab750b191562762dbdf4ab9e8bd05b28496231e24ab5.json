@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce(\n            (SELECT i.term_months FROM core.investment_contracts i\n              WHERE i.contract_id = $1),\n            (SELECT greatest(1, (extract(epoch FROM (upper(c.lease_period) - lower(c.lease_period)))\n                                 / 2629800)::int)\n               FROM core.contracts c WHERE c.id = $1 AND c.lease_period IS NOT NULL),\n            12) AS \"months\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "months",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "94d41004f2f6767c8e34ab750b191562762dbdf4ab9e8bd05b28496231e24ab5"
+}

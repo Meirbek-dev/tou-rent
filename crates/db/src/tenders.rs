@@ -1,0 +1,386 @@
+//! Тендеры и лоты (М3): `core.tenders` / `core.lots`.
+//!
+//! Переходы статусов выполняются обычным UPDATE - их законность охраняет
+//! триггер INV-021 (и правило 10 дней FR-303); нарушение возвращается
+//! как [`TransitionError::Rejected`] с текстом причины из БД.
+
+use rust_decimal::Decimal;
+use time::OffsetDateTime;
+use uuid::Uuid;
+
+use crate::Db;
+
+#[derive(Debug, Clone)]
+pub struct TenderRecord {
+    pub id: Uuid,
+    pub status: String,
+    pub title: String,
+    pub organizer_id: Uuid,
+    pub announced_at: Option<OffsetDateTime>,
+    pub submission_deadline: Option<OffsetDateTime>,
+    pub opening_at: Option<OffsetDateTime>,
+    pub opened_at: Option<OffsetDateTime>,
+    pub trading_at: Option<OffsetDateTime>,
+    pub zoom_url: Option<String>,
+    pub zoom_recording_url: Option<String>,
+    pub repeat_of: Option<Uuid>,
+    pub created_at: OffsetDateTime,
+    pub updated_at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone)]
+pub struct LotRecord {
+    pub id: Uuid,
+    pub tender_id: Uuid,
+    pub seq: i32,
+    pub object_id: Uuid,
+    pub purpose: String,
+    pub lease_months: i32,
+    pub base_rate_monthly: Decimal,
+    pub guarantee_fee: Decimal,
+    pub rate_calculation: serde_json::Value,
+    pub viewing_terms: Option<String>,
+    /// Единица ставки (FR-205): `monthly` - за месяц, `hourly` - за час
+    pub rate_unit: String,
+    /// Объем разыгрываемых часов почасового лота (п. 97)
+    pub hours_total: Option<i32>,
+    /// Лот отменен (FR-305, п. 78): объект освобожден, взносы на возврате
+    pub cancelled_at: Option<OffsetDateTime>,
+    pub cancel_reason: Option<String>,
+}
+
+/// Выборка тендера: общий список столбцов + хвост запроса (см. `acts.rs`).
+///
+/// `!` у `status` - это `::text`, который планировщик считает потенциально
+/// NULL, хотя столбец NOT NULL.
+macro_rules! tender_query {
+    ($tail:literal $(, $arg:expr)*) => {
+        sqlx::query_as!(
+            TenderRecord,
+            r#"SELECT id, status::text AS "status!", title, organizer_id,
+                      announced_at, submission_deadline, opening_at, opened_at,
+                      trading_at, zoom_url, zoom_recording_url, repeat_of,
+                      created_at, updated_at
+               FROM core.tenders"# + $tail
+            $(, $arg)*
+        )
+    };
+}
+/// То же для `RETURNING`: столбцы идут в конце запроса, поэтому макрос
+/// принимает не хвост, а голову (см. `identities.rs`).
+macro_rules! tender_query_returning {
+    ($head:literal $(, $arg:expr)*) => {
+        sqlx::query_as!(
+            TenderRecord,
+            $head + r#" RETURNING id, status::text AS "status!", title, organizer_id,
+                                  announced_at, submission_deadline, opening_at, opened_at,
+                                  trading_at, zoom_url, zoom_recording_url, repeat_of,
+                                  created_at, updated_at"#
+            $(, $arg)*
+        )
+    };
+}
+
+/// Выборка лота: `!` у `rate_unit` - по той же причине, что у `status`.
+macro_rules! lot_query {
+    ($tail:literal $(, $arg:expr)*) => {
+        sqlx::query_as!(
+            LotRecord,
+            r#"SELECT id, tender_id, seq, object_id, purpose, lease_months,
+                      base_rate_monthly, guarantee_fee, rate_calculation,
+                      viewing_terms, rate_unit::text AS "rate_unit!", hours_total,
+                      cancelled_at, cancel_reason
+               FROM core.lots"# + $tail
+            $(, $arg)*
+        )
+    };
+}
+macro_rules! lot_query_returning {
+    ($head:literal $(, $arg:expr)*) => {
+        sqlx::query_as!(
+            LotRecord,
+            $head + r#" RETURNING id, tender_id, seq, object_id, purpose, lease_months,
+                                  base_rate_monthly, guarantee_fee, rate_calculation,
+                                  viewing_terms, rate_unit::text AS "rate_unit!", hours_total,
+                                  cancelled_at, cancel_reason"#
+            $(, $arg)*
+        )
+    };
+}
+
+pub async fn get(db: &Db, id: Uuid) -> Result<Option<TenderRecord>, sqlx::Error> {
+    tender_query!(" WHERE id = $1", id).fetch_optional(db).await
+}
+
+/// Реестр тендеров. `public_only` - только опубликованные (для guest, п. 5–6).
+pub async fn list(
+    db: &Db,
+    after: Option<Uuid>,
+    limit: i64,
+    public_only: bool,
+) -> Result<Vec<TenderRecord>, sqlx::Error> {
+    // Свежие объявления сверху: id - uuid v7, монотонен по времени создания,
+    // поэтому курсор идет «вниз» (id < after). Реестр, начинающийся с самых
+    // старых тендеров, прятал бы новую публикацию на последней странице.
+    tender_query!(
+        " WHERE ($1::uuid IS NULL OR id < $1)
+            AND (NOT $3 OR status <> 'draft')
+          ORDER BY id DESC LIMIT $2",
+        after,
+        limit,
+        public_only
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// Дата/время торгов при уведомлении допущенных (FR-504, п. 59): если
+/// организатор не назначил `trading_at` заранее - 3-й рабочий день после
+/// уведомления по производственному календарю (G12). `None` - тендер не найден.
+pub async fn schedule_trading(
+    db: &Db,
+    actor: Uuid,
+    tender_id: Uuid,
+    business_days: i32,
+) -> Result<Option<OffsetDateTime>, sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        let existing = sqlx::query_scalar!(
+            "SELECT trading_at FROM core.tenders WHERE id = $1",
+            tender_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(current) = existing else {
+            return Ok(None);
+        };
+        if current.is_some() {
+            return Ok(current);
+        }
+
+        // TODO-ENGINEER: время начала торгов (10:00 Алматы) - плейсхолдер,
+        // источника в контуре 1 нет (п. 59 задает только день)
+        //
+        // `!` у RETURNING: столбец nullable, но присвоенное выражение NULL
+        // быть не может - оба его аргумента NOT NULL
+        let scheduled = sqlx::query_scalar!(
+            r#"UPDATE core.tenders
+               SET trading_at = (refdata.add_business_days(
+                                    (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Almaty')::date,
+                                    $2
+                                  )::timestamp
+                                 + time '10:00') AT TIME ZONE 'Asia/Almaty'
+               WHERE id = $1
+               RETURNING trading_at AS "trading_at!""#,
+            tender_id,
+            business_days
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        Ok(Some(scheduled))
+    })
+    .await
+}
+
+pub async fn lots_of(db: &Db, tender_id: Uuid) -> Result<Vec<LotRecord>, sqlx::Error> {
+    lot_query!(" WHERE tender_id = $1 ORDER BY seq", tender_id)
+        .fetch_all(db)
+        .await
+}
+
+/// Лоты страницы тендеров одним запросом (реестр без N+1).
+pub async fn lots_for(db: &Db, tender_ids: &[Uuid]) -> Result<Vec<LotRecord>, sqlx::Error> {
+    lot_query!(
+        " WHERE tender_id = ANY($1) ORDER BY tender_id, seq",
+        tender_ids
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// Снимок ставки (FR-202) уже посчитан вызывающей стороной из refdata + domain.
+pub struct NewLot<'a> {
+    pub object_id: Uuid,
+    pub purpose: &'a str,
+    pub lease_months: i32,
+    pub base_rate_monthly: Decimal,
+    pub guarantee_fee: Decimal,
+    pub rate_calculation: &'a serde_json::Value,
+    pub viewing_terms: Option<&'a str>,
+    /// FR-205: `monthly` - ставка за месяц, `hourly` - за час (п. 97)
+    pub rate_unit: &'a str,
+    /// Объем разыгрываемых часов почасового лота; взнос считает БД (FR-206)
+    pub hours_total: Option<i32>,
+}
+
+/// Тендер и все его лоты - одна транзакция (FR-301): либо создается целиком,
+/// либо ничего. Снимки ставок в лотах уже посчитаны вызывающей стороной.
+pub async fn create(
+    db: &Db,
+    actor: Uuid,
+    title: &str,
+    organizer_id: Uuid,
+    lots: &[NewLot<'_>],
+) -> Result<(TenderRecord, Vec<LotRecord>), sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        let tender = tender_query_returning!(
+            "INSERT INTO core.tenders (title, organizer_id) VALUES ($1, $2)",
+            title,
+            organizer_id
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+
+        let mut created = Vec::with_capacity(lots.len());
+        for (idx, lot) in lots.iter().enumerate() {
+            // `$10::text::core.rate_unit`: единица приходит строкой, приведение
+            // к перечислению делает БД
+            let record = lot_query_returning!(
+                "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                    base_rate_monthly, guarantee_fee, rate_calculation, viewing_terms,
+                    rate_unit, hours_total)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text::core.rate_unit, $11)",
+                tender.id,
+                idx as i32 + 1,
+                lot.object_id,
+                lot.purpose,
+                lot.lease_months,
+                lot.base_rate_monthly,
+                lot.guarantee_fee,
+                lot.rate_calculation,
+                lot.viewing_terms,
+                lot.rate_unit,
+                lot.hours_total
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            created.push(record);
+        }
+        Ok((tender, created))
+    })
+    .await
+}
+
+/// Правка полей черновика (даты, ссылки; FR-301, FR-306).
+/// Возвращает None, если тендер не найден или уже не черновик.
+pub struct DraftFields<'a> {
+    pub title: &'a str,
+    pub submission_deadline: Option<OffsetDateTime>,
+    pub opening_at: Option<OffsetDateTime>,
+    pub trading_at: Option<OffsetDateTime>,
+    pub zoom_url: Option<&'a str>,
+}
+
+pub async fn update_draft(
+    db: &Db,
+    actor: Uuid,
+    id: Uuid,
+    f: DraftFields<'_>,
+) -> Result<Option<TenderRecord>, sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        tender_query_returning!(
+            "UPDATE core.tenders
+             SET title = $2, submission_deadline = $3, opening_at = $4, trading_at = $5, zoom_url = $6
+             WHERE id = $1 AND status = 'draft'",
+            id,
+            f.title,
+            f.submission_deadline,
+            f.opening_at,
+            f.trading_at,
+            f.zoom_url
+        )
+        .fetch_optional(&mut *tx)
+        .await
+    })
+    .await
+}
+
+/// Ссылка на запись торгов (FR-306, п. 72): вносится после того, как торги
+/// завершены, - до итогов записи не существует. Возвращает None, если тендер
+/// не найден или еще не подведен: проверку держит условие запроса, а не
+/// порядок вызовов в обработчике.
+pub async fn set_recording_url(
+    db: &Db,
+    actor: Uuid,
+    id: Uuid,
+    recording_url: Option<&str>,
+) -> Result<Option<TenderRecord>, sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        tender_query_returning!(
+            "UPDATE core.tenders SET zoom_recording_url = $2
+             WHERE id = $1 AND status IN ('summed_up', 'contracted')",
+            id,
+            recording_url
+        )
+        .fetch_optional(&mut *tx)
+        .await
+    })
+    .await
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum TransitionError {
+    #[error("тендер не найден")]
+    NotFound,
+    /// Переход отклонен правилами БД (INV-021, FR-303) - текст причины из RAISE
+    #[error("{0}")]
+    Rejected(String),
+    #[error(transparent)]
+    Db(#[from] sqlx::Error),
+}
+
+/// Смена статуса; законность перехода решает триггер БД (INV-021).
+pub async fn transition(
+    db: &Db,
+    actor: Uuid,
+    id: Uuid,
+    to_status: &str,
+) -> Result<TenderRecord, TransitionError> {
+    crate::with_actor(db, actor, async |tx| {
+        // Смена на тот же статус - не переход: не no-op, а ошибка оператора (INV-021)
+        let result = tender_query_returning!(
+            "UPDATE core.tenders SET status = $2::text::core.tender_status
+             WHERE id = $1 AND status IS DISTINCT FROM $2::text::core.tender_status",
+            id,
+            to_status
+        )
+        .fetch_optional(&mut *tx)
+        .await;
+
+        match result {
+            Ok(Some(record)) => Ok(record),
+            Ok(None) => {
+                let exists = sqlx::query_scalar!(
+                    r#"SELECT status::text AS "status!" FROM core.tenders WHERE id = $1"#,
+                    id
+                )
+                .fetch_optional(&mut *tx)
+                .await?;
+                match exists {
+                    Some(current) => Err(TransitionError::Rejected(format!(
+                        "INV-021: тендер уже в статусе {current} - повторный переход невозможен"
+                    ))),
+                    None => Err(TransitionError::NotFound),
+                }
+            }
+            Err(sqlx::Error::Database(db_err)) if db_err.code().as_deref() == Some("23514") => {
+                Err(TransitionError::Rejected(db_err.message().to_owned()))
+            }
+            Err(other) => Err(TransitionError::Db(other)),
+        }
+    })
+    .await
+}
+
+/// Количество тендеров по статусам - бизнес-метрика дашборда (T17).
+pub async fn count_by_status(db: &Db) -> Result<Vec<(String, i64)>, sqlx::Error> {
+    // ORDER BY по порядковому номеру: под псевдонимом `status!` имя
+    // выходного столбца сменилось, и `ORDER BY status` попал бы на
+    // перечисление, а не на его текст
+    let rows = sqlx::query!(
+        r#"SELECT status::text AS "status!", count(*) AS "count!"
+           FROM core.tenders GROUP BY status ORDER BY 1"#
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.status, r.count)).collect())
+}

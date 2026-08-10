@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT table_schema::text AS \"schema!\", table_name::text AS \"table!\",\n                  column_name::text AS \"column!\", column_default::text AS \"value!\"\n           FROM information_schema.columns\n          WHERE table_schema IN ('core', 'audit', 'refdata')\n            AND column_default IS NOT NULL\n            AND column_default LIKE '%now()%'\n            AND column_default NOT LIKE '%core.now()%'\n          ORDER BY 1, 2, 3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "schema!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "table!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "column!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "value!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1cd4363b02aa9ee1aa1eeac27ff4803c2cde3654e063600a14c9c12d1c4797cd"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.special_requests\n             SET status = $2::text::core.special_request_status WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "91bbfb54836d263b81f1ab139781e7af06670f40d137548873c0572c88b3cce2"
+}

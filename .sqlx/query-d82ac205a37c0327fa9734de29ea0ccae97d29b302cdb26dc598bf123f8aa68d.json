@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO refdata.holidays (day, label_ru) VALUES ($1, $2)\n             ON CONFLICT (day) DO UPDATE SET label_ru = EXCLUDED.label_ru",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d82ac205a37c0327fa9734de29ea0ccae97d29b302cdb26dc598bf123f8aa68d"
+}

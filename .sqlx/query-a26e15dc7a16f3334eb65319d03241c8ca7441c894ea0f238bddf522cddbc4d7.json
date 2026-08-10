@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.tenders (title, status, organizer_id)\n         VALUES ('Т21 тендер', 'draft', $1) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a26e15dc7a16f3334eb65319d03241c8ca7441c894ea0f238bddf522cddbc4d7"
+}

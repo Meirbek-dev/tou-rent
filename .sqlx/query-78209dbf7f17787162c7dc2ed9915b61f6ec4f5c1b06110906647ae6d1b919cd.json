@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n           SELECT 1 FROM refdata.rate_options\n           WHERE coefficient = $1 AND option_code = $2\n         ) AS \"exists!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "78209dbf7f17787162c7dc2ed9915b61f6ec4f5c1b06110906647ae6d1b919cd"
+}

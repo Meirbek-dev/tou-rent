@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.acts (contract_id, kind, act_date, note, created_by)\n             VALUES ($1, $2::text::core.act_kind, $3, $4, $5)\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Date",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0940dc002fce3a7dd40ea6f4cfb74d92265d3282924b57695f1dcd4ee462f62b"
+}

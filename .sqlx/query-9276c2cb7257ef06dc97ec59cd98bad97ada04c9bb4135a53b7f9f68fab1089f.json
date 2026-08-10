@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.ledger_entries SET credit = 1 WHERE account_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9276c2cb7257ef06dc97ec59cd98bad97ada04c9bb4135a53b7f9f68fab1089f"
+}

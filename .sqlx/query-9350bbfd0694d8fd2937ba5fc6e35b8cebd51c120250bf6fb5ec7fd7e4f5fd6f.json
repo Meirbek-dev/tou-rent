@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.role_grants (user_id, role, granted_by)\n             VALUES ($1, $2::text::core.role, $3)\n             ON CONFLICT (user_id, role) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9350bbfd0694d8fd2937ba5fc6e35b8cebd51c120250bf6fb5ec7fd7e4f5fd6f"
+}

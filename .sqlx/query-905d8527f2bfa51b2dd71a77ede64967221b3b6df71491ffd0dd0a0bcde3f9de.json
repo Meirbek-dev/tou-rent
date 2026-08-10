@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.investment_contract_files\n               (contract_id, code, file_key, filename, content_type, size_bytes)\n             VALUES ($1, $2, $3, $4, $5, $6)\n             ON CONFLICT (contract_id, code) DO UPDATE\n               SET file_key = EXCLUDED.file_key, filename = EXCLUDED.filename,\n                   content_type = EXCLUDED.content_type, size_bytes = EXCLUDED.size_bytes,\n                   uploaded_at = core.now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "905d8527f2bfa51b2dd71a77ede64967221b3b6df71491ffd0dd0a0bcde3f9de"
+}

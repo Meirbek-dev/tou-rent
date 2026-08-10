@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH app AS (\n           SELECT a.id, a.tender_id, a.lot_id FROM core.applications a WHERE a.id = $2\n         ),\n         eligible AS (\n           SELECT cm.id AS member_id, cm.member_role\n           FROM core.meeting_attendance att\n           JOIN core.commission_members cm ON cm.id = att.member_id\n           CROSS JOIN app\n           WHERE att.meeting_id = $1 AND att.present\n             AND NOT core.member_recused(cm.id, app.tender_id, app.lot_id)\n             AND (cm.member_role <> 'reserve'\n                  OR EXISTS (SELECT 1 FROM core.member_recusals r\n                             WHERE r.replacement_member_id = cm.id\n                               AND r.tender_id = app.tender_id\n                               AND (r.lot_id IS NULL OR r.lot_id = app.lot_id)))\n         )\n         SELECT\n           (SELECT count(*) FROM eligible)::bigint AS \"eligible!\",\n           count(*) FILTER (WHERE v.value = 'for')::bigint AS \"votes_for!\",\n           count(*) FILTER (WHERE v.value = 'against')::bigint AS \"votes_against!\",\n           max(CASE WHEN att.chairing THEN v.value::text END) AS chair_vote\n         FROM eligible e\n         LEFT JOIN core.votes v\n           ON v.member_id = e.member_id AND v.meeting_id = $1 AND v.application_id = $2\n         LEFT JOIN core.meeting_attendance att\n           ON att.meeting_id = $1 AND att.member_id = e.member_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "eligible!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "votes_for!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "votes_against!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "chair_vote",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "77caaef4657a3a532b10b96e5275cfc96f604768f04c0de3e6d6ca9887b09fc3"
+}

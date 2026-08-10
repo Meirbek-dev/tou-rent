@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT core.price_key()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "price_key",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c30b6e88b68f0b6e1c7e65e37b38f5140c3edeb7b28fda3db4b44106a9aeb1a4"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.auction_participants\n               (auction_id, application_id, turn_order, initial_price)\n             VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "15bffcf98c846db4a236cc9dde79a6b9172cc6f5eaab25ccf374e5b3f09fdc52"
+}

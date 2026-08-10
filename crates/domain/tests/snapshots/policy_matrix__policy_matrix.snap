@@ -1,0 +1,34 @@
+---
+source: crates/domain/tests/policy_matrix.rs
+expression: matrix
+---
+ObjectRead: guest, participant, organizer, secretary, commission, board, finance, admin
+ObjectManage: organizer
+RateCalculate: organizer
+TenderRead: guest, participant, organizer, secretary, commission, board, finance, admin
+TenderManage: organizer
+TenderPublish: organizer
+ApplicationSubmit: participant
+ApplicationWithdraw: participant
+ApplicationReadOwn: participant
+ApplicationReadAll: secretary, commission
+JournalRead: secretary
+OpeningPerform: secretary
+AdmissionDecide: secretary
+ProtocolGenerate: secretary
+AuctionManage: secretary
+BidPlace: participant
+AuctionWatch: participant, organizer, secretary, commission
+ContractRead: organizer, secretary, commission, board, finance
+FeeConfirm: finance
+LedgerRead: finance
+CommissionManage: admin
+MeetingManage: secretary
+CoiDeclare: commission
+VoteCast: commission
+BoardDecide: board
+NotificationReadOwn: participant, organizer, secretary, commission, board, finance, admin
+UserManage: admin
+RoleGrant: admin
+RefdataManage: admin
+AuditRead: admin

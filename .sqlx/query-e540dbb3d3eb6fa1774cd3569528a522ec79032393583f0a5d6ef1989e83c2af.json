@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(sum(e.credit - e.debit), 0)::numeric(14,2) AS \"balance!\"\n             FROM core.ledger_accounts acc\n             LEFT JOIN core.ledger_entries e ON e.account_id = acc.id\n            WHERE acc.kind = 'contract_deposit' AND acc.contract_id = $1\n            GROUP BY acc.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "balance!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e540dbb3d3eb6fa1774cd3569528a522ec79032393583f0a5d6ef1989e83c2af"
+}

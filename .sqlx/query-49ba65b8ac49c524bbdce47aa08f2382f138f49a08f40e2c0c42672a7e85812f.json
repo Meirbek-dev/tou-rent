@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.votes (meeting_id, application_id, member_id, value, dissent)\n             VALUES ($1, $2, $3, $4::text::core.vote_value, $5)\n             ON CONFLICT (meeting_id, application_id, member_id)\n             DO UPDATE SET value = EXCLUDED.value, dissent = EXCLUDED.dissent, cast_at = core.now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "49ba65b8ac49c524bbdce47aa08f2382f138f49a08f40e2c0c42672a7e85812f"
+}

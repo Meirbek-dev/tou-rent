@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM core.commissions\n             WHERE valid_from <= current_date AND current_date < valid_until\n               AND approved_at IS NOT NULL\n             ORDER BY approved_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "70ccfe75e1abb381067c0089d094e179729a54cde2ae5154cf3038b3e60e3498"
+}

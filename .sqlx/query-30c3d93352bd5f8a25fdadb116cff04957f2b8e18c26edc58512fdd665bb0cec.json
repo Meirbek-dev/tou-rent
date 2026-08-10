@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.obligations SET due_at = now() - interval '1 day' WHERE tender_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "30c3d93352bd5f8a25fdadb116cff04957f2b8e18c26edc58512fdd665bb0cec"
+}

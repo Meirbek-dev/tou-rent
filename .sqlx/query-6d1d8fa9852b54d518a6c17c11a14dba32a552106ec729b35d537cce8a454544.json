@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.journal_entries (tender_id, entry_kind, actor_id)\n         VALUES ($1, 'application_submitted', $2) RETURNING seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "seq",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6d1d8fa9852b54d518a6c17c11a14dba32a552106ec729b35d537cce8a454544"
+}

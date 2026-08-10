@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.land_decisions\n               (land_application_id, decision, rationale, decided_by)\n             VALUES ($1, $2::text::core.land_decision, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2acc3894fe6777b7688362b50f73946174d95812b689afae902696e16dcb2935"
+}

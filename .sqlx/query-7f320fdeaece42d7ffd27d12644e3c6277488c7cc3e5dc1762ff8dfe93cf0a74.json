@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"audited!\" FROM audit.log\n           WHERE table_name = 'refdata.rate_coefficients' AND row_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "audited!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7f320fdeaece42d7ffd27d12644e3c6277488c7cc3e5dc1762ff8dfe93cf0a74"
+}

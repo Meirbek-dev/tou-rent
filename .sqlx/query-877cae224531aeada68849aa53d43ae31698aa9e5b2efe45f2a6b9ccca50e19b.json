@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.meeting_attendance (meeting_id, member_id, present, chairing)\n                 VALUES ($1, $2, $3, $4)\n                 ON CONFLICT (meeting_id, member_id)\n                 DO UPDATE SET present = EXCLUDED.present, chairing = EXCLUDED.chairing,\n                               recorded_at = core.now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "877cae224531aeada68849aa53d43ae31698aa9e5b2efe45f2a6b9ccca50e19b"
+}

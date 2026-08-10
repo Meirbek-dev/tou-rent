@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.benefit_grants\n               (contract_id, scheme, communal_monthly, council_decision, council_date,\n                study_credits, internships, granted_by)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n             ON CONFLICT (contract_id) DO UPDATE\n               SET scheme = EXCLUDED.scheme,\n                   communal_monthly = EXCLUDED.communal_monthly,\n                   council_decision = EXCLUDED.council_decision,\n                   council_date = EXCLUDED.council_date,\n                   study_credits = EXCLUDED.study_credits,\n                   internships = EXCLUDED.internships,\n                   granted_by = EXCLUDED.granted_by",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Numeric",
+        "Text",
+        "Date",
+        "Int4",
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d55a471d846df33923641ba80a63fa7354c15ccc782d65ae9f90a5103940427c"
+}

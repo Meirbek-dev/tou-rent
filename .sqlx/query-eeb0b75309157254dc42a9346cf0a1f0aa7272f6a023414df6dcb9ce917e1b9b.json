@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.land_decisions SET rationale = 'другое' WHERE land_application_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eeb0b75309157254dc42a9346cf0a1f0aa7272f6a023414df6dcb9ce917e1b9b"
+}

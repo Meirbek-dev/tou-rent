@@ -1,0 +1,63 @@
+---
+source: crates/domain/tests/rate_golden.rs
+expression: calc
+---
+{
+  "inputs": {
+    "mrp": "3932.5",
+    "area_m2": "250",
+    "factors": {
+      "kt": {
+        "option_code": "case",
+        "value": "1.5"
+      },
+      "kk": {
+        "option_code": "case",
+        "value": "1.2"
+      },
+      "ksk": {
+        "option_code": "case",
+        "value": "0.95"
+      },
+      "kr": {
+        "option_code": "case",
+        "value": "1.4"
+      },
+      "kvd": {
+        "option_code": "case",
+        "value": "1.1"
+      },
+      "kopf": {
+        "option_code": "case",
+        "value": "0.9"
+      },
+      "kfu": {
+        "option_code": "case",
+        "value": "1.05"
+      },
+      "ksots": {
+        "option_code": "case",
+        "value": "0.5"
+      },
+      "k": {
+        "option_code": "case",
+        "value": "1.2"
+      },
+      "kn": {
+        "option_code": "case",
+        "value": "1.1"
+      },
+      "kv": {
+        "option_code": "case",
+        "value": "1.3"
+      }
+    }
+  },
+  "base_rate_rbs": "5898.75",
+  "multiplier": "1.2634242923076923076923076923",
+  "annual_raw": "1863156.0110625000000000000000",
+  "annual": "1863156",
+  "monthly": "155263",
+  "guarantee_fee": "155263",
+  "vat_included": false
+}

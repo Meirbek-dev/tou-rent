@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contracts c\n             SET checklist_done_at = CASE\n                   WHEN NOT EXISTS (SELECT 1 FROM core.contract_checklists cl\n                                    WHERE cl.contract_id = c.id AND cl.checked_at IS NULL)\n                   THEN coalesce(c.checklist_done_at, core.now())\n                 END\n             WHERE c.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4f32b420df7645dbcf6530ca65d126083ad850623050853a7ab423e5b8e6be74"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT code FROM refdata.special_category_documents\n         WHERE category_code = $1 ORDER BY ordinal LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "dd691967e042a5dc7cd16ec62349a1d75f27cc923d0ed2003863a0bea90afb3e"
+}

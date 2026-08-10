@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.objects (kind, name, address, area_m2)\n         VALUES ('land_plot', 'Т40 участок', 'г. Павлодар, ул. Тестовая, 1', 5000)\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "73d03d6c7634816e88ec4cb7701f534593780ab23b867f0555cbf58e66ada362"
+}

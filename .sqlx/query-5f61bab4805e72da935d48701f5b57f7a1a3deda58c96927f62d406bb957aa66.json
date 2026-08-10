@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT round(a.starting_bid + a.bid_step * $2::int, 2) AS \"amount!\"\n             FROM core.auctions a WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "amount!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5f61bab4805e72da935d48701f5b57f7a1a3deda58c96927f62d406bb957aa66"
+}

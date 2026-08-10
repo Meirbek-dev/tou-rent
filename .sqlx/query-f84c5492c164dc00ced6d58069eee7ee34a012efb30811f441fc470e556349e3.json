@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.obligations\n         SET status = 'done', completed_at = core.now()\n         WHERE action = $1 AND status <> 'done'\n           AND tender_id IS NOT DISTINCT FROM $2\n           AND contract_id IS NOT DISTINCT FROM $3\n           AND application_id IS NOT DISTINCT FROM $4\n           AND special_request_id IS NOT DISTINCT FROM $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f84c5492c164dc00ced6d58069eee7ee34a012efb30811f441fc470e556349e3"
+}

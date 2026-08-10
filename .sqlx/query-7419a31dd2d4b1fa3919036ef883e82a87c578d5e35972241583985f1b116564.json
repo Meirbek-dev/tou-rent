@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.price_proposals SET amount = amount WHERE amount IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "7419a31dd2d4b1fa3919036ef883e82a87c578d5e35972241583985f1b116564"
+}

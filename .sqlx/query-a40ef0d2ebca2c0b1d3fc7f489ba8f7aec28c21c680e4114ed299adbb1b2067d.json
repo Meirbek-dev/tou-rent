@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n                     SELECT 1 FROM core.special_reviews WHERE special_request_id = $1\n                   ) AS \"has_review!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "has_review!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a40ef0d2ebca2c0b1d3fc7f489ba8f7aec28c21c680e4114ed299adbb1b2067d"
+}

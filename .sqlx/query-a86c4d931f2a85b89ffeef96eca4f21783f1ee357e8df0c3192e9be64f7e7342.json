@@ -1,0 +1,119 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.id, r.applicant_id, u.full_name AS \"applicant_name?\",\n                      r.category, c.label_ru AS category_label,\n                      c.rule_ref AS category_rule_ref,\n                      r.status::text AS \"status!\",\n                      r.applicant_kind::text AS \"applicant_kind!\",\n                      r.applicant_details, r.object_id, o.name AS \"object_name?\", r.purpose,\n                      r.requested_months, r.investment_amount, r.tender_id,\n                      r.submitted_at, r.withdrawn_at\n               FROM core.special_requests r\n               JOIN refdata.special_categories c ON c.code = r.category\n               LEFT JOIN core.users u ON u.id = r.applicant_id\n               LEFT JOIN core.objects o ON o.id = r.object_id WHERE r.applicant_id = $1 ORDER BY r.submitted_at DESC LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "applicant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "applicant_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "category",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "category_label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "category_rule_ref",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "applicant_kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "applicant_details",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 9,
+        "name": "object_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "object_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "purpose",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "requested_months",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 13,
+        "name": "investment_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 14,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 15,
+        "name": "submitted_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "withdrawn_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "a86c4d931f2a85b89ffeef96eca4f21783f1ee357e8df0c3192e9be64f7e7342"
+}

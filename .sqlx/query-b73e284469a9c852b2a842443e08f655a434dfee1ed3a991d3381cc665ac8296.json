@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refdata.clock_offset SET shift = interval '4321 seconds' WHERE id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b73e284469a9c852b2a842443e08f655a434dfee1ed3a991d3381cc665ac8296"
+}

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.member_id, u.full_name, d.has_conflict, d.details, d.declared_at\n         FROM core.coi_declarations d\n         JOIN core.commission_members cm ON cm.id = d.member_id\n         JOIN core.users u ON u.id = cm.user_id\n         WHERE d.tender_id = $1\n         ORDER BY u.full_name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "member_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "full_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "has_conflict",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "details",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "declared_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "085b39449239617a86be10d876ac97b42d7c199b8fb6336cabf93235fb376363"
+}

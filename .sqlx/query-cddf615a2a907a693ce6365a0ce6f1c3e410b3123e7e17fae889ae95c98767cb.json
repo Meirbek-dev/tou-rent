@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.votes (meeting_id, application_id, member_id, value)\n         VALUES ($1, $2, $3, 'for')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cddf615a2a907a693ce6365a0ce6f1c3e410b3123e7e17fae889ae95c98767cb"
+}

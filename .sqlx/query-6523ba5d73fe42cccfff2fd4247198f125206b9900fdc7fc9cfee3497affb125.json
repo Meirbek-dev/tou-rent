@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT requires_council, min_study_credits FROM refdata.benefit_schemes\n         WHERE code = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "requires_council",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "min_study_credits",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "6523ba5d73fe42cccfff2fd4247198f125206b9900fdc7fc9cfee3497affb125"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT audit.verify_chain() AS \"intact!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "intact!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9693a283c553feb2595d10208392a990ce16eaa25da49dae935dfb361f0fa13d"
+}

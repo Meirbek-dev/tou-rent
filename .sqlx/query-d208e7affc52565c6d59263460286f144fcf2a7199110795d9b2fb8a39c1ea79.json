@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refdata.special_categories\n         SET competition = 'highest_amount'\n         WHERE code = $1 AND competition <> 'highest_amount'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d208e7affc52565c6d59263460286f144fcf2a7199110795d9b2fb8a39c1ea79"
+}

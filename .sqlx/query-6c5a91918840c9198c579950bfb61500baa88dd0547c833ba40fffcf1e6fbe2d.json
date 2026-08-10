@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.auction_participants SET status = 'absent' WHERE application_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6c5a91918840c9198c579950bfb61500baa88dd0547c833ba40fffcf1e6fbe2d"
+}

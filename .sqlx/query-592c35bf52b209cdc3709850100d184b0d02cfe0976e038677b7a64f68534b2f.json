@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.occurred_at, a.kind::text AS \"account_kind!\",\n                owner.full_name AS \"payer?\", e.credit AS amount, e.rule_ref,\n                clerk.full_name AS \"recorded_by?\"\n         FROM core.ledger_entries e\n         JOIN core.ledger_accounts a ON a.id = e.account_id\n         LEFT JOIN core.users owner ON owner.id = a.owner_user_id\n         LEFT JOIN core.users clerk ON clerk.id = e.recorded_by\n         WHERE e.credit > 0\n           AND ($1::date IS NULL OR e.occurred_at >= $1::date)\n           AND ($2::date IS NULL OR e.occurred_at < $2::date + 1)\n         ORDER BY e.occurred_at DESC LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "occurred_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "account_kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "payer?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "rule_ref",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "recorded_by?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Date",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "592c35bf52b209cdc3709850100d184b0d02cfe0976e038677b7a64f68534b2f"
+}

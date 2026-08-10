@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "tui",
+  // Turbo раскладывает по пакетам только то, что у пакетов и правда есть:
+  // codegen, build и dev. Формат, линт и типы - предмет Vite+ (`vp check`),
+  // он видит весь монорепо из корневого конфига. Задачи turbo без скриптов
+  // в пакетах молча завершались успехом - `bun run lint` возвращал ноль,
+  // ничего не проверив.
+  "tasks": {
+    "codegen": {
+      "outputs": ["src/schema.d.ts"]
+    },
+    "build": {
+      "dependsOn": ["^codegen", "^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".output/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

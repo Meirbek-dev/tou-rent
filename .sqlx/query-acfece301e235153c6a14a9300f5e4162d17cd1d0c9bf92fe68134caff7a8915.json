@@ -1,0 +1,106 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.plot_id, o.name AS plot_name, a.investor_id,\n                      u.full_name AS \"investor_name?\", a.project, a.investment_amount,\n                      a.term_months, a.status::text AS \"status!\", a.submitted_at,\n                      a.withdrawn_at, d.decision::text AS decision,\n                      d.rationale AS \"rationale?\",\n                      d.decided_at AS \"decided_at?\", l.contract_id AS \"contract_id?\"\n               FROM core.land_applications a\n               JOIN core.objects o ON o.id = a.plot_id\n               LEFT JOIN core.users u ON u.id = a.investor_id\n               LEFT JOIN core.land_decisions d ON d.land_application_id = a.id\n               LEFT JOIN core.land_contracts l ON l.land_application_id = a.id WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "plot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "plot_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "investor_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "investor_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "project",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "investment_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "term_months",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "submitted_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "withdrawn_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "decision",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "rationale?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "decided_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "contract_id?",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      true,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "acfece301e235153c6a14a9300f5e4162d17cd1d0c9bf92fe68134caff7a8915"
+}

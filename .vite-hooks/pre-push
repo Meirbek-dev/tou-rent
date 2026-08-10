@@ -1,0 +1,6 @@
+#!/bin/sh
+# Вторая линия лазеров перед пушем (первая - vp staged в pre-commit, третья - CI-гейты).
+# Rust-часть (clippy/test) на Windows-хосте не гоняем - её закрывает CI (A-003).
+set -e
+vp check
+cargo fmt --all --check

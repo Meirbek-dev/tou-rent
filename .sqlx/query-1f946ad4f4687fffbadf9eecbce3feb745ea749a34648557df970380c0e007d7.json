@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT rate_unit::text AS \"rate_unit!\", hours_total,\n                  base_rate_monthly, guarantee_fee\n           FROM core.lots WHERE tender_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rate_unit!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "hours_total",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 2,
+        "name": "base_rate_monthly",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "guarantee_fee",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "1f946ad4f4687fffbadf9eecbce3feb745ea749a34648557df970380c0e007d7"
+}

@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.tender_id, a.version, a.summary,\n                    a.previous_deadline, a.new_deadline, a.doc_key,\n                    u.full_name AS \"created_by_name?\", a.created_at\n             FROM core.tender_amendments a\n             LEFT JOIN core.users u ON u.id = a.created_by WHERE a.tender_id = $1 ORDER BY a.version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "summary",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "previous_deadline",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "new_deadline",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "doc_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_by_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "4460d83190875f023c93f244c54f6d52f9ba2196dcad2e0d6f73e4d754e8d82d"
+}

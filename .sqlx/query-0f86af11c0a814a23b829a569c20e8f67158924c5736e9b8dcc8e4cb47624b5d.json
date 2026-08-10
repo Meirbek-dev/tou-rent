@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contracts SET drafted_at = core.now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0f86af11c0a814a23b829a569c20e8f67158924c5736e9b8dcc8e4cb47624b5d"
+}

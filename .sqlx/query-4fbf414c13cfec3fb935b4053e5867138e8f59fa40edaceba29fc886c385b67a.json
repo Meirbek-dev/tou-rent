@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.member_recusals\n           (tender_id, member_id, lot_id, reason, replacement_member_id)\n         VALUES ($1, $2, $3, 'аффилированность', $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4fbf414c13cfec3fb935b4053e5867138e8f59fa40edaceba29fc886c385b67a"
+}

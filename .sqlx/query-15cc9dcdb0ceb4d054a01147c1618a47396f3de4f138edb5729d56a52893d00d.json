@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, kind::text AS \"kind!\", special_request_id, contract_id,\n                      acceptance_id, title, file_key, payload, published_at,\n                      unpublish_at, unpublished_at\n               FROM core.public_records p\n         WHERE p.special_request_id = $1\n            OR p.contract_id IN (SELECT i.contract_id FROM core.investment_contracts i\n                                 WHERE i.special_request_id = $1)\n            OR p.acceptance_id IN (SELECT a.id FROM core.investment_acceptances a\n                                   JOIN core.investment_contracts i ON i.contract_id = a.contract_id\n                                   WHERE i.special_request_id = $1)\n         ORDER BY p.published_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "special_request_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "acceptance_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "file_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "payload",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "published_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "unpublish_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "unpublished_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "15cc9dcdb0ceb4d054a01147c1618a47396f3de4f138edb5729d56a52893d00d"
+}

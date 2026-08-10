@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.commission_members (commission_id, user_id, member_role)\n             VALUES ($1, $2, $3::text::core.commission_member_role) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9766b90f3739632733e54989af4ef3dca66d2537578070e1cbc6b21e633ad29a"
+}

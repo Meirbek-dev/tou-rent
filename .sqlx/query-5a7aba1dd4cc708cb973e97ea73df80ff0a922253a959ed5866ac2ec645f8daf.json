@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.contract_amendment_changes\n               (amendment_id, field_code, old_value, new_value)\n             VALUES ($1, 'representative', 'Иванов', 'Иванов')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5a7aba1dd4cc708cb973e97ea73df80ff0a922253a959ed5866ac2ec645f8daf"
+}

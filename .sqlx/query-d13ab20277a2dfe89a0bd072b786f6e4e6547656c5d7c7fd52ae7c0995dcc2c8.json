@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders\n             SET status = 'cancelled', cancel_reason = $2, cancelled_at = core.now()\n             WHERE id = $1 AND status <> 'cancelled'\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d13ab20277a2dfe89a0bd072b786f6e4e6547656c5d7c7fd52ae7c0995dcc2c8"
+}

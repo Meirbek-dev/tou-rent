@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.field_code, f.label_ru AS field_label,\n                      c.old_value, c.new_value\n               FROM core.contract_amendment_changes c\n               JOIN refdata.amendable_fields f ON f.code = c.field_code WHERE c.amendment_id = $1 ORDER BY f.ordinal",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "field_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "field_label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "old_value",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "new_value",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f491988b1897dc1d55a49e086e77955f6d0c762ee6b96c9ab1c429d95364b607"
+}

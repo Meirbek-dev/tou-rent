@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.public_records SET unpublished_at = now() WHERE special_request_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e38774a87e9acb40715c372f6be57934c1861f77fcbc7c6d763b79e6eb36f51"
+}

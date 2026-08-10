@@ -1,0 +1,261 @@
+# Дев-стенд TOU.Rent (арх. § 2): все авторитетные данные - PostgreSQL,
+# Redis - только эфемерное, RustFS - файлы.
+name: tou-rent-dev
+
+# Rust-сервисы собираются и работают в контейнере: Windows-хост не линкует
+# нативные бинарники (A-003). Кеш-тома разделяются с контейнерными cargo test.
+# Профиль api: `podman compose --profile api up -d` (или `vp run stack:up`).
+x-rust-workspace: &rust-workspace
+  image: rust:1.97
+  working_dir: /w
+  profiles: [api]
+  environment:
+    DATABASE_URL: postgres://tou_rent:tou_rent_dev@postgres:5432/tou_rent
+    # Без нее тесты testkit против живой БД (A-021) молча печатают SKIP
+    # и отчитываются зеленым за 0.00s - то есть инварианты INV-037, INV-040,
+    # INV-A01 и RLS на стенде не проверяет никто. В CI такая же переменная
+    # задана глобально, и там пропуск считается ошибкой (crates/testkit/src/lib.rs)
+    TESTKIT_DATABASE_URL: postgres://tou_rent:tou_rent_dev@postgres:5432/tou_rent
+    REDIS_URL: redis://redis:6379
+    RUST_LOG: info
+    CARGO_TARGET_DIR: /target
+    # Файлы заявок/протоколов (Т8+): RustFS по S3 API (dev-only ключи)
+    S3_ENDPOINT: http://rustfs:9000
+    S3_ACCESS_KEY: tou_rent
+    S3_SECRET_KEY: tou_rent_dev
+    S3_BUCKET_DOSSIERS: dossiers
+    # Мастер-ключ шифрования цен (INV-040, п. 40; dev-only - на проде SOPS)
+    PRICE_ENCRYPTION_KEY: tou_rent_dev_price_key
+  volumes:
+    - ../..:/w
+    - cargo_registry:/usr/local/cargo/registry
+    - cargo_target:/target
+    - rustup:/usr/local/rustup
+
+services:
+  api-migrate:
+    <<: *rust-workspace
+    command: cargo run -p api -- migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Двигатель обязательств (FR-1702): эскалация просроченных сроков
+  jobs:
+    <<: *rust-workspace
+    command: cargo run -p jobs
+    environment:
+      DATABASE_URL: postgres://tou_rent:tou_rent_dev@postgres:5432/tou_rent
+      RUST_LOG: info
+      CARGO_TARGET_DIR: /target
+      PRICE_ENCRYPTION_KEY: tou_rent_dev_price_key
+      # На стенде сроки проверяются чаще: демо не ждет минуту
+      JOBS_INTERVAL: "20"
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+
+  api:
+    <<: *rust-workspace
+    command: cargo run -p api
+    ports:
+      - "8080:8080"
+    # Реквизиты OIDC-клиента (FR-1502) пишет провижининг Zitadel; файла нет -
+    # api поднимается с локальным входом контура 1, как и раньше
+    env_file:
+      - path: ./.zitadel/oidc.env
+        required: false
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+
+  # --- Профиль zitadel (FR-1502, ADR-0003) ---------------------------------
+  # Поднимается отдельно: `vp run zitadel:up`. Внешний домен один для браузера
+  # и для api - иначе `iss` в id_token не совпадет с адресом discovery.
+  # `id.127.0.0.1.nip.io` резолвится в 127.0.0.1 (публичный wildcard nip.io),
+  # а внутри сети стенда тот же адрес перехватывает алиас на сам Zitadel -
+  # правка hosts на машине разработчика не нужна.
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v4.16.2}
+    profiles: [zitadel]
+    # Мастер-ключ Zitadel - ровно 32 байта (dev-значение; в проде - из SOPS)
+    command: start-from-init --masterkey ${ZITADEL_MASTERKEY:-DevMasterkeyNeeds32Characters!!!} --tlsMode disabled
+    environment:
+      ZITADEL_DATABASE_POSTGRES_HOST: postgres
+      ZITADEL_DATABASE_POSTGRES_PORT: 5432
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: zitadel_dev # dev-only
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: tou_rent
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: tou_rent_dev # dev-only
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # Порт совпадает снаружи и внутри: иначе issuer из id_token не совпал бы
+      # с адресом, по которому api ходит за discovery
+      ZITADEL_PORT: 8081
+      ZITADEL_EXTERNALPORT: 8081
+      ZITADEL_EXTERNALDOMAIN: id.127.0.0.1.nip.io
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_TLS_ENABLED: "false"
+      ZITADEL_FIRSTINSTANCE_ORG_NAME: TOU
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ZITADEL_ADMIN_PASSWORD:-TouDevAdmin2026!}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      # Машинный пользователь провижининга: его PAT кладется в общий том
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: tou-provision
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: TOU provisioning
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2100-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /pat/pat.txt
+    ports:
+      - "8081:8081"
+    volumes:
+      - zitadel_pat:/pat
+    healthcheck:
+      test: ["CMD", "/app/zitadel", "ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 20s
+    networks:
+      default:
+        aliases:
+          - id.127.0.0.1.nip.io
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Начиная с Zitadel v4 интерфейс входа поставляется отдельным контейнером.
+  # Сам Zitadel направляет браузер на :3002/ui/v2/login; api остается на :8081.
+  zitadel-login:
+    image: ghcr.io/zitadel/zitadel-login:${ZITADEL_VERSION:-v4.16.2}
+    profiles: [zitadel]
+    environment:
+      ZITADEL_API_URL: http://id.127.0.0.1.nip.io:8081
+      NEXT_PUBLIC_BASE_PATH: /ui/v2/login
+      ZITADEL_SERVICE_USER_TOKEN_FILE: /pat/pat.txt
+      CUSTOM_REQUEST_HEADERS: Host:id.127.0.0.1.nip.io:8081,X-Forwarded-Proto:http
+    ports:
+      - "3002:3000"
+    volumes:
+      - zitadel_pat:/pat:ro
+    depends_on:
+      zitadel:
+        condition: service_healthy
+
+  # Проект, роли и OIDC-клиент заводятся скриптом, а не руками в UI:
+  # стенд воспроизводим с нуля. Результат - infra/compose/.zitadel/oidc.env
+  zitadel-init:
+    image: alpine:3.24
+    profiles: [zitadel]
+    entrypoint: ["/bin/sh", "/provision.sh"]
+    environment:
+      ZITADEL_INTERNAL_URL: http://id.127.0.0.1.nip.io:8081
+      ZITADEL_ISSUER: http://id.127.0.0.1.nip.io:8081
+      # Куда провайдер возвращает браузер: в dev это web-сервер (:3000),
+      # он проксирует /api на api (см. apps/web/vite.config.ts)
+      OIDC_REDIRECT_URL: http://localhost:3000/api/v1/auth/oidc/callback
+      OIDC_EXTRA_REDIRECT_URL: http://localhost:8080/api/v1/auth/oidc/callback
+      OIDC_POST_LOGOUT_URL: http://localhost:3000/
+      DEMO_USER_PASSWORD: ${ZITADEL_DEMO_PASSWORD:-TouDevDemo2026!}
+    volumes:
+      - ../zitadel/provision.sh:/provision.sh:ro,z
+      - zitadel_pat:/pat:ro
+      - ./.zitadel:/out:z
+    depends_on:
+      zitadel:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:19beta2
+    environment:
+      POSTGRES_DB: tou_rent
+      POSTGRES_USER: tou_rent
+      POSTGRES_PASSWORD: tou_rent_dev # dev-only
+    ports:
+      - "5432:5432"
+    # Образы 18+: том монтируется в /var/lib/postgresql (данные - в подкаталоге
+    # с номером мажорной версии), это позволяет pg_upgrade --link при переходе 19beta→19
+    volumes:
+      - pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tou_rent -d tou_rent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8.10.0
+    ports:
+      - "6379:6379"
+
+  # Объектное хранилище - RustFS (ADR-0006): тот же S3 API, что и раньше,
+  # поэтому у приложения меняется только адрес. Одна нода, один диск.
+  rustfs:
+    image: rustfs/rustfs:1.0.0-rc.1
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_ADDRESS: ":9001"
+      RUSTFS_ACCESS_KEY: tou_rent
+      RUSTFS_SECRET_KEY: tou_rent_dev # dev-only
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - rustfs_data:/data
+
+  # Бакеты арх. § 2: public (опубликованные PDF) и dossiers (материалы досье).
+  # Обе команды идемпотентны - контейнер отрабатывает и завершается.
+  #
+  # Бакеты заводит aws-cli, а не клиент конкретного вендора: Object Lock
+  # настраивается обычными вызовами S3 (CreateBucket с флагом блокировки +
+  # PutObjectLockConfiguration), и смена сервера их не затрагивает.
+  # Проверка контрольных сумм на стороне клиента переведена в when_required:
+  # значение по умолчанию (when_supported, aws-cli 2.23+) добавляет CRC32
+  # к запросам, которые S3-совместимые серверы принимать не обязаны.
+  #
+  # INV-042 (FR-1206, FR-1602, п. 16.15, 42): dossiers создается с Object Lock.
+  # Object Lock включается только при создании бакета: на стенде с уже созданным
+  # без блокировки `dossiers` put-object-lock-configuration отработает вхолостую,
+  # и WORM появится после пересоздания тома rustfs_data (A-075).
+  #
+  # Режим и срок здесь не такие, как в проде (A-098): на стенде governance
+  # на сутки, в проде compliance на пять лет. Проверяется на стенде то, что
+  # блокировка включена и удаление отбивается, а не длина срока; compliance
+  # же не снимает никто, включая администратора, - то есть каждый пробный
+  # файл досье оставался бы на диске разработчика пять лет, и единственной
+  # уборкой было бы удаление тома целиком. Прод-режим проверяется на проде.
+  rustfs-init:
+    image: amazon/aws-cli:2.36.19
+    depends_on:
+      - rustfs
+    environment:
+      AWS_ACCESS_KEY_ID: tou_rent
+      AWS_SECRET_ACCESS_KEY: tou_rent_dev # dev-only
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://rustfs:9000
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until aws s3api list-buckets >/dev/null 2>&1; do sleep 1; done
+        aws s3api create-bucket --bucket public || true
+        aws s3api create-bucket --bucket dossiers --object-lock-enabled-for-bucket || true
+        aws s3api put-object-lock-configuration --bucket dossiers \
+          --object-lock-configuration '{"ObjectLockEnabled":"Enabled","Rule":{"DefaultRetention":{"Mode":"GOVERNANCE","Days":1}}}'
+
+volumes:
+  pg_data:
+  rustfs_data:
+  # PAT машинного пользователя Zitadel - для провижининга и Login V2
+  zitadel_pat:
+  # Явные имена - те же тома использует контейнерный `cargo test` (без префикса проекта)
+  cargo_registry:
+    name: tou-rent-cargo
+  cargo_target:
+    name: tou-rent-target
+  rustup:
+    name: tou-rent-rustup

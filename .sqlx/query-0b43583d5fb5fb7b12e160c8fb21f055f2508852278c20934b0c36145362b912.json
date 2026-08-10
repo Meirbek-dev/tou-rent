@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.objects (kind, name, address, area_m2)\n         VALUES ('premises', 'Т37 помещение', 'адрес', 60.00) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0b43583d5fb5fb7b12e160c8fb21f055f2508852278c20934b0c36145362b912"
+}

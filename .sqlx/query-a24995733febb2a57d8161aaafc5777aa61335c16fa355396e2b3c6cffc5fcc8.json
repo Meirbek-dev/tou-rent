@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"count!\" FROM core.contracts\n           WHERE lot_id = $1 AND status NOT IN ('terminated', 'cancelled')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a24995733febb2a57d8161aaafc5777aa61335c16fa355396e2b3c6cffc5fcc8"
+}

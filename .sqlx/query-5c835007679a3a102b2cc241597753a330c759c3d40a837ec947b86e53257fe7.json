@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.dossier_items SET file_key = NULL\n             WHERE special_request_id = $1 AND file_key IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5c835007679a3a102b2cc241597753a330c759c3d40a837ec947b86e53257fe7"
+}

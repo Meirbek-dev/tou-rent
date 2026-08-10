@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SET ROLE tou_rent_app",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "c966a2cb8f6960df828879ef1d0fc960e8b9cd0aa3f6f55e90455a63924149c2"
+}

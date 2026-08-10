@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.ledger_accounts (kind, contract_id, owner_user_id)\n         VALUES ('contract_deposit', $1, $2)\n         ON CONFLICT (contract_id) DO UPDATE SET contract_id = EXCLUDED.contract_id\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3400d513a697093898283048ce4374c1d10a7652b13d9b9d76a6a83274c2f964"
+}

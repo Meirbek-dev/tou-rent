@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contracts SET tenant_signed_at = core.now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9a2f20581cc80b3b4c372a13d3b8f990111127cd096d8968af5cd0d2d2b56daa"
+}

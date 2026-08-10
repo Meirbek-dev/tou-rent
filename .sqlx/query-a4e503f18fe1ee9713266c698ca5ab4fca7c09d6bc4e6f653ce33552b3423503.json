@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.application_id, v.member_id, u.full_name AS member_name,\n                  v.value::text AS \"value!\", v.dissent\n           FROM core.votes v\n           JOIN core.commission_members cm ON cm.id = v.member_id\n           JOIN core.users u ON u.id = cm.user_id\n           WHERE v.meeting_id = $1\n           ORDER BY v.application_id, u.full_name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "application_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "member_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "member_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "value!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "dissent",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "a4e503f18fe1ee9713266c698ca5ab4fca7c09d6bc4e6f653ce33552b3423503"
+}

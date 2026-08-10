@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.place::text AS \"place!\",\n                c.handed_to_tenant_at IS NOT NULL AS \"handed_to_tenant!\",\n                c.tenant_signed_at IS NOT NULL AS \"tenant_signed!\",\n                EXISTS (SELECT 1 FROM core.evasions e WHERE e.contract_id = c.id) AS \"declared!\",\n                COALESCE((SELECT a.runner_up_application_id IS NOT NULL\n                          FROM core.auctions a WHERE a.lot_id = c.lot_id), false)\n                  AS \"runner_up_available!\"\n         FROM core.contracts c WHERE c.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "place!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "handed_to_tenant!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "tenant_signed!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "declared!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "runner_up_available!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "62489e7f6c971b9480f685f4f0c283c24a6ee49ad9264807c621c9dcb205051e"
+}

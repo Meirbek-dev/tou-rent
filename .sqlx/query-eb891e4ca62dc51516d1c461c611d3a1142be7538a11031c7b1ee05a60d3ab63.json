@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.reg_number, c.registered_at, o.name AS object_name,\n                u.full_name AS \"tenant_name?\", c.monthly_rate,\n                lower(c.lease_period) AS lease_from, upper(c.lease_period) AS lease_to,\n                c.status::text AS \"status!\",\n                CASE\n                  WHEN c.tender_id IS NOT NULL THEN 'tender'\n                  WHEN EXISTS (SELECT 1 FROM core.land_contracts l WHERE l.contract_id = c.id)\n                    THEN 'land'\n                  WHEN EXISTS (SELECT 1 FROM core.investment_contracts i WHERE i.contract_id = c.id)\n                    THEN 'special'\n                  ELSE 'other'\n                END AS \"source!\"\n         FROM core.contracts c\n         JOIN core.objects o ON o.id = c.object_id\n         LEFT JOIN core.users u ON u.id = c.tenant_id\n         WHERE c.registered_at IS NOT NULL\n           AND ($1::date IS NULL OR c.registered_at >= $1::date)\n           AND ($2::date IS NULL OR c.registered_at < $2::date + 1)\n         ORDER BY c.registered_at DESC LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reg_number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "registered_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "object_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tenant_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "monthly_rate",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "lease_from",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "lease_to",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "source!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Date",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "eb891e4ca62dc51516d1c461c611d3a1142be7538a11031c7b1ee05a60d3ab63"
+}

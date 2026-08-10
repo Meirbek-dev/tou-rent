@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.land_contracts\n               (contract_id, land_application_id, investment_amount)\n             VALUES ($1, $2, 500000000)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "45372d587acc71c0b01a1806af75690dc8159c55a36e02d58a028e7ff8af6fe3"
+}

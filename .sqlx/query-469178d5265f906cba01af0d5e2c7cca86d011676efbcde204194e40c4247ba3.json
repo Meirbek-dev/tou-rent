@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.runner_up_application_id AS \"application_id!\", app.participant_id,\n                u.full_name AS participant_name, a.runner_up_amount AS \"amount!\"\n         FROM core.auctions a\n         JOIN core.applications app ON app.id = a.runner_up_application_id\n         JOIN core.users u ON u.id = app.participant_id\n         WHERE a.lot_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "application_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "participant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "participant_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "amount!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "469178d5265f906cba01af0d5e2c7cca86d011676efbcde204194e40c4247ba3"
+}

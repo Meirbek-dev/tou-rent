@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT k.code FROM core.land_contract_covenants k\n         JOIN refdata.land_covenants c ON c.code = k.code\n         WHERE k.contract_id = $1 ORDER BY c.ordinal",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "554849a12a36b2b1387c2568ad69bae8e3e49bf74104793234037e99ec47b278"
+}

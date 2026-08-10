@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.public_records\n         SET unpublished_at = unpublish_at + interval '1 day'\n         WHERE special_request_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "55cd7c207520454369f3de6d548c9dc7490218624f97f9668122a85023e8e6ec"
+}

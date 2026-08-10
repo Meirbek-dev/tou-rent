@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.auction_participants\n             SET status = 'passed', changed_at = core.now()\n             WHERE auction_id = $1 AND application_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7f50b668598c72810c76666dc74c7bfdd06bbfed5f17c5d172665a3bcc8d6e71"
+}

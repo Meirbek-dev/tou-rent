@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT unnest(enum_range(NULL::core.special_request_status))::text AS \"value!\"\n           ORDER BY 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "69d4c6a8255fa712fa9843f408b27897bcbe8df785e63abbd10c2b5d00f0a82c"
+}

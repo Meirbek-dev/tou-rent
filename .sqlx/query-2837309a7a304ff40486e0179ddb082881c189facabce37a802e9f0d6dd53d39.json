@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.id, o.action, o.rule_ref,\n                      o.assignee_role::text AS \"assignee_role!\",\n                      o.tender_id, t.title AS \"tender_title?\", o.due_at,\n                      o.status::text AS \"status!\", o.completed_at\n               FROM core.obligations o\n               LEFT JOIN core.tenders t ON t.id = o.tender_id WHERE o.assignee_role = ANY($1::text[]::core.role[])\n            AND o.status IN ('pending', 'overdue')\n          ORDER BY o.due_at LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "action",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "rule_ref",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "assignee_role!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "tender_title?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "due_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "completed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      true,
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "2837309a7a304ff40486e0179ddb082881c189facabce37a802e9f0d6dd53d39"
+}

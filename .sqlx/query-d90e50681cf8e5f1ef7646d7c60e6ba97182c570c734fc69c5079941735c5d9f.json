@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT cl.item_code, i.label_ru, i.rule_ref, cl.checked_at,\n                    u.full_name AS \"checked_by_name?\"\n             FROM core.contract_checklists cl\n             JOIN refdata.checklist_items i ON i.code = cl.item_code\n             LEFT JOIN core.users u ON u.id = cl.checked_by\n             WHERE cl.contract_id = $1\n             ORDER BY i.seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "label_ru",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "rule_ref",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "checked_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "checked_by_name?",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "d90e50681cf8e5f1ef7646d7c60e6ba97182c570c734fc69c5079941735c5d9f"
+}

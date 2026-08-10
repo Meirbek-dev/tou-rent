@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.lots SET object_id = $2 WHERE tender_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e5d561eb551f3525862ffeb54e4812c4dadb467eb9ffadc3b7ac178b0ed28fc6"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT core.investment_accepted($1) AS \"accepted!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "accepted!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "570b9c9a83444d5b02de14eebe8f431897579e6a32efc0b81a0d98ae3ea2263c"
+}

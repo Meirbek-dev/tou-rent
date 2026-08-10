@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.dossier_items SET special_request_id = NULL, tender_id = NULL\n             WHERE special_request_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3026c384f227ea8c6ecd32aa48694fdcad548f0dfa259d0a2e6c4378350a2a49"
+}

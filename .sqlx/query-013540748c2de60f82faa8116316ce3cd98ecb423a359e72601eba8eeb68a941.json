@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, tender_id, seq, object_id, purpose, lease_months,\n                      base_rate_monthly, guarantee_fee, rate_calculation,\n                      viewing_terms, rate_unit::text AS \"rate_unit!\", hours_total,\n                      cancelled_at, cancel_reason\n               FROM core.lots WHERE tender_id = $1 ORDER BY seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "seq",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "object_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "purpose",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "lease_months",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "base_rate_monthly",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "guarantee_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "rate_calculation",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 9,
+        "name": "viewing_terms",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "rate_unit!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "hours_total",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "cancelled_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "cancel_reason",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "013540748c2de60f82faa8116316ce3cd98ecb423a359e72601eba8eeb68a941"
+}

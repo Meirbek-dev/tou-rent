@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id, i.contract_id, i.special_request_id,\n                      i.investment_amount, i.term_months, i.extended_at, i.extension_months,\n                      i.prolonged_at, i.prolongation_months, i.rate_calculation,\n                      core.investment_accepted(i.contract_id) AS \"accepted_amount!\",\n                      c.status::text AS \"contract_status!\", c.monthly_rate,\n                      o.name AS \"object_name?\", u.full_name AS \"tenant_name?\",\n                      coalesce(array(SELECT f.code FROM core.investment_contract_files f\n                                     WHERE f.contract_id = i.contract_id ORDER BY f.code),\n                               ARRAY[]::text[]) AS \"attachments!\"\n               FROM core.investment_contracts i\n               JOIN core.contracts c ON c.id = i.contract_id\n               JOIN core.objects o ON o.id = c.object_id\n               LEFT JOIN core.users u ON u.id = c.tenant_id WHERE i.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "special_request_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "investment_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "term_months",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "extended_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "extension_months",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "prolonged_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "prolongation_months",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "rate_calculation",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 10,
+        "name": "accepted_amount!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "contract_status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "monthly_rate",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 13,
+        "name": "object_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "tenant_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "attachments!",
+        "type_info": "TextArray"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "f1e68207b418359acc07947c1a57c334d1affa39d01e4e5e828141741accf1ef"
+}

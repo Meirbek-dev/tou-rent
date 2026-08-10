@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT code, label_ru, label_kk, label_en, rule_ref\n         FROM refdata.land_covenants ORDER BY ordinal",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "label_ru",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "label_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "label_en",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "rule_ref",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "21f69ca03c058bfb8b911d426c05dfdf4848293282f7eb3995f2b79115426d2f"
+}

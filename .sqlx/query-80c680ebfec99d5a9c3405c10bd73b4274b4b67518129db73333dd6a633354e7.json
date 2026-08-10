@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_board_decisions\n                   (special_request_id, decision, rationale, decided_by)\n                 VALUES ($1, 'redirect', $2, $3)\n                 ON CONFLICT (special_request_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "80c680ebfec99d5a9c3405c10bd73b4274b4b67518129db73333dd6a633354e7"
+}

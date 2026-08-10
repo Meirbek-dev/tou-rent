@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.participant_id, l.guarantee_fee\n         FROM core.applications a\n         JOIN core.lots l ON l.id = a.lot_id\n         WHERE a.tender_id = $1 AND a.status = 'admitted'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "participant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "guarantee_fee",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ea4c2485d662a08b0a14ead97796042869bc6d8ef20bacd0b06996507f2a2a13"
+}

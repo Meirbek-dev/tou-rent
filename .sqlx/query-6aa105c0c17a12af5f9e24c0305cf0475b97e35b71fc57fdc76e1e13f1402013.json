@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.meeting_attendance SET present = false\n             WHERE meeting_id = $1 AND member_id = ANY($2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6aa105c0c17a12af5f9e24c0305cf0475b97e35b71fc57fdc76e1e13f1402013"
+}

@@ -1,0 +1,74 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT code, label_ru, label_kk, label_en, rule_ref, has_schedule,\n                later_share_pct, requires_council, min_study_credits, internship_quota\n         FROM refdata.benefit_schemes ORDER BY code",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "label_ru",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "label_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "label_en",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "rule_ref",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "has_schedule",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "later_share_pct",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "requires_council",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "min_study_credits",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "internship_quota",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7298d17d31df7fc1bc71d74b805c9ddb36296ac5b79a5a5b1294a04bca7a2843"
+}

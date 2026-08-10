@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contracts SET registered_at = now(), reg_number = 'Д-1' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "630596c5ef01ae3e42eeea70e735f856a496f9cadb5e085e934beed9c423de63"
+}

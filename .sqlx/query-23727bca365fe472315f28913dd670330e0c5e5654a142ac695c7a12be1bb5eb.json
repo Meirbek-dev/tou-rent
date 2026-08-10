@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id FROM core.applications a\n         WHERE a.tender_id = $1 AND a.status = 'admitted'\n         ORDER BY a.submitted_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "23727bca365fe472315f28913dd670330e0c5e5654a142ac695c7a12be1bb5eb"
+}

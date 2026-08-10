@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, e.contract_id, e.tender_id, e.lot_id, l.seq AS \"lot_seq?\",\n                      e.user_id, u.full_name AS user_name, e.place::text AS \"place!\",\n                      e.ground, g.label_ru AS ground_label, e.note, e.declared_at\n               FROM core.evasions e\n               JOIN core.users u ON u.id = e.user_id\n               JOIN refdata.evasion_grounds g ON g.code = e.ground\n               LEFT JOIN core.lots l ON l.id = e.lot_id WHERE e.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "lot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "lot_seq?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "user_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "place!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "ground",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "ground_label",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "note",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "declared_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "568be3bbdbace2fb17a6d7bd70ea7e07e6f92f124d18ff0936a16bbc2af0f1b6"
+}

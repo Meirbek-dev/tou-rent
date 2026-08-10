@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refdata.special_categories SET publishable = false WHERE code = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4bda078a45e63cf139ded1bede6e8b6cdab0ae74136b9bd7f78a7ec4585decd6"
+}

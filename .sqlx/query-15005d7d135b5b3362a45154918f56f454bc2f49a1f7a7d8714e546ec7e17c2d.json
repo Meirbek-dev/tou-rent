@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders\n               SET trading_at = (refdata.add_business_days(\n                                    (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Almaty')::date,\n                                    $2\n                                  )::timestamp\n                                 + time '10:00') AT TIME ZONE 'Asia/Almaty'\n               WHERE id = $1\n               RETURNING trading_at AS \"trading_at!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "trading_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "15005d7d135b5b3362a45154918f56f454bc2f49a1f7a7d8714e546ec7e17c2d"
+}

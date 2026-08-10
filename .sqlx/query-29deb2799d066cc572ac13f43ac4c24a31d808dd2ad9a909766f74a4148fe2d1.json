@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.id, m.tender_id, m.commission_id, c.name AS commission_name,\n                    m.scheduled_at, m.held_at, m.opened_at,\n                    m.quorum_present, m.quorum_required\n             FROM core.sessions_meetings m\n             JOIN core.commissions c ON c.id = m.commission_id\n             WHERE m.tender_id = $1 AND m.kind = 'results'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "commission_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "commission_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "scheduled_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "held_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "opened_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "quorum_present",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "quorum_required",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "29deb2799d066cc572ac13f43ac4c24a31d808dd2ad9a909766f74a4148fe2d1"
+}

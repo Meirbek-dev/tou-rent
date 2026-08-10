@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.protocols\n         SET unpublished_at = core.now()\n         WHERE id IN (\n           SELECT id FROM core.protocols\n           WHERE published_at IS NOT NULL AND unpublished_at IS NULL\n             AND unpublish_at IS NOT NULL AND unpublish_at <= core.now()\n           ORDER BY unpublish_at\n           LIMIT $1\n           FOR UPDATE SKIP LOCKED\n         )\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3aac8ea0f2d642624f11d2f24c6bf7f1b568e7a26eb282a3dee59e879af67030"
+}

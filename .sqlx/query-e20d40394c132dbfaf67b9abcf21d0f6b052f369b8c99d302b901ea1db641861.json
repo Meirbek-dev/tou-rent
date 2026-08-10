@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.protocols (tender_id, kind, number, content, pdf_key,\n                                     published_at, unpublish_at, unpublished_at)\n         VALUES ($1, 'admission', 'Д-Т28', '{}'::jsonb, $2,\n                 core.now() - interval '7 months',\n                 core.now() - interval '1 month',\n                 CASE WHEN $3 THEN core.now() END)\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e20d40394c132dbfaf67b9abcf21d0f6b052f369b8c99d302b901ea1db641861"
+}

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.application_id,\n                      COALESCE(a.applicant_details->>'name', '-') AS \"applicant_name!\",\n                      p.turn_order, p.status::text AS \"status!\", p.initial_price\n               FROM core.auction_participants p\n               JOIN core.applications a ON a.id = p.application_id WHERE p.auction_id = $1 ORDER BY p.turn_order",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "application_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "applicant_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "turn_order",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "initial_price",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "cd48e5941870d004aba581797d9b155bd12778197c1cd1a9294fb6b7ef8bb3e9"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.acts (contract_id, kind, act_date)\n             VALUES ($1, $2::text::core.act_kind, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Date"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6e2a3a5ff29e78e81d2744b305bccd1d828e5ef2c5ab634d52eb447a8cff4d8d"
+}

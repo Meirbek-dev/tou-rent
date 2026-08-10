@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.id, g.contract_id, g.scheme, g.communal_monthly,\n                    g.council_decision, g.council_date, g.study_credits, g.internships,\n                    u.full_name AS \"granted_by_name?\", g.granted_at,\n                    c.monthly_rate AS base_monthly, s.internship_quota\n             FROM core.benefit_grants g\n             JOIN core.contracts c ON c.id = g.contract_id\n             JOIN refdata.benefit_schemes s ON s.code = g.scheme\n             LEFT JOIN core.users u ON u.id = g.granted_by WHERE g.contract_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "scheme",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "communal_monthly",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "council_decision",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "council_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 6,
+        "name": "study_credits",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "internships",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "granted_by_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "granted_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "base_monthly",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "internship_quota",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "d948338c6884cfe07f44a48bb69a5e0a65922292e30592debdffad76aa05df60"
+}

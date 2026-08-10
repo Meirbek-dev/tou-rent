@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refdata.clock_offset SET shift = '11 days' WHERE id",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "264d6b2a9759dd1c1437641a8f3dbdf68047212e31baafcc9f237c076c9a82e3"
+}

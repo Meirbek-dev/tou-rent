@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.id, d.special_request_id, d.decision::text AS \"decision!\",\n                      d.rationale, d.decided_by, u.full_name AS \"decided_by_name?\",\n                      d.decided_at, d.pdf_key\n               FROM core.special_board_decisions d\n               LEFT JOIN core.users u ON u.id = d.decided_by WHERE d.special_request_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "special_request_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "decision!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "rationale",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "decided_by",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "decided_by_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "decided_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "pdf_key",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "bad30585e64db900d84795bfe0ebb977306925977f9e7741e1e5ceaa912b21af"
+}

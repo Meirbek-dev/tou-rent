@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.contract_id, a.act_date, a.accepted_amount,\n                    a.note, u.full_name AS \"accepted_by_name?\", a.pdf_key, a.created_at\n             FROM core.investment_acceptances a\n             LEFT JOIN core.users u ON u.id = a.accepted_by WHERE a.contract_id = $1 ORDER BY a.act_date, a.created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "act_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 3,
+        "name": "accepted_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "note",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "accepted_by_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "pdf_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "1d8ab061f0e142ee8cb415c6d51fbed124335dde8df34f5368e614e008ffb7f2"
+}

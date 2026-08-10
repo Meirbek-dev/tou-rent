@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, tender_id, kind::text AS \"kind!\", number, content,\n                      pdf_key, generated_at\n               FROM core.protocols WHERE tender_id = $1 AND kind = $2::text::core.protocol_kind",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "content",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "pdf_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "generated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "8290473ef32959502e5c722efc2a8a36d9689cc4eac9884a6790da2fe5085d68"
+}

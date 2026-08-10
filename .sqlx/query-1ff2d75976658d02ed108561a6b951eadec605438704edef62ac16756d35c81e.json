@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coefficient, option_code FROM refdata.rate_options\n         ORDER BY coefficient, option_code LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coefficient",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "option_code",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "1ff2d75976658d02ed108561a6b951eadec605438704edef62ac16756d35c81e"
+}

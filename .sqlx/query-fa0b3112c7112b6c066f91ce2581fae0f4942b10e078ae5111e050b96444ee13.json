@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.objects (kind, name, address, area_m2, floor_part, premises_type_code)\n         SELECT o.kind, $2, o.address, o.area_m2, o.floor_part, o.premises_type_code\n         FROM core.objects o\n         JOIN core.lots l ON l.object_id = o.id\n         WHERE l.tender_id = $1\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fa0b3112c7112b6c066f91ce2581fae0f4942b10e078ae5111e050b96444ee13"
+}

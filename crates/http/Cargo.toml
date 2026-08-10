@@ -1,0 +1,47 @@
+[package]
+name = "tou-http"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+argon2.workspace = true
+# multipart - загрузка файлов заявок (FR-401); ws - комната торгов (FR-603)
+axum = { workspace = true, features = ["multipart", "ws"] }
+axum-extra.workspace = true
+fred.workspace = true
+garde.workspace = true
+object_store.workspace = true
+zip.workspace = true
+openidconnect.workspace = true
+rand.workspace = true
+rust_decimal.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Отпечаток обращения для счетчика попыток (ratelimit, NFR-16)
+sha2.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tou-application.workspace = true
+tou-db.workspace = true
+tou-domain.workspace = true
+tou-ports.workspace = true
+tower-sessions.workspace = true
+tower-sessions-redis-store.workspace = true
+tracing.workspace = true
+typst.workspace = true
+typst-assets.workspace = true
+typst-layout.workspace = true
+typst-pdf.workspace = true
+utoipa.workspace = true
+utoipa-axum.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tower.workspace = true

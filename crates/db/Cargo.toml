@@ -1,0 +1,20 @@
+[package]
+name = "tou-db"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rust_decimal.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tou-domain.workspace = true
+tou-ports.workspace = true
+# Предупреждение о выборке, упершейся в потолок строк (MAX_ROWS)
+tracing.workspace = true
+uuid.workspace = true

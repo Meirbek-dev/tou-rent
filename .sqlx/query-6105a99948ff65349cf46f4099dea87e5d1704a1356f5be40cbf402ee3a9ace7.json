@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM core.applications a\n                        WHERE a.tender_id = $1 AND a.participant_id = $2) AS \"participates!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "participates!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6105a99948ff65349cf46f4099dea87e5d1704a1356f5be40cbf402ee3a9ace7"
+}

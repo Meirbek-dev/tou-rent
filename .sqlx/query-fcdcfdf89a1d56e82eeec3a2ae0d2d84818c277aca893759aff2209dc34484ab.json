@@ -1,0 +1,160 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id, c.tender_id, c.lot_id, l.seq AS \"lot_seq?\",\n                      o.name AS object_name, c.tenant_id, u.full_name AS tenant_name,\n                      c.status::text AS \"status!\", c.place::text AS \"place!\",\n                      EXISTS (SELECT 1 FROM core.evasions e\n                              WHERE e.contract_id = c.id) AS \"evaded!\",\n                      c.monthly_rate, c.lease_months,\n                      c.reg_number, c.registered_at, c.signed_scan_key, c.pdf_key,\n                      c.signature_status::text AS \"signature_status!\",\n                      c.drafted_at, c.handed_to_tenant_at, c.tenant_signed_at,\n                      c.documents_received_at, c.checklist_done_at,\n                      c.landlord_signed_at, c.copy_sent_at\n               FROM core.contracts c\n               JOIN core.objects o ON o.id = c.object_id\n               JOIN core.users u ON u.id = c.tenant_id\n               LEFT JOIN core.lots l ON l.id = c.lot_id WHERE c.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "lot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "lot_seq?",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "object_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "tenant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "tenant_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "place!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "evaded!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 10,
+        "name": "monthly_rate",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 11,
+        "name": "lease_months",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "reg_number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "registered_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "signed_scan_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "pdf_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 16,
+        "name": "signature_status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 17,
+        "name": "drafted_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 18,
+        "name": "handed_to_tenant_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 19,
+        "name": "tenant_signed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 20,
+        "name": "documents_received_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 21,
+        "name": "checklist_done_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 22,
+        "name": "landlord_signed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 23,
+        "name": "copy_sent_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "fcdcfdf89a1d56e82eeec3a2ae0d2d84818c277aca893759aff2209dc34484ab"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM core.tender_amendments WHERE tender_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "15099d5b24bb3be61cb1869034ce0e078764712bfdf69b3c59bd1c06f7a30ddb"
+}

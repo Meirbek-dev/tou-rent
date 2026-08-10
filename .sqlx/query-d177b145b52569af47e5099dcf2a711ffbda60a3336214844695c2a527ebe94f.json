@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n                       SELECT 1 FROM core.notifications\n                       WHERE kind = $2 AND payload->>'tender_id' = $1::uuid::text\n                     ) AS \"exists!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d177b145b52569af47e5099dcf2a711ffbda60a3336214844695c2a527ebe94f"
+}

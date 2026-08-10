@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"audited!\" FROM audit.log\n           WHERE table_name = 'core.user_identities' AND row_id IN\n             (SELECT id FROM core.user_identities WHERE user_id = $1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "audited!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "974d99cef3c1acf60d72a5f2b360bcc9e91bbb9496f87fa25f3da4f33c28b9f2"
+}

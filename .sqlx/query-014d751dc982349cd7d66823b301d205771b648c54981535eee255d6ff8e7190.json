@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.tenders (title, organizer_id, status, submission_deadline)\n         VALUES ('Т8 инварианты', $1, 'accepting', now() + $2::text::interval) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "014d751dc982349cd7d66823b301d205771b648c54981535eee255d6ff8e7190"
+}

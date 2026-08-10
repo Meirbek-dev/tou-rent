@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.auctions (lot_id, starting_bid, bid_step, status, started_at, ends_at,\n                                    current_turn_application_id)\n         VALUES ($1, 55000.00, 2750.00, 'running', core.now(),\n                 core.now() + interval '1 hour', $2)\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c6ff4983726451a2e64831c9fb0f500b7761259aa05b7e5c5e9bdfe5c7e41c7a"
+}

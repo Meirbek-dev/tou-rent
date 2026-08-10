@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.protocols (tender_id, kind, meeting_id, number, content, pdf_key)\n             VALUES ($1, $2::text::core.protocol_kind, $3, $4, $5, $6)\n             ON CONFLICT (tender_id, kind) DO NOTHING RETURNING id, tender_id, kind::text AS \"kind!\", number,\n                                  content, pdf_key, generated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "content",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 5,
+        "name": "pdf_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "generated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "db68485393052cfa3718364c14c205c8eac790280477d32115a9754964eae20b"
+}

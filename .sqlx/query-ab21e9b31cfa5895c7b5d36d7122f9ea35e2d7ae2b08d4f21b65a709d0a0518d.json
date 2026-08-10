@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contract_amendment_changes SET new_value = 'KZ33'\n             WHERE amendment_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ab21e9b31cfa5895c7b5d36d7122f9ea35e2d7ae2b08d4f21b65a709d0a0518d"
+}

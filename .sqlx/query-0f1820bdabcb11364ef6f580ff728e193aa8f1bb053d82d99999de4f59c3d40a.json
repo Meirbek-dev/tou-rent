@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.applications\n             SET status = 'fee_confirmed', fee_confirmed_at = core.now(), fee_confirmed_by = $2\n             WHERE id = $1 AND status = 'submitted'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0f1820bdabcb11364ef6f580ff728e193aa8f1bb053d82d99999de4f59c3d40a"
+}

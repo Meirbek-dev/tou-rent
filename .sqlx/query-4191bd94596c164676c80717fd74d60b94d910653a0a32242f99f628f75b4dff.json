@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders\n             SET status = 'failed', failure_ground = $2,\n                 consequence = $3::text::core.failure_consequence,\n                 failed_at = core.now()\n             WHERE id = $1 AND status <> 'failed'\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4191bd94596c164676c80717fd74d60b94d910653a0a32242f99f628f75b4dff"
+}

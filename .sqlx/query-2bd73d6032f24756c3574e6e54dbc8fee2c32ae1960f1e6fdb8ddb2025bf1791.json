@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM core.role_grants\n         WHERE user_id = $1 AND source = 'oidc'\n           AND role <> ALL($2::text[]::core.role[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2bd73d6032f24756c3574e6e54dbc8fee2c32ae1960f1e6fdb8ddb2025bf1791"
+}

@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.applications\n             SET status = 'withdrawn', withdrawn_at = core.now(), declined_amendment_id = $2\n             WHERE id = $1 AND participant_id = $3\n             RETURNING tender_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5661b80ff27a4f2ce5c7b3686214abf04309002dfca660f4b4e5d8859a971c8e"
+}

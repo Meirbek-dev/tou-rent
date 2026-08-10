@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.protocols (tender_id, kind, number, content, pdf_key)\n         VALUES ($1, 'results', 'И-Т28', '{}'::jsonb, $2)\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3dd55bd9ac8a90a48260ce9760e40da3ed655c5da2a44daebd039005d2548fe9"
+}

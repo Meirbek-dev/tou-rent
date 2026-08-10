@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.applications\n           (tender_id, lot_id, participant_id, status, applicant_kind, applicant_details)\n         VALUES ($1, $2, $3, 'admitted', 'legal_entity', '{\"name\": \"ТОО Т26\"}'::jsonb)\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "83ded5ad0cc3a90eaee9e5bab3e672bb1a11c4ab67cd9b0c3d79391ff422adc2"
+}

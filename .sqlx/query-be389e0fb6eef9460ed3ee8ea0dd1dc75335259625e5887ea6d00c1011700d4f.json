@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (\n                       SELECT 1 FROM core.protocols\n                       WHERE tender_id = $1 AND kind = 'admission'\n                     ) AS \"exists!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "be389e0fb6eef9460ed3ee8ea0dd1dc75335259625e5887ea6d00c1011700d4f"
+}

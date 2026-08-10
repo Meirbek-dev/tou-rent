@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.role_grants (user_id, role, granted_by)\n         VALUES ($1, 'participant', $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81e509b66840cbe718a185fde31ee0a76f7b42ed44f0ebbba21bde1c18793fba"
+}

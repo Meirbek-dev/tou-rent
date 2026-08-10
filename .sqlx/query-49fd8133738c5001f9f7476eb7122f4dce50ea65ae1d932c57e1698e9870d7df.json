@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.contract_checklists (contract_id, item_code)\n         VALUES ($1, 'bank_details'), ($1, 'fee_receipt')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "49fd8133738c5001f9f7476eb7122f4dce50ea65ae1d932c57e1698e9870d7df"
+}

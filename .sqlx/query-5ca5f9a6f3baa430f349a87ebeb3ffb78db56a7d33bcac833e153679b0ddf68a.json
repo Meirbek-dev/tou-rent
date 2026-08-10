@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.sessions_meetings\n           (tender_id, commission_id, kind, scheduled_at, held_at, opened_at,\n            quorum_present, quorum_required)\n         SELECT $1, $2, 'qualification', core.now() - interval '1 hour',\n                core.now() - interval '1 hour', core.now() - interval '1 hour', 7, 5\n         WHERE NOT EXISTS (SELECT 1 FROM core.sessions_meetings m\n                           WHERE m.tender_id = $1 AND m.kind = 'qualification')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5ca5f9a6f3baa430f349a87ebeb3ffb78db56a7d33bcac833e153679b0ddf68a"
+}

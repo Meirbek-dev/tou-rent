@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.special_requests SET status = 'withdrawn'\n             WHERE id = $1 AND applicant_id = $2 AND status IN ('submitted', 'under_review')\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f7517d7fef10ef0eebad006204b41c54f32052d18578e81a68e573e1302b18a0"
+}

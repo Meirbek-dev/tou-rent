@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT extract(year FROM age(retain_until, occurred_at))::int AS \"years!\"\n           FROM core.dossier_items WHERE special_request_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "years!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5ed71c3e1021632e6253221d0057f06f956cba701fcea85cc8a8da6ebf8215a9"
+}

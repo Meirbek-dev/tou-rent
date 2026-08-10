@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(sum(credit - debit), 0)::numeric(14,2) AS \"balance!\"\n             FROM core.ledger_entries WHERE account_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "balance!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "31d362c7e35f72d9e6d58ff5cb9b486dd4db048064f8fea39fa53b94aa52804e"
+}

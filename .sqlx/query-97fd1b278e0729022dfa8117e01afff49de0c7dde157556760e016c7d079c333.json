@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.auctions\n             SET status = 'running', started_at = core.now(),\n                 ends_at = core.now() + make_interval(mins => $2)\n             WHERE id = $1 AND status = 'scheduled'\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "97fd1b278e0729022dfa8117e01afff49de0c7dde157556760e016c7d079c333"
+}

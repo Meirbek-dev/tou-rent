@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.sessions_meetings (tender_id, commission_id, kind, scheduled_at)\n         VALUES ($1, $2, 'qualification', now()) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f122eb9934ef21f28bd4dc008749fb1ac7443df8d183174afe403203f99c94c3"
+}

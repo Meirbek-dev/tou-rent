@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.winner_application_id, a.winner_amount,\n                    a.runner_up_application_id, a.runner_up_amount,\n                    l.tender_id, l.object_id, l.lease_months,\n                    EXISTS (SELECT 1 FROM core.evasions e\n                            WHERE e.lot_id = l.id AND e.place = 'winner') AS \"winner_evaded!\",\n                    EXISTS (SELECT 1 FROM core.evasions e\n                            WHERE e.lot_id = l.id AND e.place = 'runner_up')\n                      AS \"runner_up_evaded!\",\n                    -- `?`: протокол итогов приходит LEFT JOIN'ом, а `id` -\n                    -- NOT NULL, и sqlx выводит nullability по столбцу\n                    p.id AS \"protocol_id?\"\n             FROM core.auctions a\n             JOIN core.lots l ON l.id = a.lot_id\n             LEFT JOIN core.protocols p ON p.tender_id = l.tender_id AND p.kind = 'results'\n             WHERE a.lot_id = $1 AND a.status = 'finished'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "winner_application_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "winner_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "runner_up_application_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "runner_up_amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 4,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "object_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "lease_months",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "winner_evaded!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "runner_up_evaded!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "protocol_id?",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "8744a98897408202ee321b8ce033ef1ad5bad637b07319662485b23aeb447846"
+}

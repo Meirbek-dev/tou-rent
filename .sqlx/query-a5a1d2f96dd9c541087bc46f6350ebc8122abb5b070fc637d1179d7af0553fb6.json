@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.commissions SET approved_at = core.now(), approved_by = $2 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a5a1d2f96dd9c541087bc46f6350ebc8122abb5b070fc637d1179d7af0553fb6"
+}

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT extract(isodow FROM (o.due_at AT TIME ZONE 'Asia/Almaty'))::int AS \"dow!\",\n                  o.rule_ref, o.assignee_role::text AS \"role!\"\n           FROM core.obligations o WHERE o.tender_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "dow!",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "rule_ref",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "role!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      null
+    ]
+  },
+  "hash": "dffca704ad157fc6599532722da87f0c056a2d522132dea5ed4f2e6829781255"
+}

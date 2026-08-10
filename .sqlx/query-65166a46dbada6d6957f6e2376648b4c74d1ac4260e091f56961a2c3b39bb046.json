@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.land_plots\n               (object_id, cadastral_number, designation, permitted_use, min_investment)\n             VALUES ($1, $2, $3, $4, $5)\n             ON CONFLICT (object_id) DO UPDATE\n               SET cadastral_number = EXCLUDED.cadastral_number,\n                   designation      = EXCLUDED.designation,\n                   permitted_use    = EXCLUDED.permitted_use,\n                   min_investment   = EXCLUDED.min_investment",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "65166a46dbada6d6957f6e2376648b4c74d1ac4260e091f56961a2c3b39bb046"
+}

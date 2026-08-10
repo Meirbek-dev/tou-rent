@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce(sum(e.debit) FILTER (WHERE e.op = 'hold'), 0)::numeric(14,2)\n                    AS \"held!\",\n                  coalesce(sum(e.credit - e.debit), 0)::numeric(14,2) AS \"balance!\"\n           FROM core.ledger_entries e\n           JOIN core.ledger_accounts acc ON acc.id = e.account_id\n           WHERE acc.application_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "held!",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 1,
+        "name": "balance!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "65bd6e4729cfe113959f11a9341e929d4a9e657a3395bfe654362821a204e270"
+}

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.member_id, u.full_name, r.lot_id, r.reason,\n                r.replacement_member_id, ru.full_name AS \"replacement_name?\", r.decided_at\n         FROM core.member_recusals r\n         JOIN core.commission_members cm ON cm.id = r.member_id\n         JOIN core.users u ON u.id = cm.user_id\n         LEFT JOIN core.commission_members rcm ON rcm.id = r.replacement_member_id\n         LEFT JOIN core.users ru ON ru.id = rcm.user_id\n         WHERE r.tender_id = $1\n         ORDER BY u.full_name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "member_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "full_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "lot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "replacement_member_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 5,
+        "name": "replacement_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "decided_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "ff1d66a8cdd1a7c6ea5095e253ae66ce95f3c29b03c9f1ddf01825282b943315"
+}

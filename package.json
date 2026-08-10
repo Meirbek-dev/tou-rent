@@ -1,0 +1,54 @@
+{
+  "name": "tou-rent",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "prepare": "vp config --no-agent",
+    "build": "turbo build",
+    "codegen": "turbo codegen",
+    "dev": "turbo dev",
+    "stack:up": "podman compose -f infra/compose/docker-compose.dev.yml --profile api up -d",
+    "stack:down": "podman compose -f infra/compose/docker-compose.dev.yml --profile api down",
+    "api:restart": "podman compose -f infra/compose/docker-compose.dev.yml restart api",
+    "api:logs": "podman compose -f infra/compose/docker-compose.dev.yml logs -f api",
+    "api:migrate": "podman compose -f infra/compose/docker-compose.dev.yml run --rm api-migrate",
+    "cache:size": "podman run --rm -v tou-rent-target:/target alpine:3.22 du -sh /target /target/debug/deps /target/debug/incremental",
+    "cache:sweep": "podman run --rm -v tou-rent-target:/target alpine:3.22 rm -rf /target/debug/incremental",
+    "cache:clean": "podman run --rm -v tou-rent-target:/target alpine:3.22 sh -c \"rm -rf /target/debug /target/release\"",
+    "zitadel:up": "podman compose -f infra/compose/docker-compose.dev.yml --profile zitadel up -d",
+    "zitadel:down": "podman compose -f infra/compose/docker-compose.dev.yml --profile zitadel down",
+    "zitadel:provision": "podman compose -f infra/compose/docker-compose.dev.yml run --rm zitadel-init",
+    "zitadel:logs": "podman compose -f infra/compose/docker-compose.dev.yml logs -f zitadel zitadel-login zitadel-init",
+    "check": "vp check",
+    "lint": "vp lint",
+    "format": "vp fmt --write",
+    "e2e": "bun run --cwd apps/e2e e2e",
+    "e2e:install": "bun run --cwd apps/e2e e2e:install"
+  },
+  "devDependencies": {
+    "turbo": "^2.10.9",
+    "typescript": "catalog:",
+    "vite": "^0.2.8",
+    "vite-plus": "^0.2.8"
+  },
+  "packageManager": "bun@1.3.14",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "catalog": {
+    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
+    "vitest": "4.1.9",
+    "vite-plus": "latest",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "typescript": "catalog:",
+    "js-yaml": "^4.3.1"
+  }
+}

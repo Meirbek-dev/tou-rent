@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.id FROM core.objects o\n         JOIN core.lots l ON l.object_id = o.id\n         WHERE l.tender_id = $1 AND o.name = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ee591e0606127b3cc02c25e76b518dc292861792e2dd9d7e3b70f513f3aa632d"
+}

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT status::text AS \"status!\", rent_starts_on,\n                  lower(lease_period) AS period_from\n             FROM core.contracts WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "rent_starts_on",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 2,
+        "name": "period_from",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "b56cd994c7953af6b9c9a13c0512901c5664229f876245cf94231beff18642f3"
+}

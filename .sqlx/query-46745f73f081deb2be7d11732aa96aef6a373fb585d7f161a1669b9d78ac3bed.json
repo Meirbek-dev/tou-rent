@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ordinal FROM refdata.special_categories\n         WHERE competition = 'redirect' ORDER BY ordinal",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ordinal",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "46745f73f081deb2be7d11732aa96aef6a373fb585d7f161a1669b9d78ac3bed"
+}

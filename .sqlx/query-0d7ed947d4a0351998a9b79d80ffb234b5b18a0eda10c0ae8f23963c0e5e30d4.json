@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.contract_id, a.seq, a.ground, a.effective_on,\n                      a.pdf_key, u.full_name AS \"created_by_name?\", a.created_at\n               FROM core.contract_amendments a\n               LEFT JOIN core.users u ON u.id = a.created_by WHERE a.contract_id = $1 ORDER BY a.seq",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "seq",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "ground",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "effective_on",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 5,
+        "name": "pdf_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_by_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "0d7ed947d4a0351998a9b79d80ffb234b5b18a0eda10c0ae8f23963c0e5e30d4"
+}

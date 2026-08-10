@@ -1,0 +1,60 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT b.id, b.auction_id, b.application_id,\n                      COALESCE(app.applicant_details->>'name', '-') AS \"applicant_name!\",\n                      b.amount, b.seq, b.placed_at\n               FROM core.bids b\n               JOIN core.applications app ON app.id = b.application_id WHERE b.auction_id = $1 AND ($2::bigint IS NULL OR b.seq > $2)\n          ORDER BY b.seq LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "auction_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "application_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "applicant_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "amount",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 5,
+        "name": "seq",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "placed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "32685eb068f2f1682e39e79d1edfe8c1abe2a08479220eadb39ec217969363ce"
+}

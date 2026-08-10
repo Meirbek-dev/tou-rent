@@ -1,0 +1,48 @@
+node_modules
+.DS_Store
+dist
+dist-ssr
+*.local
+.env*
+!.env.example
+!infra/compose/.env.prod.example
+.tanstack
+.wrangler
+.output
+.vinxi
+__unconfig*
+todos.json
+
+# vite+ hook dispatcher (генерируется vp config; проектные скрипты .vite-hooks/* - в репо)
+.vite-hooks/_/
+
+# turbo
+.turbo
+
+# typescript
+*.tsbuildinfo
+
+# rust
+target/
+
+# generated (paraglide)
+apps/web/src/paraglide/
+
+# Реквизиты OIDC-клиента дев-стенда (пишет infra/zitadel/provision.sh, NFR-09)
+infra/compose/.zitadel/
+
+# Последний успешно развернутый тег - состояние конкретного хоста (deploy.sh)
+infra/compose/.deployed-tag
+
+# Playwright (T14)
+apps/e2e/test-results
+apps/e2e/playwright-report
+apps/e2e/results.xml
+
+# .sqlx НЕ игнорируется намеренно (гейт G3). Это слепок схемы, по которому
+# макросы sqlx проверяют запросы там, где живой базы нет: сборка образа
+# (infra/docker/api.Dockerfile) и задания пайплайна без сервиса postgres
+# (rust-lint, db-gates, mutants, deps) собираются с SQLX_OFFLINE=true.
+# Без слепка в репозитории чистый checkout не собирается вообще - проверено:
+# «SQLX_OFFLINE=true but there is no cached data for this query».
+# Свежесть слепка стережет `sqlx prepare --check` в job rust-test.

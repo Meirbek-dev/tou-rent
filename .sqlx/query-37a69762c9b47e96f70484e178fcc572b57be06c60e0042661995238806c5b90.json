@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.participant_id, a.lot_id, l.seq, l.purpose,\n                          core.price_amount(p) AS \"amount!\"\n                     FROM core.applications a\n                     JOIN core.lots l ON l.id = a.lot_id\n                     JOIN core.price_proposals p ON p.application_id = a.id\n                     WHERE a.tender_id = $1 AND a.status = 'admitted'\n                     ORDER BY a.submitted_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "participant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "lot_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "seq",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "purpose",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "amount!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "37a69762c9b47e96f70484e178fcc572b57be06c60e0042661995238806c5b90"
+}

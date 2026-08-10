@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders\n         SET submission_deadline = core.now() - interval '1 hour',\n             opening_at = core.now() - interval '30 minutes'\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6d44cef8b03a2e367bb227b73f7bdc61a35ec3dbb86b17c3e31efa4207085a02"
+}

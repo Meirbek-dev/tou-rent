@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contract_checklists\n             SET checked_at = CASE WHEN $3 THEN core.now() END,\n                 checked_by = CASE WHEN $3 THEN $4::uuid END\n             WHERE contract_id = $1 AND item_code = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ef3e4af631e3083162085b0404a283844adeb2bbe82f7900e1e2d9462766a7c2"
+}

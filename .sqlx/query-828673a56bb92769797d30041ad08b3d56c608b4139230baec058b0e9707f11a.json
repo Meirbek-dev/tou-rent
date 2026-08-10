@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.auctions (lot_id, starting_bid, bid_step)\n         VALUES ($1, $2::text::numeric, $3::text::numeric) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "828673a56bb92769797d30041ad08b3d56c608b4139230baec058b0e9707f11a"
+}

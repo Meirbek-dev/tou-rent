@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"obligations!\" FROM core.obligations\n          WHERE tender_id = $1 AND action = 'results_protocol'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "obligations!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "531b2ff1c995d3afbcbae622fa031a77b134b90239f39c3ab9afb5184cbdb48e"
+}

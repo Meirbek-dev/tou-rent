@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.auction_participants\n               (auction_id, application_id, turn_order, initial_price)\n             SELECT $1, a.id,\n                    COALESCE(j.seq, 1000 + row_number() OVER (ORDER BY a.submitted_at))::int,\n                    core.price_amount(p) AS amount\n             FROM core.applications a\n             JOIN core.price_proposals p ON p.application_id = a.id\n             LEFT JOIN core.journal_entries j\n               ON j.application_id = a.id AND j.entry_kind = 'application_submitted'\n             WHERE a.lot_id = $2 AND a.status = 'admitted'\n             ON CONFLICT (auction_id, application_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1498a13e40a4aa36c4bd182da309ac2f52f1d942aa36413816b573ea5629678f"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.obligations\n         SET status = 'cancelled'\n         WHERE status IN ('pending', 'overdue')\n           AND tender_id IS NOT DISTINCT FROM $1\n           AND contract_id IS NOT DISTINCT FROM $2\n           AND application_id IS NOT DISTINCT FROM $3\n           AND special_request_id IS NOT DISTINCT FROM $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3245de57e4fb90a0082850c685a76e3a84d993867d20163b54bbba4e5fa355f3"
+}

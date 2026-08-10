@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.lots SET cancelled_at = now(), cancel_reason = 'нарушение п. 5' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1760a75cf960454a721fdb19e2f656fe51d99c2a659bb494c441d47064fd56aa"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders SET status = 'qualification', opened_at = now() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7c79ba47eead0dc35941c8358d3952e43d4427d4ecb05c7cb7cdfdb44c9afd15"
+}

@@ -1,0 +1,65 @@
+# Caddy - единственная точка входа прода (арх. § 2): TLS от Let's Encrypt,
+# терминация HTTPS, маршрутизация /api на api, остального - на web.
+# Домен и почта для ACME задаются переменными окружения compose.
+
+{
+	email {$ACME_EMAIL}
+}
+
+{$TOU_DOMAIN} {
+	encode zstd gzip
+
+	# API, SSE-уведомления (FR-1301) и WS-комната торгов (FR-603).
+	# flush_interval -1 отключает буферизацию: событие уходит клиенту сразу,
+	# апгрейд протокола reverse_proxy пробрасывает сам.
+	handle /api/* {
+		reverse_proxy api:8080 {
+			flush_interval -1
+
+			# Адрес клиента задает прокси, а не клиент. Без этой строки
+			# Caddy дописывает свой хоп к присланному `X-Forwarded-For`,
+			# и первым элементом остается то, что прислал сам клиент, -
+			# а на первый элемент опирается лимит попыток входа по адресу
+			# (crates/http/src/ratelimit.rs, NFR-09).
+			header_up X-Forwarded-For {remote_host}
+		}
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+
+		# Политика источников (NFR-07). Портал и кабинеты грузят все свое
+		# со своего же origin, поэтому список короткий и закрытый.
+		#
+		# `unsafe-inline` для стилей и скриптов держат две вещи, обе наши:
+		# Tailwind и Base UI ставят inline-стили на элементы, а разметка
+		# несет inline-скрипты - `themeInitializer` (тема поднимается до
+		# первого кадра, иначе он мигает) и гидратация TanStack Start.
+		# Убрать их можно только через nonce, а его нужно протянуть
+		# в SSR-рендер; до тех пор политика все равно закрывает главное -
+		# чужие источники скриптов и `object-src`.
+		#
+		# `connect-src` шире прочего: там свой api, WS-комната торгов
+		# (FR-603) и внешняя телеметрия, если она включена.
+		Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' wss://{$TOU_DOMAIN} https://*.ingest.sentry.io https://*.posthog.com; upgrade-insecure-requests"
+
+		# Браузерных возможностей системе не нужно ни одной: ни камеры,
+		# ни микрофона, ни геолокации, ни платежей
+		Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()"
+	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 50MiB
+			roll_keep 10
+		}
+	}
+}

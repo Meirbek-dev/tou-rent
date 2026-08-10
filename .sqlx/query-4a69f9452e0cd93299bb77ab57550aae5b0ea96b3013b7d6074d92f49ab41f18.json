@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT core.tender_price_key($1) AS key_a, core.tender_price_key($2) AS key_b",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key_a",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "key_b",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "4a69f9452e0cd93299bb77ab57550aae5b0ea96b3013b7d6074d92f49ab41f18"
+}

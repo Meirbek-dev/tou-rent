@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.auctions SET ends_at = ends_at + interval '14 minutes' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8e62ca3809d7453eb4e35a1c2ef287f95999a11a2a267fc157584674a7cafab2"
+}

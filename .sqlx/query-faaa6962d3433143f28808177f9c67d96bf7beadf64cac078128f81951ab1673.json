@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_requests\n           (applicant_id, category, applicant_kind, applicant_details, purpose)\n         VALUES ($1, $2, 'legal_entity', '{}'::jsonb, 'размещение оборудования')\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "faaa6962d3433143f28808177f9c67d96bf7beadf64cac078128f81951ab1673"
+}

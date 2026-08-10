@@ -1,0 +1,23 @@
+{
+  "name": "@tou/api-client",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "codegen": "openapi-typescript ./openapi.json -o ./src/schema.d.ts"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0",
+    "openapi-react-query": "^0.5.4"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": "^5.101.4"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "typescript": "catalog:"
+  }
+}

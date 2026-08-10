@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (refdata.add_business_days(\n                   ($1 AT TIME ZONE 'Asia/Almaty')::date, $2\n                 )::timestamp + time '18:00') AT TIME ZONE 'Asia/Almaty'\n                 AS \"deadline!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deadline!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2051145f92b8113de86e8515fc22e2c4ef992a10b32f7c81cd1f32c2b202efcc"
+}

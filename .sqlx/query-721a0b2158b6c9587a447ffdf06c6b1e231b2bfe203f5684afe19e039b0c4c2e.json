@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(sum(credit), 0)::numeric(14,2) AS \"confirmed!\"\n               FROM core.ledger_entries\n               WHERE account_id = $1 AND op = 'receipt_confirmed'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "confirmed!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "721a0b2158b6c9587a447ffdf06c6b1e231b2bfe203f5684afe19e039b0c4c2e"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.applications a\n         SET status = CASE\n               WHEN a.applicant_details->>'name' LIKE '%3%' THEN 'rejected'::core.application_status\n               ELSE 'admitted'::core.application_status\n             END,\n             rejection_reason = CASE\n               WHEN a.applicant_details->>'name' LIKE '%3%' THEN 'non_compliant'\n             END\n         WHERE a.tender_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "68d55ccca104757e0507ae04154bdc75cff8d38dbfbb46020195dfdbcfd71cdf"
+}

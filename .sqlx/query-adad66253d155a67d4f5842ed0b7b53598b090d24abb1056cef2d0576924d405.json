@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.objects\n                   (kind, name, address, area_m2, floor_part,\n                    premises_type_code, premises_kind_code, comfort_code, location_code)\n                 VALUES ($1::text::core.object_kind, $2, $3, $4::text::numeric, $5,\n                         'default', 'default', 'default', 'default')\n                 RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "adad66253d155a67d4f5842ed0b7b53598b090d24abb1056cef2d0576924d405"
+}

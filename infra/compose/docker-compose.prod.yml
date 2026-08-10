@@ -1,0 +1,360 @@
+# Прод-стенд TOU.Rent (арх. § 2, NFR-10): Caddy → web/api, PostgreSQL как
+# единственный авторитетный источник, Redis (сессии, эфемерное), RustFS (файлы).
+# Разворачивается только через deploy.sh.
+#
+# Секреты берутся из .env рядом с этим файлом (см. .env.prod.example);
+# в репозиторий они не коммитятся (NFR-09).
+#
+# Версии инфраструктурных образов пиньованы (T70, NFR-10): с `latest` два
+# деплоя одной и той же ревизии кода дают разные стенды, а откатиться некуда
+# — тег уже переехал. Значения взяты с образов, проверенных на дев-стенде,
+# и каждый тег существует в реестре. Обновление версии — отдельный коммит:
+# так видно, что менялось окружение, а не код.
+name: tou-rent
+
+# Журналы контейнеров растут, пока есть диск. Caddy свои уже ротирует
+# (Caddyfile), остальным ротация задается здесь: один хост на всю систему,
+# и переполнение диска гасит и приложение, и базу (NFR-10).
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+
+# Одна машина держит и приложение, и базу (арх. § 2), поэтому потолок памяти
+# задается каждому сервису: без него утечка в `jobs` или тяжелый запрос
+# выселяют Postgres, и отказ одного сервиса становится отказом стенда (NFR-10).
+# Сумма потолков - около 10 ГБ: значения рассчитаны на хост с 16 ГБ, при
+# другом объеме их правят здесь, в одном месте.
+#
+# Привилегий, которых нет, нельзя лишиться по ошибке: процессы приложения -
+# обычные бинарники от непривилегированного пользователя, им не нужно ничего
+# из списка capabilities (NFR-07). Исключения ниже - Caddy (порты ниже 1024)
+# и Postgres (штатный вход образа снимает права с root).
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+  cap_drop: [ALL]
+
+x-api-image: &api-image
+  image: ${REGISTRY:-registry.local/tou-rent}/api:${TAG:-latest}
+  build:
+    context: ../..
+    dockerfile: infra/docker/api.Dockerfile
+  environment:
+    DATABASE_URL: postgres://tou_rent:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD}@postgres:5432/tou_rent
+    # Redis закрыт паролем: в нем лежат сессии и счетчики попыток входа, а сеть
+    # стенда общая - любой контейнер в ней иначе читает и правит чужие сессии
+    # (NFR-09). Пароль едет в URL, поэтому спецсимволы в нем недопустимы
+    # (см. .env.prod.example)
+    REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD}@redis:6379
+    RUST_LOG: ${RUST_LOG:-info}
+    COOKIE_SECURE: "1"
+    S3_ENDPOINT: http://rustfs:9000
+    # Приложение ходит в RustFS своей учетной записью, а не root-ключами:
+    # у root есть право снять Object Lock и удалить бакет досье целиком,
+    # а приложению нужно только читать и писать объекты (INV-042, NFR-09)
+    S3_ACCESS_KEY: ${S3_APP_ACCESS_KEY:?S3_APP_ACCESS_KEY}
+    S3_SECRET_KEY: ${S3_APP_SECRET_KEY:?S3_APP_SECRET_KEY}
+    S3_BUCKET_DOSSIERS: dossiers
+    # Мастер-ключ шифрования ценовых предложений (INV-040, п. 40): в базе
+    # не хранится, потеря делает цены нечитаемыми - бэкап ключа обязателен
+    PRICE_ENCRYPTION_KEY: ${PRICE_ENCRYPTION_KEY:?PRICE_ENCRYPTION_KEY}
+    # Провайдер идентичности (FR-1502, ADR-0003). Пусто - вход только
+    # локальный (FR-1501); сам Zitadel разворачивается отдельно от этого
+    # стенда, здесь фиксируются только реквизиты клиента (NFR-09)
+    OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+    OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
+    OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+    OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-}
+    OIDC_POST_LOGOUT_URL: ${OIDC_POST_LOGOUT_URL:-}
+    OIDC_TRUSTED_AUDIENCES: ${OIDC_TRUSTED_AUDIENCES:-}
+    OIDC_LABEL: ${OIDC_LABEL:-}
+
+services:
+  caddy:
+    <<: [*logging, *hardening]
+    image: caddy:2.11.4
+    restart: unless-stopped
+    # Единственное сохраненное право: занять 80 и 443. Все остальное снято
+    cap_add: [NET_BIND_SERVICE]
+    mem_limit: 256m
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      TOU_DOMAIN: ${TOU_DOMAIN:?TOU_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+
+  web:
+    <<: [*logging, *hardening]
+    image: ${REGISTRY:-registry.local/tou-rent}/web:${TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+    restart: unless-stopped
+    mem_limit: 1g
+    environment:
+      API_ORIGIN: http://api:8080
+    # Без проверки здоровья Caddy отправляет трафик в контейнер, который
+    # поднялся, но еще не слушает: у SSR-сервера старт не мгновенный.
+    #
+    # Проверка идет самим bun, а не wget или curl: в рантайм-образе
+    # `oven/bun` из внешних программ есть только ca-certificates, и проба
+    # на wget не проходила никогда. Caddy ждет `web` здоровым - то есть
+    # прод не поднимался вовсе, а сообщение об отказе указывало на api.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "process.exit((await fetch('http://127.0.0.1:3000/healthz')).ok ? 0 : 1)",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Миграции накатываются до старта api той же версией образа (NFR-10)
+  api-migrate:
+    <<: [*api-image, *logging, *hardening]
+    restart: "no"
+    command: ["migrate"]
+    mem_limit: 512m
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    <<: [*api-image, *logging, *hardening]
+    restart: unless-stopped
+    mem_limit: 2g
+    # Проверка здоровья описана здесь, а не только в образе: podman собирает
+    # OCI-формат, в котором инструкция HEALTHCHECK игнорируется
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/v1/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+      # Redis ждется здоровым, а не просто запущенным: в нем сессии, и api,
+      # стартовавший раньше, отвечал бы отказом на каждый запрос с сессией
+      redis:
+        condition: service_healthy
+      rustfs:
+        condition: service_started
+
+  # Двигатель обязательств (FR-1702): тот же образ, другая команда
+  jobs:
+    <<: [*api-image, *logging, *hardening]
+    restart: unless-stopped
+    entrypoint: ["jobs"]
+    command: []
+    mem_limit: 512m
+    # Проба из образа проверяет HTTP api, а воркер портов не слушает - с ней
+    # контейнер вечно unhealthy, хотя работает штатно. Свою пробу дать нечему:
+    # живость `jobs` видна по журналу, а не по сокету
+    healthcheck:
+      disable: true
+    depends_on:
+      api-migrate:
+        condition: service_completed_successfully
+
+  postgres:
+    <<: [*logging, *hardening]
+    image: postgres:19beta2
+    restart: unless-stopped
+    # Штатный вход образа поднимается root'ом и снимает права до `postgres`,
+    # поправив владельца каталога данных, - на это и оставлен короткий список
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    mem_limit: 4g
+    # По умолчанию контейнеру дают 64 МБ разделяемой памяти; параллельные
+    # планы упираются в этот потолок и падают с «could not resize shared
+    # memory segment». Общая память нужна размером с рабочую нагрузку
+    shm_size: 256m
+    environment:
+      POSTGRES_DB: tou_rent
+      POSTGRES_USER: tou_rent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tou_rent -d tou_rent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  # Сессии и счетчики попыток входа (crates/http: RedisStore, ratelimit).
+  # Том смонтирован, и до T74 в нем ничего не лежало: сервер поднимался
+  # с выключенными и RDB, и AOF, поэтому всякий перезапуск - в том числе
+  # штатный `deploy.sh` - разлогинивал всех разом. Окно заморозки бережет
+  # комнату торгов от обрыва, а сессию участника рядом с ней не берегло
+  # ничто. AOF с посекундной синхронизацией: потеря секунды сессионных
+  # записей безобидна, потеря всех - нет
+  redis:
+    <<: [*logging, *hardening]
+    image: redis:8.10.0
+    restart: unless-stopped
+    # Штатный вход образа снимает права до `redis` только если у него есть
+    # SETUID и SETGID, а их снял cap_drop - и redis-server оставался root'ом.
+    # Каталог данных принадлежит `redis` (999), root без DAC_OVERRIDE в него
+    # не пишет, и на первом же старте с AOF сервер падал с «Can't open or
+    # create append-only dir». Поэтому пользователь задается сразу: снимать
+    # права не нужно, если их с самого начала нет (NFR-07)
+    user: "999:999"
+    mem_limit: 512m
+    command:
+      [
+        "redis-server",
+        "--requirepass",
+        "${REDIS_PASSWORD:?REDIS_PASSWORD}",
+        "--save",
+        "",
+        "--appendonly",
+        "yes",
+        "--appendfsync",
+        "everysec",
+      ]
+    environment:
+      # Пароль для redis-cli в пробе здоровья: в аргументах командной строки
+      # он был бы виден в `ps` любому в контейнере
+      REDISCLI_AUTH: ${REDIS_PASSWORD:?REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Объектное хранилище - RustFS (ADR-0006). Наружу не публикуется: и S3 API,
+  # и консоль доступны только из сети стенда, снаружи файлы ходят через api.
+  rustfs:
+    <<: [*logging, *hardening]
+    image: rustfs/rustfs:1.0.0-rc.1
+    restart: unless-stopped
+    mem_limit: 2g
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+      # Консоль в проде выключена совсем, а не просто не опубликована наружу:
+      # управлять хранилищем через нее некому - и бакеты, и учетную запись
+      # приложения заводят шаги ниже. В пайплайне она выключена так же
+      RUSTFS_CONSOLE_ENABLE: "false"
+      RUSTFS_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY}
+      RUSTFS_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY}
+    volumes:
+      - rustfs_data:/data
+
+  # INV-042 (FR-1206, FR-1602, п. 16.15, 42): бакет досье создается с Object
+  # Lock и режимом compliance на пять лет - предельный срок хранения (решения
+  # особого порядка лежат три года и укладываются в него). Compliance значит,
+  # что до истечения срока объект не удалит и администратор.
+  # Object Lock включается только при создании бакета: на стенде, где
+  # `dossiers` уже создан без него, нужен новый том (A-075).
+  #
+  # Бакеты заводит aws-cli: Object Lock настраивается обычными вызовами S3,
+  # и шаг не зависит от клиента конкретного вендора (A-093).
+  rustfs-init:
+    <<: *hardening
+    image: amazon/aws-cli:2.36.19
+    restart: "no"
+    mem_limit: 256m
+    depends_on:
+      rustfs:
+        condition: service_started
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until aws s3api list-buckets >/dev/null 2>&1; do sleep 2; done
+        aws s3api create-bucket --bucket dossiers --object-lock-enabled-for-bucket || true
+        aws s3api create-bucket --bucket public || true
+        aws s3api put-object-lock-configuration --bucket dossiers \
+          --object-lock-configuration '{"ObjectLockEnabled":"Enabled","Rule":{"DefaultRetention":{"Mode":"COMPLIANCE","Years":5}}}'
+    environment:
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:?S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ENDPOINT_URL: http://rustfs:9000
+      # См. пояснение в docker-compose.dev.yml: значение по умолчанию
+      # добавляет к запросам CRC32, обязательным его S3 не делает
+      AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+
+  # Учетная запись приложения: чтение и запись объектов, но не управление
+  # бакетами. Право снять Object Lock или удалить бакет досье остается только
+  # у root, которым ходит этот шаг (INV-042).
+  #
+  # IAM живет в admin-API RustFS, а не в S3, поэтому здесь нужен его
+  # собственный клиент `rc` (A-093).
+  rustfs-iam:
+    <<: *hardening
+    image: rustfs/rc:v0.1.31
+    restart: "no"
+    mem_limit: 256m
+    depends_on:
+      rustfs-init:
+        condition: service_completed_successfully
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Ожидания сервера здесь нет: `rc alias set` только пишет конфиг
+        # и не ходит на сервер, а к моменту этого шага rustfs-init уже
+        # дождался ответа на ListBuckets
+        rc alias set tou http://rustfs:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"
+        # Бакет досье под Object Lock: удаления в нем нет и быть не может -
+        # compliance-retention его все равно не пропустит, а право, которого
+        # у приложения нет, нельзя использовать по ошибке (INV-042).
+        # Удаление остается у `public`: снятие публикаций через 6 месяцев -
+        # штатная операция (INV-076, FR-1403), WORM там не включен
+        cat > /tmp/app-policy.json <<'POLICY'
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:ListBucket"],
+              "Resource": ["arn:aws:s3:::dossiers", "arn:aws:s3:::dossiers/*"]
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:ListBucket"],
+              "Resource": ["arn:aws:s3:::public", "arn:aws:s3:::public/*"]
+            }
+          ]
+        }
+        POLICY
+        rc admin policy create tou/ tou-rent-app /tmp/app-policy.json || true
+        rc admin user add tou/ "$$S3_APP_ACCESS_KEY" "$$S3_APP_SECRET_KEY" || true
+        rc admin policy attach tou/ tou-rent-app --user "$$S3_APP_ACCESS_KEY" || true
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:?S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:?S3_SECRET_KEY}
+      S3_APP_ACCESS_KEY: ${S3_APP_ACCESS_KEY:?S3_APP_ACCESS_KEY}
+      S3_APP_SECRET_KEY: ${S3_APP_SECRET_KEY:?S3_APP_SECRET_KEY}
+
+volumes:
+  pg_data:
+  redis_data:
+  rustfs_data:
+  caddy_data:
+  caddy_config:
+  caddy_logs:

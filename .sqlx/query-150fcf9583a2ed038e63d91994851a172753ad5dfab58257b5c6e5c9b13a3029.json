@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.land_plots SET published_at = now() WHERE object_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "150fcf9583a2ed038e63d91994851a172753ad5dfab58257b5c6e5c9b13a3029"
+}

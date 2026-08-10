@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, effective_from <= current_date AND id = first_value(id) OVER (\n                    ORDER BY (effective_from <= current_date) DESC, effective_from DESC\n                  ) AS \"current!\"\n           FROM refdata.rate_coefficients\n           WHERE coefficient = $1 AND option_code = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "current!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "ff8e5022ba2a7b1e24674bf0bec7e56ec27e9576321a3a63d921e799982a658a"
+}

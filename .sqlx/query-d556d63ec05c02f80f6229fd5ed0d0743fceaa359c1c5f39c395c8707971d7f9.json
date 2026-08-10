@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.ledger_accounts (kind, contract_id, owner_user_id)\n         VALUES ('contract_deposit', $1, $2) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d556d63ec05c02f80f6229fd5ed0d0743fceaa359c1c5f39c395c8707971d7f9"
+}

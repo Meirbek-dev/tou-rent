@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(sum(e.credit - e.debit), 0) > 0 AS \"has_balance!\"\n           FROM core.ledger_accounts acc\n           JOIN core.ledger_entries e ON e.account_id = acc.id\n           WHERE acc.application_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "has_balance!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7d34fee84b1728d795615d868a056835c19a500a92b1352d79d3a89dbead3b24"
+}

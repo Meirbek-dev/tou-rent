@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.commission_members SET member_role = 'chairman' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "222114bdbe944c2bd68ff9843cef64fb5766e8c2de82d5826d608353631443b0"
+}

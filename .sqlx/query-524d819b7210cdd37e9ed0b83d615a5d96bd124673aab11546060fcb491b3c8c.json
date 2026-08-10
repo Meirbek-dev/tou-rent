@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_board_decisions\n           (special_request_id, decision, rationale, decided_by, pdf_key)\n         VALUES ($1, $2::text::core.special_decision, 'обоснование решения', $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "524d819b7210cdd37e9ed0b83d615a5d96bd124673aab11546060fcb491b3c8c"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.tenders (title, status, organizer_id, repeat_of)\n             SELECT t.title || ' (повторный)', 'draft', t.organizer_id, t.id\n             FROM core.tenders t WHERE t.id = $1\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "00e5d088d3dcf1cc7db67a48063a0e2c3af02846a21250e95faba651b79c4a21"
+}

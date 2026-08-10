@@ -1,0 +1,18 @@
+# Контекст сборки образов (infra/docker/*.Dockerfile): в него не попадают
+# артефакты сборки и локальные каталоги - иначе на хост-машину уезжают гигабайты.
+.git
+.turbo
+.tanstack
+.vite-hooks
+target
+node_modules
+**/node_modules
+apps/web/.output
+apps/web/.nitro
+apps/web/src/paraglide
+**/.env
+**/.env.local
+infra/compose/.env
+docs
+specs
+*.md

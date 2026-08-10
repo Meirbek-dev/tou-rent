@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT file_key FROM core.dossier_items\n         WHERE special_request_id = $1 AND kind = 'decision'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "file_key",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ce4d89e9801764f01700e5ed80571905df1b3efed8edffcbeb5f7b6829e5d7d9"
+}

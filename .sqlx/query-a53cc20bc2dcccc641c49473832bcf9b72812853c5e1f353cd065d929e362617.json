@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.tender_amendments (tender_id, version, summary, new_deadline)\n             VALUES ($1, 1, 'изменено целевое назначение лота',\n                     now() + make_interval(days => $2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a53cc20bc2dcccc641c49473832bcf9b72812853c5e1f353cd065d929e362617"
+}

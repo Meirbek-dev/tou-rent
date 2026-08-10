@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.public_records\n                (kind, special_request_id, title, file_key, published_by)\n             VALUES ('decision', $1, 'Результат рассмотрения заявки особого порядка', $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d974b6b2e8e0929400c91236e87080d52bc2d08bd4bf78fd4f52b87f638be139"
+}

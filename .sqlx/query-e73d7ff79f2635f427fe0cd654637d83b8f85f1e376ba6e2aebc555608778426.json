@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.commission_members cm\n         SET member_role = 'reserve'\n         FROM core.users u\n         WHERE cm.commission_id = $1 AND u.id = cm.user_id\n           AND u.email::text <> ALL($2::text[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e73d7ff79f2635f427fe0cd654637d83b8f85f1e376ba6e2aebc555608778426"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT extract(epoch FROM core.now() - now())::float8 AS \"drift!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "drift!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5f45aada27efe6a9361dc2b5f9a9468aed7d48f00e2e6b9b25b7719799b8b061"
+}

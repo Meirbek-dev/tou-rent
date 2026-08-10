@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT core.benefit_monthly($1, 1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "benefit_monthly",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "67f3923c7a8e0ce30d5bdcf4379929dd4dcbb7fe5b88280d273aa1a5f813880d"
+}

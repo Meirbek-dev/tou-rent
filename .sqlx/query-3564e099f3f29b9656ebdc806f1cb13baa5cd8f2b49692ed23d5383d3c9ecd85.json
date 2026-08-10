@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO refdata.mrp (year, amount) VALUES ($1, $2)\n         ON CONFLICT (year) DO UPDATE SET amount = EXCLUDED.amount\n         RETURNING year, amount",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "year",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 1,
+        "name": "amount",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3564e099f3f29b9656ebdc806f1cb13baa5cd8f2b49692ed23d5383d3c9ecd85"
+}

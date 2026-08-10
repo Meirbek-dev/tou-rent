@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT code, label_ru, label_kk, label_en, rule_ref\n         FROM refdata.refund_reasons ORDER BY rule_ref",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "label_ru",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "label_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "label_en",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "rule_ref",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "adb04562963c30118371f2019a73694a82ce96bf2dc168bfbad3f89d83a95bf9"
+}

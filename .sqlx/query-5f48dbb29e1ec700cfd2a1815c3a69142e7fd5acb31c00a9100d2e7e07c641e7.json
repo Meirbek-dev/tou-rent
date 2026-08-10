@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.acts (contract_id, kind, act_date, created_by)\n             VALUES ($1, $2::text::core.act_kind,\n                     (core.now() AT TIME ZONE 'Asia/Almaty')::date, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5f48dbb29e1ec700cfd2a1815c3a69142e7fd5acb31c00a9100d2e7e07c641e7"
+}

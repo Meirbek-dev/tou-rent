@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.auctions (lot_id, status, starting_bid, bid_step, started_at, ends_at)\n         SELECT $1, 'running', s.start, round(s.start * 0.05, 2),\n                core.now() - interval '30 minutes', core.now() + interval '1 hour'\n         FROM (SELECT max(core.price_amount(p)) AS start\n               FROM core.applications a\n               JOIN core.price_proposals p ON p.application_id = a.id\n               WHERE a.tender_id = $2 AND a.status = 'admitted') s\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "aaf7d6e28163d5739ae5c4b601eb91b72972dac766c88787a56564d3e599904b"
+}

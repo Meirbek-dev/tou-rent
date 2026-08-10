@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contract_amendments SET ground = 'другое' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "955de3173fd2b14a8c67b8d21cf982a48285dd56a5d7a53aa7b96d55e7cc3ae5"
+}

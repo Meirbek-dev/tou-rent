@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-dev",
+      "runtimeExecutable": "vp",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "web-dev-alt",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "--cwd", "apps/web", "dev:alt"],
+      "port": 3105
+    },
+    {
+      "name": "web-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["apps/web/.output/server/index.mjs"],
+      "port": 3000
+    }
+  ]
+}

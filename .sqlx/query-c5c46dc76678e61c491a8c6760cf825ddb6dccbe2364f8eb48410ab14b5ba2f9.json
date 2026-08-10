@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT refdata.add_business_days(d, n) AS \"day!\"\n           FROM unnest($1::date[], $2::int[]) AS t(d, n)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day!",
+        "type_info": "Date"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "DateArray",
+        "Int4Array"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c5c46dc76678e61c491a8c6760cf825ddb6dccbe2364f8eb48410ab14b5ba2f9"
+}

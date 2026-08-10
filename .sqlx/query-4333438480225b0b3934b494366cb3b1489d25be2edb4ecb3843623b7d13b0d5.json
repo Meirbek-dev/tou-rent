@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.commission_members (commission_id, user_id, member_role)\n             SELECT $1, u.id, $2::text::core.commission_member_role\n             FROM core.users u WHERE u.email = $3::citext\n             ON CONFLICT (commission_id, user_id)\n             DO UPDATE SET member_role = EXCLUDED.member_role",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4333438480225b0b3934b494366cb3b1489d25be2edb4ecb3843623b7d13b0d5"
+}

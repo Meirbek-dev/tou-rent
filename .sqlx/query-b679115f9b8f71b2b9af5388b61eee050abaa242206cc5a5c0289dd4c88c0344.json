@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders SET status = 'cancelled', cancel_reason = 'нарушение п. 5'\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b679115f9b8f71b2b9af5388b61eee050abaa242206cc5a5c0289dd4c88c0344"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT opened_at FROM core.sessions_meetings\n             WHERE tender_id = $1 AND kind = 'qualification'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "opened_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "7f78312ed178262a90e04695660ab2c919d844aa550ed00c1f6aa1b04a27cda6"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.tenders\n           (title, status, organizer_id, submission_deadline, opening_at)\n         VALUES ('Т19 тендер', 'qualification', $1,\n                 now() - interval '1 hour', now() - interval '30 minutes')\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "96e34c31bc7b4bcb06fb1db10f3f34f7d67b992ce5156361a23881b2e35d3d0c"
+}

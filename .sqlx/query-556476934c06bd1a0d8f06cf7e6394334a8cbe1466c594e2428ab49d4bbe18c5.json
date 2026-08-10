@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.meeting_attendance SET chairing = true WHERE member_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "556476934c06bd1a0d8f06cf7e6394334a8cbe1466c594e2428ab49d4bbe18c5"
+}

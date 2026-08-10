@@ -1,0 +1,26 @@
+[package]
+name = "api"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+# Swagger UI на /docs (dev): cargo run -p api --features swagger
+swagger = ["dep:utoipa-swagger-ui"]
+
+[dependencies]
+anyhow.workspace = true
+argon2.workspace = true
+axum.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tou-db.workspace = true
+tou-domain.workspace = true
+tou-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+utoipa-swagger-ui = { workspace = true, optional = true }
+uuid.workspace = true

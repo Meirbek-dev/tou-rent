@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.publishable FROM core.special_requests r\n             JOIN refdata.special_categories c ON c.code = r.category\n             WHERE r.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "publishable",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7689a5ed7e6055a2c7089c1169b66c46b9b1d325741f9c144a82c403911189c6"
+}

@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.member_id, u.full_name, cm.member_role::text AS \"member_role!\",\n                a.present, a.chairing\n         FROM core.meeting_attendance a\n         JOIN core.commission_members cm ON cm.id = a.member_id\n         JOIN core.users u ON u.id = cm.user_id\n         WHERE a.meeting_id = $1\n         ORDER BY cm.member_role, u.full_name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "member_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "full_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "member_role!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "present",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "chairing",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "fa5dd5acabbd32fc9096a700ea1abc4744c4618728bb0da57462411e87bdef41"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM refdata.holidays WHERE day = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Date"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d6c46a68fd9a391c9da6da3ffbc8e35ff3d73291f999b9ee64a35c99a411bc7e"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.dossier_items (tender_id, kind, title, source_table, source_id)\n           VALUES ($1, 'announcement', 'Объявление о тендере', 'core.tenders', $1)\n           RETURNING extract(year FROM age(retain_until, occurred_at))::int AS \"years!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "years!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "14ff34657e64bdcde52e95cd18756dfce1993364d85a590fc04633478dcc8599"
+}

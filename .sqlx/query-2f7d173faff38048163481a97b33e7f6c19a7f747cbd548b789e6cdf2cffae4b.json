@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.notifications SET read_at = core.now()\n             WHERE user_id = $1 AND read_at IS NULL\n               AND ($2::uuid[] IS NULL OR id = ANY($2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2f7d173faff38048163481a97b33e7f6c19a7f747cbd548b789e6cdf2cffae4b"
+}

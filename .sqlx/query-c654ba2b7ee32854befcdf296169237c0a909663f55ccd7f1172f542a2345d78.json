@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, contract_id, kind::text AS \"kind!\", act_date, note,\n                      pdf_key, signed_scan_key,\n                      signature_status::text AS \"signature_status!\", created_at\n               FROM core.acts WHERE contract_id = $1 ORDER BY act_date, created_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "contract_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "act_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 4,
+        "name": "note",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "pdf_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "signed_scan_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "signature_status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      true,
+      true,
+      true,
+      null,
+      false
+    ]
+  },
+  "hash": "c654ba2b7ee32854befcdf296169237c0a909663f55ccd7f1172f542a2345d78"
+}

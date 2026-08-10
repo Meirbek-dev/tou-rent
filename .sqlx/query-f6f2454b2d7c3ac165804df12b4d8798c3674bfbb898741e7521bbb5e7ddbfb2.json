@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT max(core.price_amount(p))\n             FROM core.applications a\n             JOIN core.price_proposals p ON p.application_id = a.id\n             WHERE a.lot_id = $1 AND a.status = 'admitted'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f6f2454b2d7c3ac165804df12b4d8798c3674bfbb898741e7521bbb5e7ddbfb2"
+}

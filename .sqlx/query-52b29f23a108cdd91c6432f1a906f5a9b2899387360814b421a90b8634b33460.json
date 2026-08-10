@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO refdata.rate_coefficients\n               (coefficient, option_code, label_ru, label_kk, label_en, value, effective_from)\n             VALUES ($1, $2, $3, $4, $5, $6, $7)\n             ON CONFLICT (coefficient, option_code, effective_from) DO UPDATE\n               SET label_ru = EXCLUDED.label_ru,\n                   label_kk = EXCLUDED.label_kk,\n                   label_en = EXCLUDED.label_en,\n                   value    = EXCLUDED.value\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Numeric",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "52b29f23a108cdd91c6432f1a906f5a9b2899387360814b421a90b8634b33460"
+}

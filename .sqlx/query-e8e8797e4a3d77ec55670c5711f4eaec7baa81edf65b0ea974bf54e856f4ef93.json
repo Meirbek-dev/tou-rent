@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.lots\n               (tender_id, seq, object_id, purpose, lease_months,\n                base_rate_monthly, guarantee_fee, rate_calculation)\n             SELECT $1, 1, o.id, $2, 12, $3, $3, $4\n             FROM core.objects o WHERE o.name = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Numeric",
+        "Jsonb",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e8e8797e4a3d77ec55670c5711f4eaec7baa81edf65b0ea974bf54e856f4ef93"
+}

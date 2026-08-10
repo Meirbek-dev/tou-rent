@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders SET status = 'trading',\n                trading_at = core.now() - interval '20 minutes'\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "98d32c7c29e41cdfd72bc57955c88c15ab444abf7cd4f90b81fb4e4c206b7440"
+}

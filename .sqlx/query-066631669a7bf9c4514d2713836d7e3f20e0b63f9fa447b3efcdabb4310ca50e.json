@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT value FROM refdata.rate_coefficients\n         WHERE coefficient = $1 AND option_code = $2 AND effective_from <= current_date\n         ORDER BY effective_from DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "value",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "066631669a7bf9c4514d2713836d7e3f20e0b63f9fa447b3efcdabb4310ca50e"
+}

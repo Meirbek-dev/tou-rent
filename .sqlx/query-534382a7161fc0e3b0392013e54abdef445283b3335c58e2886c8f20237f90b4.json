@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.applications\n            SET status = 'withdrawn', withdrawn_at = core.now()\n          WHERE id = $1 AND participant_id = $2 AND status = 'submitted'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "534382a7161fc0e3b0392013e54abdef445283b3335c58e2886c8f20237f90b4"
+}

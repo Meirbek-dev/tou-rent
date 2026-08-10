@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.sessions_meetings\n             SET opened_at = core.now(), held_at = COALESCE(held_at, core.now())\n             WHERE id = $1 AND opened_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "645aafc478dd362b12440680661f8836f3f4a39d95878633abbd9f3a7394fb7c"
+}

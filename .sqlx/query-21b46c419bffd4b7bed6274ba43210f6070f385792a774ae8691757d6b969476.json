@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.sessions_meetings\n               (tender_id, commission_id, kind, scheduled_at, held_at)\n             SELECT $1, $2, 'results',\n                    COALESCE(\n                      (SELECT max(a.finished_at) FROM core.auctions a\n                       JOIN core.lots l ON l.id = a.lot_id WHERE l.tender_id = $1),\n                      core.now()),\n                    core.now()\n             RETURNING id, tender_id, commission_id,\n               (SELECT name FROM core.commissions c WHERE c.id = commission_id)\n                 AS \"commission_name!\",\n               scheduled_at, held_at, opened_at, quorum_present, quorum_required",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "commission_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "commission_name!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "scheduled_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "held_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "opened_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "quorum_present",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "quorum_required",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "21b46c419bffd4b7bed6274ba43210f6070f385792a774ae8691757d6b969476"
+}

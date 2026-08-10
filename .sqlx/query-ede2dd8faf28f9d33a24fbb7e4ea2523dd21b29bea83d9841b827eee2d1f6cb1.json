@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.ledger_accounts (kind, application_id, owner_user_id)\n         VALUES ('participant_fee', $1, $2) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ede2dd8faf28f9d33a24fbb7e4ea2523dd21b29bea83d9841b827eee2d1f6cb1"
+}

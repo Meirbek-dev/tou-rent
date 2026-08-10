@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.contract_checklists (contract_id, item_code, checked_at)\n         SELECT $1, code, now() FROM refdata.checklist_items ORDER BY code LIMIT 1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7dc236151c06c02869cd91ff04526179de10cde4c7493f7aeed12a7d5dac69e6"
+}

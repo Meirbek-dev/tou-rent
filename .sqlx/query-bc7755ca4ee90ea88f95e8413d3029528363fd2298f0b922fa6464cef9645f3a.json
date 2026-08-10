@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.investment_contract_files\n               (contract_id, code, file_key, filename, content_type, size_bytes)\n             VALUES ($1, $2, 'k', 'документ.pdf', 'application/pdf', 10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bc7755ca4ee90ea88f95e8413d3029528363fd2298f0b922fa6464cef9645f3a"
+}

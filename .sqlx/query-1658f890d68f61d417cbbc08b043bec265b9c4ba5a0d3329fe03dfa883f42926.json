@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.auctions\n             SET status = 'finished', finished_at = core.now(), finished_early = $2,\n                 winner_application_id = $3, winner_amount = $4,\n                 runner_up_application_id = $5, runner_up_amount = $6\n             WHERE id = $1 AND status = 'running'\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Uuid",
+        "Numeric",
+        "Uuid",
+        "Numeric"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1658f890d68f61d417cbbc08b043bec265b9c4ba5a0d3329fe03dfa883f42926"
+}

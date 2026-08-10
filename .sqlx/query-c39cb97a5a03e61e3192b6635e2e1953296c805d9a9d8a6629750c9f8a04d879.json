@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.sessions_meetings (tender_id, commission_id, kind, scheduled_at)\n             SELECT $1, $2, 'qualification', COALESCE(t.opening_at, core.now())\n             FROM core.tenders t WHERE t.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c39cb97a5a03e61e3192b6635e2e1953296c805d9a9d8a6629750c9f8a04d879"
+}

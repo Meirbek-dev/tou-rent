@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.competition::text AS \"rule!\", c.comparable_margin_pct,\n                  r.investment_amount AS own_amount\n           FROM core.special_requests r\n           JOIN refdata.special_categories c ON c.code = r.category\n           WHERE r.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "rule!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "comparable_margin_pct",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 2,
+        "name": "own_amount",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      true
+    ]
+  },
+  "hash": "2962007281fec7983a72eb8ca2dfd53a0dde718e651633c637ae0f57e0dc70c9"
+}
