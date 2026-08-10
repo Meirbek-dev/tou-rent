@@ -40,6 +40,7 @@ use crate::pdf;
 use crate::request::{Json, Multipart, Path, Query};
 use crate::state::AppState;
 use crate::upload;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/special_request.typ");
 const DECISION_TEMPLATE: &str = include_str!("templates/special_decision.typ");
@@ -417,8 +418,9 @@ pub async fn upload_special_file(
     ]
     .contains(&record.status.as_str())
     {
-        return Err(ApiError::RuleViolation(
-            "документ прикладывается к своей заявке до решения (п. 88)".into(),
+        return Err(ApiError::rule(
+            RuleViolation::SpecialOrderApplication,
+            "документ прикладывается к своей заявке до решения (п. 88)",
         ));
     }
 
@@ -459,8 +461,9 @@ pub async fn upload_special_file(
             tracing::warn!(%file_key, "документ загружен, метаданные отклонены");
             match other {
                 Err(err) => Err(err),
-                _ => Err(ApiError::RuleViolation(
-                    "документ прикладывается к своей заявке до решения (п. 88)".into(),
+                _ => Err(ApiError::rule(
+                    RuleViolation::SpecialOrderApplication,
+                    "документ прикладывается к своей заявке до решения (п. 88)",
                 )),
             }
         }
@@ -833,7 +836,7 @@ pub async fn decide_special_request(
         .await?
         .ok_or(ApiError::NotFound)?;
     BoardDecision::take(conclusion, status, competition, choice)
-        .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+        .map_err(|err| ApiError::rule(RuleViolation::BoardDecision, err.to_string()))?;
 
     let record = special::decide(
         &state.db,

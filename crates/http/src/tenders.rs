@@ -23,6 +23,7 @@ use crate::extract::CurrentUser;
 use crate::rates::{RateOptionsDto, build_calculation, build_hourly_calculation};
 use crate::request::{Json, Path, Query};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct LotDto {
@@ -425,8 +426,9 @@ pub async fn update_tender(
             Ok(Json(TenderDto::from_record(record, lots)?))
         }
         None => match tenders::get(&state.db, id).await? {
-            Some(_) => Err(ApiError::RuleViolation(
-                "правка полей возможна только в статусе draft (FR-304 - контур 2)".into(),
+            Some(_) => Err(ApiError::rule(
+                RuleViolation::TenderDocumentationChange,
+                "правка полей возможна только в статусе draft (FR-304 - контур 2)",
             )),
             None => Err(ApiError::NotFound),
         },
@@ -477,8 +479,9 @@ pub async fn set_recording(
             Ok(Json(TenderDto::from_record(record, lots)?))
         }
         None => match tenders::get(&state.db, id).await? {
-            Some(_) => Err(ApiError::RuleViolation(
-                "ссылка на запись вносится после подведения итогов торгов (FR-306, п. 72)".into(),
+            Some(_) => Err(ApiError::rule(
+                RuleViolation::PublicRecordLink,
+                "ссылка на запись вносится после подведения итогов торгов (FR-306, п. 72)",
             )),
             None => Err(ApiError::NotFound),
         },

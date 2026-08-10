@@ -11,6 +11,7 @@ use tou_domain::auction::{self, Outcome};
 use tou_domain::ids::ApplicationId;
 use tou_domain::money::Money;
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -285,7 +286,7 @@ pub enum TransitionError {
     NotFound,
     /// Отказ БД (INV-066) или неподходящий статус комнаты
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -494,7 +495,7 @@ pub enum BidError {
     NotAdmitted,
     /// Отказ БД: шаг (INV-063), истекший таймер (INV-066), статус комнаты
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -548,7 +549,7 @@ pub async fn place_bid(db: &Db, actor: Uuid, new: NewBid) -> Result<BidRecord, B
             sqlx::Error::Database(db_err)
                 if matches!(db_err.code().as_deref(), Some("23514") | Some("23503")) =>
             {
-                BidError::Rejected(db_err.message().to_owned())
+                BidError::Rejected(crate::rule::rejection(db_err.as_ref()))
             }
             other => BidError::Db(other),
         })?;
@@ -593,7 +594,10 @@ async fn status_conflict(
     .fetch_optional(conn)
     .await;
     match current {
-        Ok(Some(status)) => TransitionError::Rejected(format!("{expectation} (сейчас {status})")),
+        Ok(Some(status)) => TransitionError::Rejected(RuleRejection::new(
+            RuleViolation::StatusNotAllowed,
+            format!("{expectation} (сейчас {status})"),
+        )),
         Ok(None) => TransitionError::NotFound,
         Err(err) => TransitionError::Db(err),
     }
@@ -604,7 +608,7 @@ fn map_rule_violation(error: sqlx::Error) -> TransitionError {
         sqlx::Error::Database(db_err)
             if matches!(db_err.code().as_deref(), Some("23514") | Some("23503")) =>
         {
-            TransitionError::Rejected(db_err.message().to_owned())
+            TransitionError::Rejected(crate::rule::rejection(db_err.as_ref()))
         }
         other => TransitionError::Db(other),
     }

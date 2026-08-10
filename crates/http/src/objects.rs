@@ -17,6 +17,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path, Query};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ObjectDto {
@@ -277,8 +278,9 @@ pub async fn delete_object(
     match objects::delete(&state.db, user.id(), id).await {
         Ok(true) => Ok(StatusCode::NO_CONTENT),
         Ok(false) => Err(ApiError::NotFound),
-        Err(DeleteObjectError::InUse) => Err(ApiError::RuleViolation(
-            "объект используется лотами или договорами (FR-101)".into(),
+        Err(DeleteObjectError::InUse) => Err(ApiError::rule(
+            RuleViolation::ObjectInUse,
+            "объект используется лотами или договорами (FR-101)",
         )),
         Err(DeleteObjectError::Db(err)) => Err(err.into()),
     }

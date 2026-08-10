@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 
 import { api } from "@/lib/api"
+import { ruleMessage } from "@/lib/rule-messages"
 
 import type { components } from "@tou/api-client"
 
@@ -20,10 +21,21 @@ export const meQuery = queryOptions({
   staleTime: 60_000,
 })
 
-/** Человекочитаемое сообщение из problem+json (RFC 9457, NFR-08). */
+/**
+ * Человекочитаемое сообщение из problem+json (RFC 9457, NFR-08).
+ *
+ * Причина отказа по правилу читается первой и переводится по каталогу:
+ * раньше первым был `detail`, а туда попадал текст `RAISE EXCEPTION` из
+ * триггера БД - единственная строка интерфейса, существовавшая только
+ * по-русски (NFR-01). Теперь сервер шлет машинную причину, `detail`
+ * у отказов по правилу пуст, и остальным ошибкам он по-прежнему принадлежит.
+ */
 export function problemMessage(error: unknown): string {
   if (error && typeof error === "object") {
     const problem = error as Partial<Problem>
+    if (typeof problem.rule === "string") {
+      return ruleMessage(problem.rule)
+    }
     if (typeof problem.detail === "string" && problem.detail !== "") {
       return problem.detail
     }

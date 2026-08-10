@@ -28,6 +28,7 @@ pub mod rates;
 pub mod redacted;
 pub mod report;
 pub mod role;
+pub mod rule;
 pub mod signing;
 pub mod special;
 pub mod tender;

@@ -6,6 +6,7 @@
 
 use rust_decimal::Decimal;
 use time::OffsetDateTime;
+use tou_domain::rule::RuleRejection;
 use uuid::Uuid;
 
 use crate::Db;
@@ -323,7 +324,7 @@ pub enum TransitionError {
     NotFound,
     /// Переход отклонен правилами БД (INV-021, FR-303) - текст причины из RAISE
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -356,15 +357,17 @@ pub async fn transition(
                 .fetch_optional(&mut *tx)
                 .await?;
                 match exists {
-                    Some(current) => Err(TransitionError::Rejected(format!(
-                        "INV-021: тендер уже в статусе {current} - повторный переход невозможен"
-                    ))),
+                    Some(current) => {
+                        Err(TransitionError::Rejected(RuleRejection::classify(format!(
+                            "INV-021: тендер уже в статусе {current} - повторный переход невозможен"
+                        ))))
+                    }
                     None => Err(TransitionError::NotFound),
                 }
             }
-            Err(sqlx::Error::Database(db_err)) if db_err.code().as_deref() == Some("23514") => {
-                Err(TransitionError::Rejected(db_err.message().to_owned()))
-            }
+            Err(sqlx::Error::Database(db_err)) if db_err.code().as_deref() == Some("23514") => Err(
+                TransitionError::Rejected(crate::rule::rejection(db_err.as_ref())),
+            ),
             Err(other) => Err(TransitionError::Db(other)),
         }
     })

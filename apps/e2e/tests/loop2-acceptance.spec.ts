@@ -73,9 +73,14 @@ test("полный тендер до договора: конвейер п. 110�
       "сверка документов завершена"
     )
 
-    // А вот подпись наймодателя без отмеченного перечня не проходит
+    // А вот подпись наймодателя без отмеченного перечня не проходит.
+    // Проверяется текст интерфейса, а не имя инварианта: причина отказа
+    // приходит машинным полем `rule`, а строка берется из каталога переводов
+    // (W-09) - «INV-115» пользователю больше не показывается.
     await page.getByTestId("advance-contract").first().click()
-    await expect(page.getByRole("alert").first()).toContainText("INV-115")
+    await expect(page.getByRole("alert").first()).toContainText(
+      "Сверка документов не завершена"
+    )
 
     const items = checklist.locator('input[type="checkbox"]')
     const total = await items.count()

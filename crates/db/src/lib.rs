@@ -37,6 +37,7 @@ pub mod publications;
 pub mod refdata;
 pub mod reports;
 pub mod results;
+mod rule;
 pub mod seed;
 pub mod special;
 pub mod tenders;

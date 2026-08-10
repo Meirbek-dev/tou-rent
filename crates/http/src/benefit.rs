@@ -24,6 +24,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 fn benefit_error(err: BenefitError) -> ApiError {
     match err {
@@ -140,7 +141,7 @@ fn grant_dto(record: GrantRecord, months: i32) -> Result<BenefitGrantDto, ApiErr
             Money::new(record.base_monthly),
             Money::new(record.communal_monthly),
         )
-        .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+        .map_err(|err| ApiError::rule(RuleViolation::BenefitScheme, err.to_string()))?;
 
     Ok(BenefitGrantDto {
         contract_id: record.contract_id,
@@ -259,7 +260,7 @@ pub async fn grant_benefit(
         study_credits: body.study_credits,
         internships: body.internships,
     })
-    .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+    .map_err(|err| ApiError::rule(RuleViolation::BenefitScheme, err.to_string()))?;
 
     let record = benefit::grant(
         &state.db,

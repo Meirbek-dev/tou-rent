@@ -25,6 +25,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/results.typ");
 
@@ -58,7 +59,10 @@ pub async fn generate_results_protocol(
         .ok_or(ApiError::NotFound)?;
     let lots = results::lot_results(&state.db, id).await?;
     if lots.is_empty() {
-        return Err(ApiError::RuleViolation("в тендере нет лотов".into()));
+        return Err(ApiError::rule(
+            RuleViolation::ResultProtocol,
+            "в тендере нет лотов",
+        ));
     }
 
     // Итог подводится по завершенным торгам: пока идет хотя бы одна комната,
@@ -67,18 +71,22 @@ pub async fn generate_results_protocol(
         .iter()
         .find(|lot| lot.auction_status.as_deref() != Some("finished"))
     {
-        return Err(ApiError::RuleViolation(format!(
-            "по лоту №{} торги не завершены (статус: {}) - протокол итогов невозможен (FR-701)",
-            pending.seq,
-            pending.auction_status.as_deref().unwrap_or("не открыты")
-        )));
+        return Err(ApiError::rule(
+            RuleViolation::ResultProtocol,
+            format!(
+                "по лоту №{} торги не завершены (статус: {}) - протокол итогов невозможен (FR-701)",
+                pending.seq,
+                pending.auction_status.as_deref().unwrap_or("не открыты")
+            ),
+        ));
     }
 
     let meeting = results::results_meeting(&state.db, user.id(), id)
         .await
         .map_err(|err| match err {
-            MeetingError::NoCommission => ApiError::RuleViolation(
-                "нет действующей тендерной комиссии - выполните `api seed` (М11)".into(),
+            MeetingError::NoCommission => ApiError::rule(
+                RuleViolation::CommissionComposition,
+                "нет действующей тендерной комиссии - выполните `api seed` (М11)",
             ),
             MeetingError::Db(db) => db.into(),
         })?;
@@ -137,8 +145,9 @@ pub async fn generate_results_protocol(
                 generated_at: protocol.generated_at,
             }),
         )),
-        None => Err(ApiError::RuleViolation(
-            "протокол итогов уже сформирован (UNIQUE по тендеру)".into(),
+        None => Err(ApiError::rule(
+            RuleViolation::DuplicateRecord,
+            "протокол итогов уже сформирован (UNIQUE по тендеру)",
         )),
     }
 }

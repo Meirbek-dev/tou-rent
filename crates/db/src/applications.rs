@@ -8,6 +8,7 @@
 use rust_decimal::Decimal;
 use time::OffsetDateTime;
 use tou_domain::redacted::Redacted;
+use tou_domain::rule::RuleRejection;
 use uuid::Uuid;
 
 use crate::Db;
@@ -148,7 +149,7 @@ pub enum SubmitError {
     Duplicate,
     /// Отказ триггера БД (INV-037: дедлайн истек) - текст причины из RAISE
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -229,7 +230,7 @@ fn map_submit_error(err: sqlx::Error) -> SubmitError {
     if let sqlx::Error::Database(db_err) = &err {
         match db_err.code().as_deref() {
             Some("23505") => return SubmitError::Duplicate,
-            Some("23514") => return SubmitError::Rejected(db_err.message().to_owned()),
+            Some("23514") => return SubmitError::Rejected(crate::rule::rejection(db_err.as_ref())),
             _ => {}
         }
     }
@@ -243,7 +244,7 @@ pub enum WithdrawError {
     NotWithdrawable,
     /// Отказ триггера БД (INV-037): после дедлайна отзыв запрещен (FR-404)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -286,7 +287,7 @@ pub async fn withdraw(
             if let sqlx::Error::Database(db_err) = &err
                 && db_err.code().as_deref() == Some("23514")
             {
-                return WithdrawError::Rejected(db_err.message().to_owned());
+                return WithdrawError::Rejected(crate::rule::rejection(db_err.as_ref()));
             }
             WithdrawError::Db(err)
         })?;

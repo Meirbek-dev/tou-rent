@@ -34,6 +34,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Path, Query};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/winner2.typ");
 
@@ -314,16 +315,18 @@ pub async fn generate_winner2_protocol(
 
     let evasions = evasion::list_for_tender(&state.db, id).await?;
     if evasions.is_empty() {
-        return Err(ApiError::RuleViolation(
-            "протокол о победителе № 2 оформляется после признания уклонения (п. 116–117)".into(),
+        return Err(ApiError::rule(
+            RuleViolation::WinnerEvasion,
+            "протокол о победителе № 2 оформляется после признания уклонения (п. 116–117)",
         ));
     }
 
     let meeting = results::results_meeting(&state.db, user.id(), id)
         .await
         .map_err(|err| match err {
-            MeetingError::NoCommission => ApiError::RuleViolation(
-                "нет действующей комиссии с утвержденным составом (FR-1101)".into(),
+            MeetingError::NoCommission => ApiError::rule(
+                RuleViolation::CommissionComposition,
+                "нет действующей комиссии с утвержденным составом (FR-1101)",
             ),
             MeetingError::Db(db) => db.into(),
         })?;
@@ -430,8 +433,9 @@ pub async fn generate_winner2_protocol(
     .await?;
 
     let protocol = inserted.ok_or_else(|| {
-        ApiError::RuleViolation(
-            "протокол о победителе № 2 уже сформирован (UNIQUE по тендеру)".into(),
+        ApiError::rule(
+            RuleViolation::DuplicateRecord,
+            "протокол о победителе № 2 уже сформирован (UNIQUE по тендеру)",
         )
     })?;
 

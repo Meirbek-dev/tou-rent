@@ -7,6 +7,7 @@
 //! одна транзакция; основание отклонения - FK на закрытый перечень (INV-052).
 
 use time::OffsetDateTime;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -57,7 +58,7 @@ pub enum OpenError {
     /// Отказ БД: переход (INV-021), время вскрытия (CHECK) или неоткрытое
     /// заседание комиссии (FR-1102)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     /// Нет действующей утвержденной комиссии - заседание невозможно
     #[error("нет действующей тендерной комиссии")]
     NoCommission,
@@ -159,8 +160,9 @@ pub async fn open_tender(
                 .fetch_optional(&mut *tx)
                 .await?;
                 return Err(match exists {
-                    Some(current) => OpenError::Rejected(format!(
-                        "вскрытие возможно только в статусе accepting (сейчас {current})"
+                    Some(current) => OpenError::Rejected(RuleRejection::new(
+                        RuleViolation::StatusNotAllowed,
+                        format!("вскрытие возможно только в статусе accepting (сейчас {current})"),
                     )),
                     None => OpenError::NotFound,
                 });
@@ -169,7 +171,7 @@ pub async fn open_tender(
             Err(sqlx::Error::Database(db_err))
                 if matches!(db_err.code().as_deref(), Some("23514") | Some("P0001")) =>
             {
-                return Err(OpenError::Rejected(db_err.message().to_owned()));
+                return Err(OpenError::Rejected(crate::rule::rejection(db_err.as_ref())));
             }
             Err(other) => return Err(OpenError::Db(other)),
         };
@@ -221,7 +223,7 @@ pub enum DecideError {
     NotDecidable,
     /// FK/CHECK БД: неизвестное основание (INV-052), чужой член комиссии и т.п.
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -242,7 +244,7 @@ pub async fn decide(
             if let sqlx::Error::Database(db_err) = &err
                 && matches!(db_err.code().as_deref(), Some("23514") | Some("23503"))
             {
-                return DecideError::Rejected(db_err.message().to_owned());
+                return DecideError::Rejected(crate::rule::rejection(db_err.as_ref()));
             }
             DecideError::Db(err)
         };

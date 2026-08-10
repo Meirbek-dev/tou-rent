@@ -27,6 +27,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/failed.typ");
 
@@ -191,19 +192,24 @@ pub async fn generate_failed_protocol(
         .await?
         .ok_or(ApiError::NotFound)?;
     if !found.failed {
-        return Err(ApiError::RuleViolation(
-            "протокол оформляется после признания тендера несостоявшимся (FR-802)".into(),
+        return Err(ApiError::rule(
+            RuleViolation::TenderFailureGround,
+            "протокол оформляется после признания тендера несостоявшимся (FR-802)",
         ));
     }
-    let ground = found
-        .ground
-        .ok_or_else(|| ApiError::RuleViolation("основание п. 81 не зафиксировано".to_owned()))?;
+    let ground = found.ground.ok_or_else(|| {
+        ApiError::rule(
+            RuleViolation::TenderFailureGround,
+            "основание п. 81 не зафиксировано",
+        )
+    })?;
 
     let meeting = results::results_meeting(&state.db, user.id(), id)
         .await
         .map_err(|err| match err {
-            MeetingError::NoCommission => ApiError::RuleViolation(
-                "нет действующей комиссии с утвержденным составом (FR-1101)".into(),
+            MeetingError::NoCommission => ApiError::rule(
+                RuleViolation::CommissionComposition,
+                "нет действующей комиссии с утвержденным составом (FR-1101)",
             ),
             MeetingError::Db(db) => db.into(),
         })?;
@@ -303,8 +309,9 @@ pub async fn generate_failed_protocol(
                 generated_at: protocol.generated_at,
             }),
         )),
-        None => Err(ApiError::RuleViolation(
-            "протокол о несостоявшемся уже сформирован (UNIQUE по тендеру)".into(),
+        None => Err(ApiError::rule(
+            RuleViolation::DuplicateRecord,
+            "протокол о несостоявшемся уже сформирован (UNIQUE по тендеру)",
         )),
     }
 }

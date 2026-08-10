@@ -32,6 +32,7 @@ use crate::pdf;
 use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
 use crate::upload;
+use tou_domain::rule::RuleViolation;
 
 const CONTRACT_TEMPLATE: &str = include_str!("templates/investment_contract.typ");
 const ACT_TEMPLATE: &str = include_str!("templates/investment_act.typ");
@@ -242,8 +243,9 @@ pub async fn draft_investment_contract(
         .await?
         .ok_or(ApiError::NotFound)?;
     let object_id = request.object_id.ok_or_else(|| {
-        ApiError::RuleViolation(
-            "FR-1204: инвестиционный договор заключается на конкретный объект (п. 91)".to_owned(),
+        ApiError::rule(
+            RuleViolation::InvestmentContract,
+            "FR-1204: инвестиционный договор заключается на конкретный объект (п. 91)",
         )
     })?;
     let object = tou_db::objects::get(&state.db, object_id)
@@ -588,7 +590,7 @@ pub async fn extend_investment(
     };
     extensions
         .allow(extension, progress)
-        .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+        .map_err(|err| ApiError::rule(RuleViolation::InvestmentContract, err.to_string()))?;
 
     let months = match extension {
         Extension::ThreeYears => tou_domain::investment::EXTENSION_MONTHS,

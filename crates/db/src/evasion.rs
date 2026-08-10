@@ -11,6 +11,7 @@
 use time::OffsetDateTime;
 use tou_domain::evasion::{Consequence, EvasionGround, Facts, Place};
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -22,14 +23,17 @@ pub enum EvasionError {
     NotFound,
     /// Правило п. 116–117 (домен) либо отказ БД
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 impl From<tou_domain::evasion::EvasionError> for EvasionError {
     fn from(err: tou_domain::evasion::EvasionError) -> Self {
-        EvasionError::Rejected(err.to_string())
+        EvasionError::Rejected(RuleRejection::new(
+            RuleViolation::WinnerEvasion,
+            err.to_string(),
+        ))
     }
 }
 
@@ -40,7 +44,7 @@ fn map_rule(err: sqlx::Error) -> EvasionError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return EvasionError::Rejected(db_err.message().to_owned());
+        return EvasionError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     EvasionError::Db(err)
 }

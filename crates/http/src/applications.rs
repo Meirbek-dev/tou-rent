@@ -33,6 +33,7 @@ use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
 use crate::storage;
 use crate::upload;
+use tou_domain::rule::RuleViolation;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ApplicationFileDto {
@@ -222,12 +223,14 @@ pub async fn submit_application(
     )
     .await
     .map_err(|err| match err {
-        SubmitError::NotAccepting => {
-            ApiError::RuleViolation("прием заявок по тендеру не открыт (п. 36)".into())
-        }
-        SubmitError::Duplicate => {
-            ApiError::RuleViolation("заявка на этот лот уже подана (п. 22)".into())
-        }
+        SubmitError::NotAccepting => ApiError::rule(
+            RuleViolation::ApplicationIntakeClosed,
+            "прием заявок по тендеру не открыт (п. 36)",
+        ),
+        SubmitError::Duplicate => ApiError::rule(
+            RuleViolation::ApplicationAlreadySubmitted,
+            "заявка на этот лот уже подана (п. 22)",
+        ),
         SubmitError::Rejected(reason) => ApiError::RuleViolation(reason),
         SubmitError::Db(db) => db.into(),
     })?;
@@ -275,8 +278,9 @@ pub async fn withdraw_application(
     let record = applications::withdraw(&state.db, user.id(), id)
         .await
         .map_err(|err| match err {
-            WithdrawError::NotWithdrawable => ApiError::RuleViolation(
-                "заявка не найдена или уже не в статусе «подана» (FR-404)".into(),
+            WithdrawError::NotWithdrawable => ApiError::rule(
+                RuleViolation::ApplicationNotPending,
+                "заявка не найдена или уже не в статусе «подана» (FR-404)",
             ),
             WithdrawError::Rejected(reason) => ApiError::RuleViolation(reason),
             WithdrawError::Db(db) => db.into(),
@@ -353,8 +357,9 @@ pub async fn upload_file(
             // без нее объект недостижим и мимо приложения. Ключ - в журнал:
             // разобрать бакет может только владелец хранилища (INV-042)
             tracing::warn!(%file_key, "объект загружен, метаданные отклонены");
-            Err(ApiError::RuleViolation(
-                "файл можно приложить только к своей поданной заявке до дедлайна (п. 36–39)".into(),
+            Err(ApiError::rule(
+                RuleViolation::ApplicationDeadlinePassed,
+                "файл можно приложить только к своей поданной заявке до дедлайна (п. 36–39)",
             ))
         }
     }
@@ -384,8 +389,9 @@ async fn ensure_open_own_application(
     }
 
     if record.status != "submitted" {
-        return Err(ApiError::RuleViolation(
-            "файл можно приложить только к своей поданной заявке до дедлайна (п. 36–39)".into(),
+        return Err(ApiError::rule(
+            RuleViolation::ApplicationDeadlinePassed,
+            "файл можно приложить только к своей поданной заявке до дедлайна (п. 36–39)",
         ));
     }
 
@@ -395,8 +401,9 @@ async fn ensure_open_own_application(
     if let Some(deadline) = tender.submission_deadline
         && tou_db::refdata::now(&state.db).await? > deadline
     {
-        return Err(ApiError::RuleViolation(
-            "прием заявок по тендеру закрыт - состав заявки зафиксирован (п. 36–39)".into(),
+        return Err(ApiError::rule(
+            RuleViolation::ApplicationDeadlinePassed,
+            "прием заявок по тендеру закрыт - состав заявки зафиксирован (п. 36–39)",
         ));
     }
 

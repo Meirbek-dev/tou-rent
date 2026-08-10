@@ -10,6 +10,7 @@
 use time::OffsetDateTime;
 use tou_domain::obligation::ObligationAction;
 use tou_domain::publication::{DossierKind, PublicationFacts};
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -21,14 +22,24 @@ pub enum PublicationError {
     NotFound,
     /// Правило п. 75–76 (домен) либо отказ БД (INV-076)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 impl From<tou_domain::publication::PublicationError> for PublicationError {
     fn from(err: tou_domain::publication::PublicationError) -> Self {
-        PublicationError::Rejected(err.to_string())
+        // Истекший срок публичного доступа - INV-076, остальное - FR-702
+        let rule = match &err {
+            tou_domain::publication::PublicationError::AccessExpired => {
+                RuleViolation::PublicationRetention
+            }
+            tou_domain::publication::PublicationError::NoDocument
+            | tou_domain::publication::PublicationError::AlreadyPublished => {
+                RuleViolation::ProtocolPublication
+            }
+        };
+        PublicationError::Rejected(RuleRejection::new(rule, err.to_string()))
     }
 }
 
@@ -39,7 +50,7 @@ fn map_rule(err: sqlx::Error) -> PublicationError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return PublicationError::Rejected(db_err.message().to_owned());
+        return PublicationError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     PublicationError::Db(err)
 }

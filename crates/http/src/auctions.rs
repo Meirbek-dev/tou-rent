@@ -31,6 +31,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct AuctionDto {
@@ -217,9 +218,9 @@ pub async fn schedule_auction(
         .await
         .map_err(|err| match err {
             ScheduleError::LotNotFound => ApiError::NotFound,
-            ScheduleError::NoAdmittedBids => ApiError::RuleViolation(
-                "стартовая ставка не определена: по лоту нет допущенных заявок с ценой (п. 62)"
-                    .into(),
+            ScheduleError::NoAdmittedBids => ApiError::rule(
+                RuleViolation::AuctionStartPriceMissing,
+                "стартовая ставка не определена: по лоту нет допущенных заявок с ценой (п. 62)",
             ),
             ScheduleError::Db(db) => db.into(),
         })?;

@@ -28,6 +28,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/contract_amendment.typ");
 
@@ -190,7 +191,8 @@ pub async fn create_amendment(
             })
         })
         .collect::<Result<_, ApiError>>()?;
-    check_changes(&changes).map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+    check_changes(&changes)
+        .map_err(|err| ApiError::rule(RuleViolation::ContractTermsImmutable, err.to_string()))?;
 
     let rows: Vec<contract_amendments::NewChange<'_>> = changes
         .iter()

@@ -8,6 +8,7 @@
 use time::OffsetDateTime;
 use tou_domain::act::{ActKind, ActState};
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -18,14 +19,14 @@ pub enum ActError {
     NotFound,
     /// Порядок актов (FR-904) или отказ БД
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 impl From<tou_domain::act::ActError> for ActError {
     fn from(err: tou_domain::act::ActError) -> Self {
-        ActError::Rejected(err.to_string())
+        ActError::Rejected(RuleRejection::new(RuleViolation::ActOrder, err.to_string()))
     }
 }
 
@@ -36,7 +37,7 @@ fn map_rule(err: sqlx::Error) -> ActError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505") | Some("23P01")
         )
     {
-        return ActError::Rejected(db_err.message().to_owned());
+        return ActError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     ActError::Db(err)
 }

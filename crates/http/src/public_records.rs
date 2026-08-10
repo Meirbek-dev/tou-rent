@@ -29,6 +29,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path, Query};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 fn publication_error(err: PublicationError) -> ApiError {
     match err {
@@ -355,8 +356,9 @@ async fn rate_material(state: &AppState, contract_id: Uuid) -> Result<Material, 
         .ok_or(ApiError::NotFound)?;
 
     let calculation = contract.rate_calculation.ok_or_else(|| {
-        ApiError::RuleViolation(
-            "FR-1403: расчет ставки договора не заморожен - публиковать нечего (п. 97)".to_owned(),
+        ApiError::rule(
+            RuleViolation::SpecialPublication,
+            "FR-1403: расчет ставки договора не заморожен - публиковать нечего (п. 97)",
         )
     })?;
 

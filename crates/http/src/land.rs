@@ -22,6 +22,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 fn land_error(err: LandError) -> ApiError {
     match err {
@@ -427,7 +428,7 @@ pub async fn decide_land_application(
         .map_err(|err: tou_domain::land::UnknownLandStatus| ApiError::internal(err))?;
     decision
         .take(status)
-        .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+        .map_err(|err| ApiError::rule(RuleViolation::LandApplication, err.to_string()))?;
 
     let record = land::decide(
         &state.db,
