@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT user_id AS \"user_id!\", full_name AS \"full_name!\",\n                  evasions AS \"evasions!\", last_declared_at, last_ground, last_tender_id\n           FROM core.evader_registry ORDER BY last_declared_at DESC LIMIT $1",
+  "query": "SELECT user_id AS \"user_id!\", full_name AS \"full_name!\",\n                  evasions AS \"evasions!\", last_declared_at, last_ground, last_tender_id\n           FROM core.evader_registry\n           WHERE ($1::timestamptz IS NULL\n                  OR (COALESCE(last_declared_at, 'epoch'::timestamptz), user_id)\n                     < ($1, $2::uuid))\n           ORDER BY COALESCE(last_declared_at, 'epoch'::timestamptz) DESC, user_id DESC\n           LIMIT $3",
   "describe": {
     "columns": [
       {
@@ -36,6 +36,8 @@
     ],
     "parameters": {
       "Left": [
+        "Timestamptz",
+        "Uuid",
         "Int8"
       ]
     },
@@ -48,5 +50,5 @@
       true
     ]
   },
-  "hash": "8a05f59f64925f02c7b006013372432c92bb0dcc1e36b903772407b736c63457"
+  "hash": "01742e0ae4c8dd649ffce4d5f5ceebe5782e88238dfb18f56c61ce643a8a6a64"
 }

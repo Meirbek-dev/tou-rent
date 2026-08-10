@@ -9,6 +9,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { api } from "@/lib/api"
 import { meQuery, problemMessage } from "@/lib/auth"
+import {
+  FULL_NAME_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  emailSchema,
+  fieldError,
+  fullNameSchema,
+  passwordSchema,
+} from "@/lib/validation"
 
 // FR-1501, FR-1504: регистрация внешнего участника - email, пароль и имя.
 // Подтверждение email в контуре 1 автоматическое (ссылка уходит в лог api),
@@ -19,23 +27,34 @@ export const Route = createFileRoute("/auth/register")({
   component: RegisterPage,
 })
 
-/** Парольная политика api: не короче 12 символов (garde, TODO-ENGINEER). */
-const PASSWORD_MIN = 12
-
 function RegisterPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [submitAttempted, setSubmitAttempted] = useState(false)
+
+  // Те же границы, что и у `garde` в `auth.rs`: короткий пароль до сих пор
+  // отвергался только сервером - после отправки и с общей ошибкой формы
+  const nameError = fieldError(fullNameSchema, fullName.trim())
+  const emailError = fieldError(emailSchema, email.trim())
+  const passwordError = fieldError(passwordSchema, password)
+  const hasErrors =
+    nameError !== undefined ||
+    emailError !== undefined ||
+    passwordError !== undefined
+
+  const shown = (value: string, error: string | undefined) =>
+    submitAttempted || value !== "" ? error : undefined
 
   const register = useMutation({
     mutationFn: async () => {
       const { data, error } = await api.POST("/api/v1/auth/register", {
         body: {
-          email,
+          email: email.trim(),
           password,
-          full_name: fullName,
+          full_name: fullName.trim(),
           locale: getLocale(),
         },
       })
@@ -44,7 +63,7 @@ function RegisterPage() {
       }
       // Регистрация не создает сессию - вход выполняется теми же данными
       const login = await api.POST("/api/v1/auth/login", {
-        body: { email, password },
+        body: { email: email.trim(), password },
       })
       if (login.error !== undefined || login.data === undefined) {
         throw login.error ?? new Error("login after register failed")
@@ -71,6 +90,8 @@ function RegisterPage() {
           className="flex flex-col gap-4"
           onSubmit={(event) => {
             event.preventDefault()
+            setSubmitAttempted(true)
+            if (hasErrors) return
             register.mutate()
           }}
         >
@@ -81,9 +102,14 @@ function RegisterPage() {
               name="full_name"
               autoComplete="name"
               required
-              maxLength={200}
+              maxLength={FULL_NAME_MAX_LENGTH}
+              aria-invalid={shown(fullName, nameError) !== undefined}
               value={fullName}
               onChange={(event) => setFullName(event.target.value)}
+            />
+            <FieldError
+              id="register-name-error"
+              message={shown(fullName, nameError)}
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -94,8 +120,13 @@ function RegisterPage() {
               type="email"
               autoComplete="email"
               required
+              aria-invalid={shown(email, emailError) !== undefined}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+            />
+            <FieldError
+              id="register-email-error"
+              message={shown(email, emailError)}
             />
           </div>
           <div className="flex flex-col gap-1.5">
@@ -106,8 +137,9 @@ function RegisterPage() {
               type="password"
               autoComplete="new-password"
               required
-              minLength={PASSWORD_MIN}
+              minLength={PASSWORD_MIN_LENGTH}
               aria-describedby="register-password-hint"
+              aria-invalid={shown(password, passwordError) !== undefined}
               value={password}
               onChange={(event) => setPassword(event.target.value)}
             />
@@ -115,8 +147,12 @@ function RegisterPage() {
               id="register-password-hint"
               className="text-sm text-muted-foreground"
             >
-              {m.auth_password_rule({ min: PASSWORD_MIN })}
+              {m.auth_password_rule({ min: PASSWORD_MIN_LENGTH })}
             </p>
+            <FieldError
+              id="register-password-error"
+              message={shown(password, passwordError)}
+            />
           </div>
           {register.isError && (
             <p role="alert" className="text-sm text-destructive">
@@ -141,5 +177,21 @@ function RegisterPage() {
         </p>
       </main>
     </>
+  )
+}
+
+/** Ошибка поля рядом с самим полем: `role="alert"` озвучивает ее сразу. */
+function FieldError({
+  id,
+  message,
+}: {
+  id: string
+  message: string | undefined
+}) {
+  if (message === undefined) return null
+  return (
+    <p id={id} role="alert" className="text-sm text-destructive">
+      {message}
+    </p>
   )
 }

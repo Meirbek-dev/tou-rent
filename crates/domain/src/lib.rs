@@ -14,6 +14,7 @@ pub mod commission;
 pub mod contract;
 pub mod evasion;
 pub mod failure;
+pub mod identity;
 pub mod ids;
 pub mod investment;
 pub mod land;

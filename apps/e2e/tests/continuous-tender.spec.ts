@@ -95,7 +95,10 @@ test("сквозной путь без вставки состояния: пуб
         )
       }).toPass({ timeout: 30_000 })
 
-      await participantPage.locator("#apply-idnum").fill("990101300123")
+      // Контрольный разряд ИИН считается по национальному алгоритму
+      // (crates/domain/src/identity.rs, W-13): у 99010130012 он равен 2.
+      // Прежнее значение ...23 форма теперь отклоняет до отправки
+      await participantPage.locator("#apply-idnum").fill("990101300122")
       await participantPage
         .locator("#apply-address")
         .fill("г. Павлодар, ул. Ломова, 68")

@@ -143,16 +143,24 @@ pub async fn list_for_tender(db: &Db, tender_id: Uuid) -> Result<Vec<ContractRec
 }
 
 /// Договоры нанимателя (кабинет участника).
-pub async fn list_for_tenant(db: &Db, tenant_id: Uuid) -> Result<Vec<ContractRecord>, sqlx::Error> {
+///
+/// Курсора нет: договоров у одного нанимателя единицы - выборку ограничивает
+/// сама предметная область. Потолок остается защитой от невероятного, но
+/// молчать о нем нельзя: наниматель не должен гадать, все ли договоры видит.
+pub async fn list_for_tenant(
+    db: &Db,
+    tenant_id: Uuid,
+) -> Result<crate::Page<ContractRecord>, sqlx::Error> {
     let rows = contract_query!(
         " WHERE c.tenant_id = $1 ORDER BY c.created_at DESC LIMIT $2",
         tenant_id,
-        crate::MAX_ROWS
+        crate::probe_limit(crate::MAX_ROWS)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "contracts::list_for_tenant");
-    Ok(rows)
+    let page = crate::Page::probe(rows, crate::MAX_ROWS);
+    crate::warn_if_truncated(page.truncated, "contracts::list_for_tenant");
+    Ok(page)
 }
 
 /// Составление договора по итогам торгов (FR-901, п. 108, 110).

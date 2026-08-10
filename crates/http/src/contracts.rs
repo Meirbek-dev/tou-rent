@@ -127,19 +127,36 @@ pub async fn tender_contracts(
     Ok(Json(records.into_iter().map(contract_dto).collect()))
 }
 
+/// Договоры кабинета нанимателя (ТЗ § 7).
+///
+/// `next_after` всегда `null`: договоров у нанимателя единицы, продолжения
+/// у выборки нет. Поле остается ради единообразия усекаемых реестров.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MyContractPage {
+    pub items: Vec<ContractDto>,
+    pub next_after: Option<String>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
 /// Мои договоры (кабинет нанимателя).
 #[utoipa::path(
     get,
     path = "/api/v1/contracts/my",
     tag = "contracts",
-    responses((status = 200, description = "Договоры нанимателя", body = [ContractDto]))
+    responses((status = 200, description = "Договоры нанимателя", body = MyContractPage))
 )]
 pub async fn my_contracts(
     user: CurrentUser,
     State(state): State<AppState>,
-) -> Result<Json<Vec<ContractDto>>, ApiError> {
-    let records = contracts::list_for_tenant(&state.db, user.id()).await?;
-    Ok(Json(records.into_iter().map(contract_dto).collect()))
+) -> Result<Json<MyContractPage>, ApiError> {
+    let page = contracts::list_for_tenant(&state.db, user.id()).await?;
+    let truncated = page.truncated;
+    Ok(Json(MyContractPage {
+        items: page.into_iter().map(contract_dto).collect(),
+        next_after: None,
+        truncated,
+    }))
 }
 
 /// Доступ к конкретному договору: ведущие процесс - по праву, наниматель -

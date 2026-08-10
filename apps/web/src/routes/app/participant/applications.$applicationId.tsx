@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { Link, createFileRoute, notFound } from "@tanstack/react-router"
 import {
   useMutation,
@@ -22,6 +22,7 @@ import {
   rejectionReasonsQuery,
 } from "@/lib/participant"
 import { cn } from "@/lib/utils"
+import { UPLOAD_ACCEPT, uploadError } from "@/lib/validation"
 import { buttonVariants } from "@/components/ui/button"
 
 import type { ApplicationDto } from "@/lib/participant"
@@ -50,6 +51,10 @@ function ApplicationPage() {
 function ApplicationCard({ application }: { application: ApplicationDto }) {
   const queryClient = useQueryClient()
   const fileInput = useRef<HTMLInputElement>(null)
+  // Досье под Object Lock на пять лет (INV-042), поэтому api отвергает файл
+  // не того формата или крупнее 10 МБ. Раньше форма об этом не знала, и
+  // участник узнавал об отказе, отправив файл целиком
+  const [fileError, setFileError] = useState<string | undefined>(undefined)
   const { data: reasons } = useSuspenseQuery(rejectionReasonsQuery)
 
   const refresh = () =>
@@ -92,6 +97,7 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
     },
     onSuccess: async () => {
       if (fileInput.current) fileInput.current.value = ""
+      setFileError(undefined)
       await refresh()
     },
   })
@@ -220,6 +226,9 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
             className="mt-4 flex flex-wrap items-end gap-3"
             onSubmit={(event) => {
               event.preventDefault()
+              const problem = uploadError(fileInput.current?.files?.[0])
+              setFileError(problem)
+              if (problem !== undefined) return
               upload.mutate()
             }}
           >
@@ -229,12 +238,25 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
                 id="application-file"
                 type="file"
                 required
+                accept={UPLOAD_ACCEPT}
+                aria-invalid={fileError !== undefined}
                 ref={fileInput}
+                onChange={() => {
+                  const file = fileInput.current?.files?.[0]
+                  setFileError(
+                    file === undefined ? undefined : uploadError(file)
+                  )
+                }}
               />
             </div>
             <Button type="submit" disabled={upload.isPending}>
               {m.file_upload_submit()}
             </Button>
+            {fileError !== undefined && (
+              <p role="alert" className="w-full text-sm text-destructive">
+                {fileError}
+              </p>
+            )}
             {upload.isError && (
               <p role="alert" className="w-full text-sm text-destructive">
                 {problemMessage(upload.error)}

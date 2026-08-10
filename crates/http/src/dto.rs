@@ -26,6 +26,44 @@ pub mod iso_date {
     }
 }
 
+/// Курсор реестра на проводе (ТЗ § 7): непрозрачная для клиента строка
+/// `<наносекунды unix>~<uuid>`.
+///
+/// Непрозрачная - значит, клиент ее не собирает и не разбирает, а возвращает
+/// в `after` как есть: состав ключа принадлежит серверу и меняется вместе
+/// с сортировкой реестра. Числом, а не RFC 3339: в строке запроса `+`
+/// часового пояса читается как пробел, и такой курсор ломался бы ровно
+/// на тех реестрах, где время записано с положительным смещением.
+pub mod cursor {
+    use tou_db::RowCursor;
+    use uuid::Uuid;
+
+    use crate::error::ApiError;
+
+    pub fn encode(cursor: RowCursor) -> String {
+        format!("{}~{}", cursor.at.unix_timestamp_nanos(), cursor.id)
+    }
+
+    pub fn parse(raw: &str) -> Result<RowCursor, ApiError> {
+        let invalid = || ApiError::Validation(format!("курсор «{raw}» не разбирается"));
+
+        let (nanos, id) = raw.split_once('~').ok_or_else(invalid)?;
+        let at = nanos
+            .parse::<i128>()
+            .ok()
+            .and_then(|nanos| time::OffsetDateTime::from_unix_timestamp_nanos(nanos).ok())
+            .ok_or_else(invalid)?;
+        let id: Uuid = id.parse().map_err(|_| invalid())?;
+        Ok(RowCursor::new(at, id))
+    }
+
+    /// Курсор следующей страницы: он есть, только если за отданными строками
+    /// что-то осталось, - иначе клиент запрашивал бы заведомо пустую страницу.
+    pub fn next(truncated: bool, last: Option<RowCursor>) -> Option<String> {
+        truncated.then(|| last.map(encode)).flatten()
+    }
+}
+
 /// Десериализация значения БД в DTO-enum по serde-имени; неизвестное
 /// значение - дрейф контракта, отвечаем 500 и шумим в телеметрию.
 fn from_db_str<T: serde::de::DeserializeOwned>(kind: &str, raw: &str) -> Result<T, ApiError> {
@@ -210,6 +248,43 @@ mod tests {
         ] {
             assert_eq!(ObjectKindDto::from_db(kind.as_db()).unwrap(), kind);
         }
+    }
+
+    /// Курсор переживает дорогу до клиента и обратно без потери точности:
+    /// момент события хранится в наносекундах, и округление до секунды
+    /// увело бы страницу мимо строк той же секунды.
+    #[test]
+    fn cursor_survives_a_round_trip() {
+        let at = time::OffsetDateTime::from_unix_timestamp_nanos(1_777_000_000_123_456_789)
+            .expect("момент");
+        let source = tou_db::RowCursor::new(at, uuid::Uuid::from_u128(42));
+
+        let encoded = cursor::encode(source);
+        assert_eq!(cursor::parse(&encoded).unwrap(), source);
+        assert!(
+            !encoded.contains('+') && !encoded.contains(' '),
+            "курсор едет в строке запроса: {encoded}"
+        );
+    }
+
+    /// Испорченный курсор - ошибка запроса, а не молчаливая первая страница:
+    /// иначе клиент листал бы реестр по кругу, не понимая почему.
+    #[test]
+    fn a_broken_cursor_is_rejected() {
+        assert!(cursor::parse("").is_err());
+        assert!(cursor::parse("не-курсор").is_err());
+        assert!(cursor::parse("123~не-uuid").is_err());
+        assert!(cursor::parse("~").is_err());
+    }
+
+    /// Курсор следующей страницы есть только тогда, когда есть следующая
+    /// страница: иначе клиент запросил бы заведомо пустую выдачу.
+    #[test]
+    fn the_next_cursor_appears_only_with_more_rows() {
+        let cursor = tou_db::RowCursor::new(time::OffsetDateTime::UNIX_EPOCH, uuid::Uuid::nil());
+        assert!(cursor::next(false, Some(cursor)).is_none());
+        assert!(cursor::next(true, None).is_none());
+        assert!(cursor::next(true, Some(cursor)).is_some());
     }
 
     /// Витрина FR-102 фильтрует по статусу строкой БД: рассинхрон

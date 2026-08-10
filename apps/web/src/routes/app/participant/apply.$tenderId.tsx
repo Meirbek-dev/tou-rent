@@ -15,6 +15,7 @@ import { api, tenderQuery } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
 import { formatTenge } from "@/lib/format"
 import { myApplicationsQuery } from "@/lib/participant"
+import { ID_NUMBER_LENGTH, applicantDetailsErrors } from "@/lib/validation"
 
 import type { TenderDto } from "@/lib/api"
 import type { ApplicantKind } from "@/lib/participant"
@@ -52,8 +53,25 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
   const [email, setEmail] = useState("")
   const [qualification, setQualification] = useState("")
   const [price, setPrice] = useState("")
+  // Пустое обязательное поле - ошибка, но кричать о ней, пока участник до
+  // него не дошел, незачем: до первой попытки отправки показываются только
+  // ошибки заполненных полей
+  const [submitAttempted, setSubmitAttempted] = useState(false)
 
   const selectedLot = tender.lots.find((lot) => lot.id === lotId)
+
+  // Реквизиты сохраняются и печатаются в договоре как есть, поэтому в заявку
+  // уходит то же значение, которое проверено, - без краевых пробелов
+  const details = {
+    name: name.trim(),
+    id_number: idNumber.trim(),
+    address: address.trim(),
+    phone: phone.trim(),
+    email: email.trim(),
+  }
+  const errors = applicantDetailsErrors(details)
+  const shownError = (field: keyof typeof details) =>
+    submitAttempted || details[field] !== "" ? errors[field] : undefined
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -65,11 +83,8 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
             lot_id: lotId,
             applicant_kind: kind,
             applicant_details: {
-              name,
-              id_number: idNumber,
-              address,
-              phone,
-              email: email === "" ? null : email,
+              ...details,
+              email: details.email === "" ? null : details.email,
             },
             qualification: qualification === "" ? null : qualification,
             price_amount: price,
@@ -97,6 +112,10 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
       className="flex max-w-3xl flex-col gap-6"
       onSubmit={(event) => {
         event.preventDefault()
+        setSubmitAttempted(true)
+        // Заявка попадает в журнал регистрации навсегда (Прил. 12), поэтому
+        // реквизит проверяется до отправки, а не после отказа api
+        if (Object.keys(errors).length > 0) return
         submit.mutate()
       }}
     >
@@ -151,17 +170,26 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
             <Input
               id="apply-name"
               required
+              aria-invalid={shownError("name") !== undefined}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
+            <FieldError id="apply-name-error" message={shownError("name")} />
           </div>
           <div className="flex w-48 flex-col gap-1.5">
             <Label htmlFor="apply-idnum">{m.applicant_id_number_label()}</Label>
             <Input
               id="apply-idnum"
               required
+              inputMode="numeric"
+              maxLength={ID_NUMBER_LENGTH}
+              aria-invalid={shownError("id_number") !== undefined}
               value={idNumber}
               onChange={(event) => setIdNumber(event.target.value)}
+            />
+            <FieldError
+              id="apply-idnum-error"
+              message={shownError("id_number")}
             />
           </div>
         </div>
@@ -171,8 +199,13 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
             <Input
               id="apply-address"
               required
+              aria-invalid={shownError("address") !== undefined}
               value={address}
               onChange={(event) => setAddress(event.target.value)}
+            />
+            <FieldError
+              id="apply-address-error"
+              message={shownError("address")}
             />
           </div>
           <div className="flex w-52 flex-col gap-1.5">
@@ -181,18 +214,23 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
               id="apply-phone"
               required
               type="tel"
+              autoComplete="tel"
+              aria-invalid={shownError("phone") !== undefined}
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
             />
+            <FieldError id="apply-phone-error" message={shownError("phone")} />
           </div>
           <div className="flex min-w-56 flex-1 flex-col gap-1.5">
             <Label htmlFor="apply-email">{m.auth_email()}</Label>
             <Input
               id="apply-email"
               type="email"
+              aria-invalid={shownError("email") !== undefined}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
             />
+            <FieldError id="apply-email-error" message={shownError("email")} />
           </div>
         </div>
       </fieldset>
@@ -235,5 +273,21 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
         </Button>
       </div>
     </form>
+  )
+}
+
+/** Ошибка поля рядом с самим полем: `role="alert"` озвучивает ее сразу. */
+function FieldError({
+  id,
+  message,
+}: {
+  id: string
+  message: string | undefined
+}) {
+  if (message === undefined) return null
+  return (
+    <p id={id} role="alert" className="text-sm text-destructive">
+      {message}
+    </p>
   )
 }

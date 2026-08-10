@@ -1760,10 +1760,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ContractDto"
-                  }
+                  "$ref": "#/components/schemas/MyContractPage"
                 }
               }
             }
@@ -2649,16 +2646,39 @@
         ],
         "summary": "Реестр уклонистов (FR-505, п. 52.4, 120): их заявки в будущих тендерах\nотклоняются автоматически - реестр показывает, кого это касается.",
         "operationId": "evader_registry",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор следующей страницы - значение `next_after` предыдущей",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Реестр уклонистов",
+            "description": "Страница реестра уклонистов",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/EvaderDto"
-                  }
+                  "$ref": "#/components/schemas/EvaderPage"
                 }
               }
             }
@@ -3562,18 +3582,39 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор следующей страницы - значение `next_after` предыдущей",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Проводки счета",
+            "description": "Страница проводок счета",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/LedgerEntryDto"
-                  }
+                  "$ref": "#/components/schemas/LedgerEntryPage"
                 }
               }
             }
@@ -4203,10 +4244,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ObligationDto"
-                  }
+                  "$ref": "#/components/schemas/ObligationPage"
                 }
               }
             }
@@ -4227,10 +4265,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProtocolDto"
-                  }
+                  "$ref": "#/components/schemas/MyProtocolPage"
                 }
               }
             }
@@ -4337,16 +4372,39 @@
         ],
         "summary": "Реестр публикаций особого порядка (FR-1403, п. 90, 92, 97): портал\nпоказывает материалы, доступные сейчас - снятые по истечении шести\nмесяцев остаются только в досье (INV-076).",
         "operationId": "list_public_records",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор следующей страницы - значение `next_after` предыдущей",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Публикации особого порядка",
+            "description": "Страница публикаций особого порядка",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PublicRecordDto"
-                  }
+                  "$ref": "#/components/schemas/PublicRecordPage"
                 }
               }
             }
@@ -4426,10 +4484,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PendingPublicationDto"
-                  }
+                  "$ref": "#/components/schemas/PendingPublicationPage"
                 }
               }
             }
@@ -5109,11 +5164,35 @@
                 "null"
               ]
             }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор следующей страницы - значение `next_after` предыдущей",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Реестр",
+            "description": "Страница реестра",
             "content": {
               "application/json": {
                 "schema": {
@@ -5133,7 +5212,7 @@
             }
           },
           "422": {
-            "description": "Неизвестный реестр или дата",
+            "description": "Неизвестный реестр, дата или курсор",
             "content": {
               "application/json": {
                 "schema": {
@@ -8092,7 +8171,7 @@
       },
       "ApplicantDetailsDto": {
         "type": "object",
-        "description": "Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020).",
+        "description": "Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020).\n\nТот же тип принимает сведения заявителя особого порядка (Прил. 3,\n`special.rs`), поэтому предметная проверка реквизитов здесь - единственная\nна оба маршрута.",
         "required": [
           "name",
           "id_number",
@@ -9621,6 +9700,33 @@
           }
         }
       },
+      "EvaderPage": {
+        "type": "object",
+        "description": "Страница реестра уклонистов (ТЗ § 7).",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvaderDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор продолжения; `null` - реестр показан до конца"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
+          }
+        }
+      },
       "EvasionDto": {
         "type": "object",
         "description": "Зафиксированное уклонение (FR-903).",
@@ -10644,6 +10750,33 @@
           }
         }
       },
+      "LedgerEntryPage": {
+        "type": "object",
+        "description": "Страница выписки по счету (ТЗ § 7).",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntryDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор продолжения; `null` - журнал показан до конца"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выписка"
+          }
+        }
+      },
       "LoginRequest": {
         "type": "object",
         "required": [
@@ -10896,6 +11029,58 @@
           "year": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "MyContractPage": {
+        "type": "object",
+        "description": "Договоры кабинета нанимателя (ТЗ § 7).\n\n`next_after` всегда `null`: договоров у нанимателя единицы, продолжения\nу выборки нет. Поле остается ради единообразия усекаемых реестров.",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
+          }
+        }
+      },
+      "MyProtocolPage": {
+        "type": "object",
+        "description": "Протоколы кабинета участника (ТЗ § 7).\n\n`next_after` всегда `null`: выборку ограничивает участие одного человека,\nпродолжения у нее нет. Поле остается, чтобы усекаемые реестры отвечали\nодинаково и клиенту не приходилось помнить, у какого из них какая форма.",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProtocolDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
           }
         }
       },
@@ -11242,6 +11427,32 @@
           }
         }
       },
+      "ObligationPage": {
+        "type": "object",
+        "description": "Дашборд сроков (ТЗ § 7).\n\n`next_after` всегда `null`: рабочий список разгружается работой, а не\nлистанием. Поднятый `truncated` здесь значит, что сроков накопилось\nбольше, чем дашборд показывает, - это про завал, а не про страницу.",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObligationDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
+          }
+        }
+      },
       "OidcProviderDto": {
         "type": "object",
         "required": [
@@ -11296,6 +11507,32 @@
           },
           "title": {
             "type": "string"
+          }
+        }
+      },
+      "PendingPublicationPage": {
+        "type": "object",
+        "description": "Рабочий список ожидающих публикации (ТЗ § 7).\n\n`next_after` здесь всегда `null`: продолжения у списка нет - он не\nреестр, а очередь работы, и `truncated` означает не «есть вторая\nстраница», а «работы накопилось больше, чем система показывает».",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingPublicationDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
           }
         }
       },
@@ -11478,6 +11715,33 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "PublicRecordPage": {
+        "type": "object",
+        "description": "Страница реестра портала (ТЗ § 7).",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicRecordDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор продолжения; `null` - реестр показан до конца"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
           }
         }
       },
@@ -11894,7 +12158,8 @@
           "registry",
           "title_ru",
           "columns",
-          "rows"
+          "rows",
+          "truncated"
         ],
         "properties": {
           "columns": {
@@ -11902,6 +12167,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор продолжения; `null` - реестр показан до конца"
           },
           "registry": {
             "type": "string",
@@ -11919,6 +12191,10 @@
           },
           "title_ru": {
             "type": "string"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка: за строками ответа есть еще"
           }
         }
       },

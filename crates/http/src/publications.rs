@@ -111,22 +111,40 @@ pub async fn tender_protocols(
     ))
 }
 
+/// Протоколы кабинета участника (ТЗ § 7).
+///
+/// `next_after` всегда `null`: выборку ограничивает участие одного человека,
+/// продолжения у нее нет. Поле остается, чтобы усекаемые реестры отвечали
+/// одинаково и клиенту не приходилось помнить, у какого из них какая форма.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MyProtocolPage {
+    pub items: Vec<ProtocolDto>,
+    pub next_after: Option<String>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
 /// Копии протоколов в кабинете участника (FR-703, п. 56): по всем тендерам,
 /// где участник подавал заявку, независимо от публичного срока.
 #[utoipa::path(
     get,
     path = "/api/v1/protocols/my",
     tag = "publications",
-    responses((status = 200, description = "Протоколы моих тендеров", body = [ProtocolDto]))
+    responses((status = 200, description = "Протоколы моих тендеров", body = MyProtocolPage))
 )]
 pub async fn my_protocols(
     user: CurrentUser,
     State(state): State<AppState>,
-) -> Result<Json<Vec<ProtocolDto>>, ApiError> {
+) -> Result<Json<MyProtocolPage>, ApiError> {
     user.require(Action::ApplicationReadOwn)?;
 
-    let records = publications::list_for_participant(&state.db, user.id()).await?;
-    Ok(Json(records.into_iter().map(protocol_dto).collect()))
+    let page = publications::list_for_participant(&state.db, user.id()).await?;
+    let truncated = page.truncated;
+    Ok(Json(MyProtocolPage {
+        items: page.into_iter().map(protocol_dto).collect(),
+        next_after: None,
+        truncated,
+    }))
 }
 
 /// Публикация протокола (FR-702, п. 75): публичный доступ на шесть месяцев

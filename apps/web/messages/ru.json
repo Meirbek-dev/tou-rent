@@ -704,5 +704,15 @@
   "benefit_credits": "обучение {credits} кредитов в семестр",
   "benefit_rule_communal": "коммунальные расходы (п. 95–96)",
   "benefit_rule_share": "половина ставки Прил. 4",
-  "benefit_rule_full": "ставка Прил. 4"
+  "benefit_rule_full": "ставка Прил. 4",
+  "validation_required": "Заполните поле",
+  "validation_too_long": "Слишком длинное значение",
+  "validation_id_number": "Проверьте БИН/ИИН: 12 цифр, контрольный разряд должен сходиться",
+  "validation_phone_charset": "Телефон записывается цифрами; допустимы «+», пробел, дефис и скобки",
+  "validation_phone_length": "В номере телефона от {min} до {max} цифр",
+  "validation_email": "Проверьте адрес электронной почты",
+  "validation_file_type": "Принимаются PDF, JPEG, PNG и TIFF",
+  "validation_file_too_large": "Файл больше {max} МБ - уменьшите или разбейте документ",
+  "list_truncated": "Показаны первые {count} записей - в выборке есть еще.",
+  "reports_truncated": "Показаны первые {count} записей за период. Полный реестр - в выгрузке CSV."
 }

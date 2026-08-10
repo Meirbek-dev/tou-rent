@@ -2908,7 +2908,13 @@ export interface components {
              */
             version: number;
         };
-        /** @description Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020). */
+        /**
+         * @description Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020).
+         *
+         *     Тот же тип принимает сведения заявителя особого порядка (Прил. 3,
+         *     `special.rs`), поэтому предметная проверка реквизитов здесь - единственная
+         *     на оба маршрута.
+         */
         ApplicantDetailsDto: {
             address: string;
             email?: string | null;
@@ -3481,6 +3487,14 @@ export interface components {
             /** Format: uuid */
             user_id: string;
         };
+        /** @description Страница реестра уклонистов (ТЗ § 7). */
+        EvaderPage: {
+            items: components["schemas"]["EvaderDto"][];
+            /** @description Курсор продолжения; `null` - реестр показан до конца */
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
+        };
         /** @description Зафиксированное уклонение (FR-903). */
         EvasionDto: {
             /** Format: uuid */
@@ -3855,6 +3869,14 @@ export interface components {
             /** @description Пункт Правил - основание проводки */
             rule_ref?: string | null;
         };
+        /** @description Страница выписки по счету (ТЗ § 7). */
+        LedgerEntryPage: {
+            items: components["schemas"]["LedgerEntryDto"][];
+            /** @description Курсор продолжения; `null` - журнал показан до конца */
+            next_after?: string | null;
+            /** @description Показана не вся выписка */
+            truncated: boolean;
+        };
         LoginRequest: {
             email: string;
             password: string;
@@ -3949,6 +3971,31 @@ export interface components {
             amount: string;
             /** Format: int32 */
             year: number;
+        };
+        /**
+         * @description Договоры кабинета нанимателя (ТЗ § 7).
+         *
+         *     `next_after` всегда `null`: договоров у нанимателя единицы, продолжения
+         *     у выборки нет. Поле остается ради единообразия усекаемых реестров.
+         */
+        MyContractPage: {
+            items: components["schemas"]["ContractDto"][];
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
+        };
+        /**
+         * @description Протоколы кабинета участника (ТЗ § 7).
+         *
+         *     `next_after` всегда `null`: выборку ограничивает участие одного человека,
+         *     продолжения у нее нет. Поле остается, чтобы усекаемые реестры отвечали
+         *     одинаково и клиенту не приходилось помнить, у какого из них какая форма.
+         */
+        MyProtocolPage: {
+            items: components["schemas"]["ProtocolDto"][];
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
         };
         NewCoefficientRequest: {
             coefficient: string;
@@ -4064,6 +4111,19 @@ export interface components {
             tender_id?: string | null;
             tender_title?: string | null;
         };
+        /**
+         * @description Дашборд сроков (ТЗ § 7).
+         *
+         *     `next_after` всегда `null`: рабочий список разгружается работой, а не
+         *     листанием. Поднятый `truncated` здесь значит, что сроков накопилось
+         *     больше, чем дашборд показывает, - это про завал, а не про страницу.
+         */
+        ObligationPage: {
+            items: components["schemas"]["ObligationDto"][];
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
+        };
         OidcProviderDto: {
             label: string;
             /** @description Ссылка начала входа - обычная навигация, работает без JS (NFR-04) */
@@ -4085,6 +4145,19 @@ export interface components {
              */
             source_id: string;
             title: string;
+        };
+        /**
+         * @description Рабочий список ожидающих публикации (ТЗ § 7).
+         *
+         *     `next_after` здесь всегда `null`: продолжения у списка нет - он не
+         *     реестр, а очередь работы, и `truncated` означает не «есть вторая
+         *     страница», а «работы накопилось больше, чем система показывает».
+         */
+        PendingPublicationPage: {
+            items: components["schemas"]["PendingPublicationDto"][];
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
         };
         PlaceBidRequest: {
             /** @example 57750 */
@@ -4154,6 +4227,14 @@ export interface components {
             unpublish_at: string;
             /** Format: date-time */
             unpublished_at?: string | null;
+        };
+        /** @description Страница реестра портала (ТЗ § 7). */
+        PublicRecordPage: {
+            items: components["schemas"]["PublicRecordDto"][];
+            /** @description Курсор продолжения; `null` - реестр показан до конца */
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
         };
         PublishRecordRequest: {
             /** @description Вид публикации: `decision` | `rate` | `investment_act` */
@@ -4322,11 +4403,15 @@ export interface components {
         /** @description Реестр отчетности: колонки и строки в одном порядке (арх. § 9). */
         RegistryDto: {
             columns: string[];
+            /** @description Курсор продолжения; `null` - реестр показан до конца */
+            next_after?: string | null;
             /** @description `decisions` | `contracts` | `receipts` */
             registry: string;
             /** @description Строки реестра: значения предформатированы сервером (ru, NFR-01) */
             rows: string[][];
             title_ru: string;
+            /** @description Показана не вся выборка: за строками ответа есть еще */
+            truncated: boolean;
         };
         RegistrySummaryDto: {
             registry: string;
@@ -5975,7 +6060,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContractDto"][];
+                    "application/json": components["schemas"]["MyContractPage"];
                 };
             };
         };
@@ -6608,20 +6693,24 @@ export interface operations {
     };
     evader_registry: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор следующей страницы - значение `next_after` предыдущей */
+                after?: string | null;
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Реестр уклонистов */
+            /** @description Страница реестра уклонистов */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EvaderDto"][];
+                    "application/json": components["schemas"]["EvaderPage"];
                 };
             };
         };
@@ -7291,7 +7380,11 @@ export interface operations {
     };
     account_entries: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор следующей страницы - значение `next_after` предыдущей */
+                after?: string | null;
+                limit?: number | null;
+            };
             header?: never;
             path: {
                 /** @description Счет книги */
@@ -7301,13 +7394,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Проводки счета */
+            /** @description Страница проводок счета */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryDto"][];
+                    "application/json": components["schemas"]["LedgerEntryPage"];
                 };
             };
         };
@@ -7743,7 +7836,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ObligationDto"][];
+                    "application/json": components["schemas"]["ObligationPage"];
                 };
             };
         };
@@ -7763,7 +7856,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProtocolDto"][];
+                    "application/json": components["schemas"]["MyProtocolPage"];
                 };
             };
         };
@@ -7843,20 +7936,24 @@ export interface operations {
     };
     list_public_records: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор следующей страницы - значение `next_after` предыдущей */
+                after?: string | null;
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Публикации особого порядка */
+            /** @description Страница публикаций особого порядка */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicRecordDto"][];
+                    "application/json": components["schemas"]["PublicRecordPage"];
                 };
             };
         };
@@ -7927,7 +8024,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PendingPublicationDto"][];
+                    "application/json": components["schemas"]["PendingPublicationPage"];
                 };
             };
             /** @description Недостаточно прав */
@@ -8470,6 +8567,9 @@ export interface operations {
                 from?: string | null;
                 /** @description Конец периода включительно (ISO 8601) */
                 to?: string | null;
+                /** @description Курсор следующей страницы - значение `next_after` предыдущей */
+                after?: string | null;
+                limit?: number | null;
             };
             header?: never;
             path: {
@@ -8480,7 +8580,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Реестр */
+            /** @description Страница реестра */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8498,7 +8598,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Неизвестный реестр или дата */
+            /** @description Неизвестный реестр, дата или курсор */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -28,10 +28,18 @@ export const tenderContractsQuery = (tenderId: string) =>
       ),
   })
 
-/** Мои договоры (кабинет нанимателя, FR-902): своя сторона конвейера. */
+/**
+ * Мои договоры (кабинет нанимателя, FR-902): своя сторона конвейера.
+ *
+ * TODO-ENGINEER: маршрут отдает страницу `{ items, next_after, truncated }`
+ * (ТЗ § 7), сюда возвращаются только строки - экран нанимателя
+ * (`routes/app/participant/contracts.tsx`) признак `truncated` пока
+ * не показывает. Договоров у нанимателя единицы, поэтому потолок здесь
+ * почти недостижим, но молчать о нем экран не должен.
+ */
 export const myContractsQuery = queryOptions({
   queryKey: ["contracts", "my"],
-  queryFn: () => mutate(api.GET("/api/v1/contracts/my")),
+  queryFn: async () => (await mutate(api.GET("/api/v1/contracts/my"))).items,
 })
 
 /** Депозит по договору (FR-1003, п. 132–136): счет и остаток. */

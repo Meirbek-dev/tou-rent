@@ -28,11 +28,22 @@ export function PublicationsPanel() {
         {m.publications_title()}
       </h2>
       <p className="text-sm text-muted-foreground">{m.publications_hint()}</p>
-      {pending.length === 0 ? (
+      {/* Список ждущих публикации разгружается работой: поднятый признак
+          означает не вторую страницу, а то, что работы больше, чем видно */}
+      {pending.truncated && (
+        <p
+          role="status"
+          className="rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-sm"
+          data-testid="publications-truncated"
+        >
+          {m.list_truncated({ count: pending.items.length })}
+        </p>
+      )}
+      {pending.items.length === 0 ? (
         <p className="text-muted-foreground">{m.publications_empty()}</p>
       ) : (
         <ul className="flex flex-col gap-3" data-testid="publications-pending">
-          {pending.map((item) => (
+          {pending.items.map((item) => (
             <li key={`${item.kind}-${item.source_id}`}>
               <PendingCard item={item} />
             </li>

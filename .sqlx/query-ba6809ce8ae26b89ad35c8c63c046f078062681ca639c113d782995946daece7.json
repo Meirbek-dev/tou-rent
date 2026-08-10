@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT e.id, e.op::text AS \"op!\", e.debit, e.credit, e.rule_ref,\n                  e.refund_reason, e.paid_at, e.note,\n                  u.full_name AS \"recorded_by_name?\", e.occurred_at\n           FROM core.ledger_entries e\n           LEFT JOIN core.users u ON u.id = e.recorded_by\n           WHERE e.account_id = $1 ORDER BY e.occurred_at, e.id LIMIT $2",
+  "query": "SELECT e.id, e.op::text AS \"op!\", e.debit, e.credit, e.rule_ref,\n                  e.refund_reason, e.paid_at, e.note,\n                  u.full_name AS \"recorded_by_name?\", e.occurred_at\n           FROM core.ledger_entries e\n           LEFT JOIN core.users u ON u.id = e.recorded_by\n           WHERE e.account_id = $1\n             AND ($2::timestamptz IS NULL OR (e.occurred_at, e.id) > ($2, $3::uuid))\n           ORDER BY e.occurred_at, e.id LIMIT $4",
   "describe": {
     "columns": [
       {
@@ -57,6 +57,8 @@
     "parameters": {
       "Left": [
         "Uuid",
+        "Timestamptz",
+        "Uuid",
         "Int8"
       ]
     },
@@ -73,5 +75,5 @@
       false
     ]
   },
-  "hash": "9e18e2a5e011d2da2978a9f1b9a6ad1a8b2c974c208fa5168f3ea77c3cd11a27"
+  "hash": "ba6809ce8ae26b89ad35c8c63c046f078062681ca639c113d782995946daece7"
 }

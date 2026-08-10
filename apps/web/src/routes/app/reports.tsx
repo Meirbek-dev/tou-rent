@@ -90,6 +90,19 @@ function ReportsPage() {
         </a>
       </form>
 
+      {/* Экран реестра - первая страница выборки, выгрузка - весь период.
+          Бухгалтерия считает по строкам, поэтому «показано не все» стоит
+          над таблицей, а не сноской под ней */}
+      {data?.truncated === true && (
+        <p
+          role="status"
+          className="rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-sm"
+          data-testid="registry-truncated"
+        >
+          {m.reports_truncated({ count: data.rows.length })}
+        </p>
+      )}
+
       {data === undefined ? null : data.rows.length === 0 ? (
         <p className="text-muted-foreground">{m.reports_empty()}</p>
       ) : (

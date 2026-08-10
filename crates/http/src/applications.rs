@@ -115,20 +115,41 @@ impl ApplicationDto {
 }
 
 /// Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020).
+///
+/// Тот же тип принимает сведения заявителя особого порядка (Прил. 3,
+/// `special.rs`), поэтому предметная проверка реквизитов здесь - единственная
+/// на оба маршрута.
 #[derive(Debug, Serialize, Deserialize, garde::Validate, ToSchema)]
 pub struct ApplicantDetailsDto {
     /// Наименование юрлица либо ФИО физлица
     #[garde(length(chars, min = 1, max = 300))]
     pub name: String,
     /// БИН/ИИН (персональные данные - NFR-07)
-    #[garde(length(chars, min = 1, max = 32))]
+    #[garde(custom(valid_id_number))]
     pub id_number: String,
     #[garde(length(chars, min = 1, max = 500))]
     pub address: String,
-    #[garde(length(chars, min = 1, max = 50))]
+    #[garde(custom(valid_phone))]
     pub phone: String,
     #[garde(inner(email, length(max = 254)))]
     pub email: Option<String>,
+}
+
+/// Предметная проверка ИИН/БИН живет в домене: по этому реквизиту сторона
+/// опознается в договоре и в реестре уклонившихся, и та же проверка теми же
+/// правилами стоит в форме (`apps/web/src/lib/validation.ts`). Прежняя
+/// «строка от 1 до 32 символов» ловила только пустое поле.
+///
+/// Имя не совпадает с именем поля намеренно: derive `garde` вводит в область
+/// видимости локальную переменную с именем поля, и функция `id_number`
+/// оказалась бы ею закрыта.
+fn valid_id_number(value: &str, _ctx: &()) -> garde::Result {
+    tou_domain::identity::validate_id_number(value)
+        .map_err(|err| garde::Error::new(err.to_string()))
+}
+
+fn valid_phone(value: &str, _ctx: &()) -> garde::Result {
+    tou_domain::identity::validate_phone(value).map_err(|err| garde::Error::new(err.to_string()))
 }
 
 #[derive(Debug, Deserialize, garde::Validate, ToSchema)]
@@ -534,4 +555,38 @@ async fn with_files(
             ApplicationDto::from_record(r, files)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn details(id_number: &str, phone: &str) -> ApplicantDetailsDto {
+        ApplicantDetailsDto {
+            name: "ТОО «Тест»".to_owned(),
+            id_number: id_number.to_owned(),
+            address: "г. Павлодар, ул. Ломова, 64".to_owned(),
+            phone: phone.to_owned(),
+            email: None,
+        }
+    }
+
+    /// Проверка домена действительно подключена к DTO: без нее сюда проходила
+    /// любая строка от 1 до 32 символов (W-13). Перечни примеров и границы -
+    /// в `tou_domain::identity`, здесь проверяется только проводка.
+    #[test]
+    fn applicant_details_run_the_domain_checks() {
+        assert!(
+            details("670124440127", "+7 701 123 45 67")
+                .validate()
+                .is_ok()
+        );
+        // Опечатка в контрольном разряде
+        assert!(
+            details("670124440128", "+7 701 123 45 67")
+                .validate()
+                .is_err()
+        );
+        assert!(details("670124440127", "не указан").validate().is_err());
+    }
 }

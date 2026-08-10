@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, kind::text AS \"kind!\", special_request_id, contract_id,\n                      acceptance_id, title, file_key, payload, published_at,\n                      unpublish_at, unpublished_at\n               FROM core.public_records WHERE unpublished_at IS NULL ORDER BY published_at DESC LIMIT $1",
+  "query": "SELECT id, kind::text AS \"kind!\", special_request_id, contract_id,\n                      acceptance_id, title, file_key, payload, published_at,\n                      unpublish_at, unpublished_at\n               FROM core.public_records WHERE unpublished_at IS NULL\n            AND ($1::timestamptz IS NULL OR (published_at, id) < ($1, $2::uuid))\n          ORDER BY published_at DESC, id DESC LIMIT $3",
   "describe": {
     "columns": [
       {
@@ -61,6 +61,8 @@
     ],
     "parameters": {
       "Left": [
+        "Timestamptz",
+        "Uuid",
         "Int8"
       ]
     },
@@ -78,5 +80,5 @@
       true
     ]
   },
-  "hash": "cee0c339d1c4fea2d42b8b2f15c7ea03083431f4ad79af326244bc06fd3fd071"
+  "hash": "9da833110ddff3e969c2b7c70afa03b72098cf8b230b7ccf6e4f71c7b3761eb2"
 }

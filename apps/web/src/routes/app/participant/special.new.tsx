@@ -21,6 +21,7 @@ import {
   reviewTermLabel,
   specialCategoriesQuery,
 } from "@/lib/special"
+import { ID_NUMBER_LENGTH, applicantDetailsErrors } from "@/lib/validation"
 
 import type { ApplicantKind } from "@/lib/participant"
 
@@ -63,8 +64,21 @@ function NewSpecialRequestPage() {
   const [purpose, setPurpose] = useState("")
   const [months, setMonths] = useState("")
   const [investment, setInvestment] = useState("")
+  const [submitAttempted, setSubmitAttempted] = useState(false)
 
   const category = categories.find((item) => item.code === categoryCode)
+
+  // Те же реквизиты Прил. 3, что и в заявке на тендер, - и та же схема
+  const details = {
+    name: name.trim(),
+    id_number: idNumber.trim(),
+    address: address.trim(),
+    phone: phone.trim(),
+    email: email.trim(),
+  }
+  const errors = applicantDetailsErrors(details)
+  const shownError = (field: keyof typeof details) =>
+    submitAttempted || details[field] !== "" ? errors[field] : undefined
 
   const submit = useMutation({
     mutationFn: async () => {
@@ -73,11 +87,8 @@ function NewSpecialRequestPage() {
           category: categoryCode,
           applicant_kind: kind,
           applicant_details: {
-            name,
-            id_number: idNumber,
-            address,
-            phone,
-            email: email === "" ? null : email,
+            ...details,
+            email: details.email === "" ? null : details.email,
           },
           object_id: objectId === "" ? null : objectId,
           purpose,
@@ -106,6 +117,8 @@ function NewSpecialRequestPage() {
       className="flex max-w-3xl flex-col gap-6"
       onSubmit={(event) => {
         event.preventDefault()
+        setSubmitAttempted(true)
+        if (Object.keys(errors).length > 0) return
         submit.mutate()
       }}
     >
@@ -181,9 +194,11 @@ function NewSpecialRequestPage() {
             <Input
               id="special-name"
               required
+              aria-invalid={shownError("name") !== undefined}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
+            <FieldError id="special-name-error" message={shownError("name")} />
           </div>
           <div className="flex w-48 flex-col gap-1.5">
             <Label htmlFor="special-idnum">
@@ -192,8 +207,15 @@ function NewSpecialRequestPage() {
             <Input
               id="special-idnum"
               required
+              inputMode="numeric"
+              maxLength={ID_NUMBER_LENGTH}
+              aria-invalid={shownError("id_number") !== undefined}
               value={idNumber}
               onChange={(event) => setIdNumber(event.target.value)}
+            />
+            <FieldError
+              id="special-idnum-error"
+              message={shownError("id_number")}
             />
           </div>
         </div>
@@ -203,8 +225,13 @@ function NewSpecialRequestPage() {
             <Input
               id="special-address"
               required
+              aria-invalid={shownError("address") !== undefined}
               value={address}
               onChange={(event) => setAddress(event.target.value)}
+            />
+            <FieldError
+              id="special-address-error"
+              message={shownError("address")}
             />
           </div>
           <div className="flex w-52 flex-col gap-1.5">
@@ -213,8 +240,14 @@ function NewSpecialRequestPage() {
               id="special-phone"
               required
               type="tel"
+              autoComplete="tel"
+              aria-invalid={shownError("phone") !== undefined}
               value={phone}
               onChange={(event) => setPhone(event.target.value)}
+            />
+            <FieldError
+              id="special-phone-error"
+              message={shownError("phone")}
             />
           </div>
           <div className="flex min-w-56 flex-1 flex-col gap-1.5">
@@ -222,8 +255,13 @@ function NewSpecialRequestPage() {
             <Input
               id="special-email"
               type="email"
+              aria-invalid={shownError("email") !== undefined}
               value={email}
               onChange={(event) => setEmail(event.target.value)}
+            />
+            <FieldError
+              id="special-email-error"
+              message={shownError("email")}
             />
           </div>
         </div>
@@ -321,5 +359,21 @@ function NewSpecialRequestPage() {
         </Button>
       </div>
     </form>
+  )
+}
+
+/** Ошибка поля рядом с самим полем: `role="alert"` озвучивает ее сразу. */
+function FieldError({
+  id,
+  message,
+}: {
+  id: string
+  message: string | undefined
+}) {
+  if (message === undefined) return null
+  return (
+    <p id={id} role="alert" className="text-sm text-destructive">
+      {message}
+    </p>
   )
 }

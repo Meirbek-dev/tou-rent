@@ -704,5 +704,15 @@
   "benefit_credits": "семестрде {credits} кредит оқыту",
   "benefit_rule_communal": "коммуналдық шығыстар (95–96-т.)",
   "benefit_rule_share": "4-қосымша мөлшерлемесінің жартысы",
-  "benefit_rule_full": "4-қосымша мөлшерлемесі"
+  "benefit_rule_full": "4-қосымша мөлшерлемесі",
+  "validation_required": "Өрісті толтырыңыз",
+  "validation_too_long": "Мән тым ұзын",
+  "validation_id_number": "БСН/ЖСН тексеріңіз: 12 цифр, бақылау разряды сәйкес келуі тиіс",
+  "validation_phone_charset": "Телефон цифрлармен жазылады; «+», бос орын, дефис және жақша рұқсат етіледі",
+  "validation_phone_length": "Телефон нөмірінде {min} мен {max} аралығында цифр болады",
+  "validation_email": "Электрондық пошта мекенжайын тексеріңіз",
+  "validation_file_type": "PDF, JPEG, PNG және TIFF қабылданады",
+  "validation_file_too_large": "Файл {max} МБ-тан үлкен - құжатты кішірейтіңіз немесе бөліңіз",
+  "list_truncated": "Алғашқы {count} жазба көрсетілді - таңдамада тағы бар.",
+  "reports_truncated": "Кезең бойынша алғашқы {count} жазба көрсетілді. Толық тізілім - CSV жүктемесінде."
 }

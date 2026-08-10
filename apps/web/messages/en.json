@@ -704,5 +704,15 @@
   "benefit_credits": "{credits} credits taught per semester",
   "benefit_rule_communal": "utility costs (cl. 95–96)",
   "benefit_rule_share": "half of the Annex 4 rate",
-  "benefit_rule_full": "the Annex 4 rate"
+  "benefit_rule_full": "the Annex 4 rate",
+  "validation_required": "Fill in this field",
+  "validation_too_long": "The value is too long",
+  "validation_id_number": "Check the BIN/IIN: 12 digits with a matching check digit",
+  "validation_phone_charset": "A phone number is written with digits; “+”, space, hyphen and brackets are allowed",
+  "validation_phone_length": "A phone number has {min} to {max} digits",
+  "validation_email": "Check the email address",
+  "validation_file_type": "PDF, JPEG, PNG and TIFF are accepted",
+  "validation_file_too_large": "The file is larger than {max} MB - reduce or split the document",
+  "list_truncated": "Showing the first {count} records - the selection has more.",
+  "reports_truncated": "Showing the first {count} records for the period. The full registry is in the CSV export."
 }

@@ -8,8 +8,8 @@ import { formatDateTime } from "@/lib/format"
  * отклоняются автоматически - реестр показывает, кого это касается.
  */
 export function EvaderRegistry() {
-  const { data: evaders } = useQuery(evaderRegistryQuery)
-  if (evaders === undefined || evaders.length === 0) return null
+  const { data: page } = useQuery(evaderRegistryQuery)
+  if (page === undefined || page.items.length === 0) return null
 
   return (
     <section
@@ -21,8 +21,19 @@ export function EvaderRegistry() {
         {m.evaders_title()}
       </h3>
       <p className="text-sm text-muted-foreground">{m.evaders_hint()}</p>
+      {/* Усечение видно на самом реестре, а не сноской под ним: увидеть
+          неполный список и не понять этого - хуже, чем не увидеть вовсе */}
+      {page.truncated && (
+        <p
+          role="status"
+          className="rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-sm"
+          data-testid="evaders-truncated"
+        >
+          {m.list_truncated({ count: page.items.length })}
+        </p>
+      )}
       <ul className="flex flex-col gap-1 text-sm">
-        {evaders.map((evader) => (
+        {page.items.map((evader) => (
           <li
             key={evader.user_id}
             className="flex flex-wrap items-center gap-x-3"

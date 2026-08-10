@@ -34,7 +34,13 @@ export const evasionGroundsQuery = queryOptions({
   queryFn: () => mutate(api.GET("/api/v1/evasion-grounds")),
 })
 
-/** Реестр уклонистов (FR-505, п. 52.4, 120). */
+/**
+ * Реестр уклонистов (FR-505, п. 52.4, 120) - первая страница.
+ *
+ * Отдается страница целиком, а не ее `items`: `truncated` показывает
+ * экран (ТЗ § 7), и потерять этот признак по дороге - значит вернуться
+ * к молчаливому усечению, из-за которого реестр и переделан.
+ */
 export const evaderRegistryQuery = queryOptions({
   queryKey: ["evaders"],
   queryFn: () => mutate(api.GET("/api/v1/evaders")),

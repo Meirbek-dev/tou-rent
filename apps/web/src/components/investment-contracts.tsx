@@ -22,6 +22,7 @@ import {
   investmentContractsQuery,
 } from "@/lib/investment"
 import { cn } from "@/lib/utils"
+import { UPLOAD_ACCEPT, uploadError } from "@/lib/validation"
 
 import type { InvestmentContract } from "@/lib/investment"
 
@@ -70,6 +71,9 @@ function ContractCard({
     investmentAcceptancesQuery(contract.id)
   )
   const fileInput = useRef<HTMLInputElement>(null)
+  // Приложения договора ложатся в то же досье под Object Lock (INV-042):
+  // формат и потолок 10 МБ проверяются до отправки (`upload.rs`)
+  const [fileError, setFileError] = useState<string | undefined>(undefined)
   const [code, setCode] = useState(attachments[0]?.code ?? "")
   const [actDate, setActDate] = useState("")
   const [amount, setAmount] = useState("")
@@ -105,6 +109,7 @@ function ContractCard({
     },
     onSuccess: async () => {
       if (fileInput.current) fileInput.current.value = ""
+      setFileError(undefined)
       await refresh()
     },
   })
@@ -251,6 +256,9 @@ function ContractCard({
           className="flex flex-wrap items-end gap-3 border-t pt-4"
           onSubmit={(event) => {
             event.preventDefault()
+            const problem = uploadError(fileInput.current?.files?.[0])
+            setFileError(problem)
+            if (problem !== undefined) return
             upload.mutate()
           }}
         >
@@ -281,12 +289,23 @@ function ContractCard({
               id={`attachment-file-${contract.id}`}
               type="file"
               required
+              accept={UPLOAD_ACCEPT}
+              aria-invalid={fileError !== undefined}
               ref={fileInput}
+              onChange={() => {
+                const file = fileInput.current?.files?.[0]
+                setFileError(file === undefined ? undefined : uploadError(file))
+              }}
             />
           </div>
           <Button type="submit" disabled={upload.isPending}>
             {m.file_upload_submit()}
           </Button>
+          {fileError !== undefined && (
+            <p role="alert" className="w-full text-sm text-destructive">
+              {fileError}
+            </p>
+          )}
           {upload.isError && (
             <p role="alert" className="w-full text-sm text-destructive">
               {problemMessage(upload.error)}

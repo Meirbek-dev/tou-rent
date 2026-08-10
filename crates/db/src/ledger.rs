@@ -108,8 +108,19 @@ pub async fn accounts(db: &Db, kind: Option<AccountKind>) -> Result<Vec<AccountR
     .await
 }
 
-/// Выписка по счету (FR-1001): все проводки в хронологическом порядке.
-pub async fn entries(db: &Db, account_id: Uuid) -> Result<Vec<EntryRow>, sqlx::Error> {
+/// Выписка по счету (FR-1001): проводки в хронологическом порядке, страницей.
+///
+/// Журнал счета растет и не сокращается: проводка - факт, ее не удаляют.
+/// Поэтому выписка идет курсором вперед по паре «момент проводки + строка»:
+/// у проводок одной транзакции `occurred_at` совпадает, и курсора по одному
+/// времени не хватило бы.
+pub async fn entries(
+    db: &Db,
+    account_id: Uuid,
+    after: Option<crate::RowCursor>,
+    limit: i64,
+) -> Result<crate::Page<EntryRow>, sqlx::Error> {
+    let (after_at, after_id) = crate::RowCursor::parts(after);
     let rows = sqlx::query_as!(
         EntryRow,
         r#"SELECT e.id, e.op::text AS "op!", e.debit, e.credit, e.rule_ref,
@@ -117,14 +128,19 @@ pub async fn entries(db: &Db, account_id: Uuid) -> Result<Vec<EntryRow>, sqlx::E
                   u.full_name AS "recorded_by_name?", e.occurred_at
            FROM core.ledger_entries e
            LEFT JOIN core.users u ON u.id = e.recorded_by
-           WHERE e.account_id = $1 ORDER BY e.occurred_at, e.id LIMIT $2"#,
+           WHERE e.account_id = $1
+             AND ($2::timestamptz IS NULL OR (e.occurred_at, e.id) > ($2, $3::uuid))
+           ORDER BY e.occurred_at, e.id LIMIT $4"#,
         account_id,
-        crate::MAX_ROWS
+        after_at,
+        after_id,
+        crate::probe_limit(limit)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "ledger::entries");
-    Ok(rows)
+    let page = crate::Page::probe(rows, limit);
+    crate::warn_if_truncated(page.truncated, "ledger::entries");
+    Ok(page)
 }
 
 /// Счет взноса по заявке (кабинет участника: «мой взнос»).

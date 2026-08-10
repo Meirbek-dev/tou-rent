@@ -244,7 +244,14 @@ pub async fn complete_tender(
 
 /// «Мои сроки» (FR-1702): открытые обязательства ролей пользователя,
 /// ближайшие сверху. Исполненные не показываются - их место в аудите.
-pub async fn for_roles(db: &Db, roles: &[Role]) -> Result<Vec<ObligationRecord>, sqlx::Error> {
+///
+/// Курсора нет: рабочий список разгружается работой - исполненный срок из
+/// него выбывает. Тысяча открытых сроков означает не длинный список,
+/// а завал, и признак усечения говорит именно об этом.
+pub async fn for_roles(
+    db: &Db,
+    roles: &[Role],
+) -> Result<crate::Page<ObligationRecord>, sqlx::Error> {
     let names: Vec<String> = roles.iter().map(|r| r.as_str().to_owned()).collect();
 
     let rows = obligation_query!(
@@ -252,12 +259,13 @@ pub async fn for_roles(db: &Db, roles: &[Role]) -> Result<Vec<ObligationRecord>,
             AND o.status IN ('pending', 'overdue')
           ORDER BY o.due_at LIMIT $2",
         &names,
-        crate::MAX_ROWS
+        crate::probe_limit(crate::MAX_ROWS)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "obligations::for_roles");
-    rows.into_iter().map(ObligationRecord::try_from).collect()
+    let page = crate::Page::probe(rows, crate::MAX_ROWS);
+    crate::warn_if_truncated(page.truncated, "obligations::for_roles");
+    page.try_map(ObligationRecord::try_from)
 }
 
 /// Просроченное обязательство и получатель эскалации.
