@@ -246,7 +246,9 @@ pub async fn login(
         .map_err(ApiError::internal)?;
 
     let roles = users::roles_of(&state.db, record.id).await?;
-    let (jar, _token) = csrf::issue(jar, state.secure_cookies);
+    // Токен CSRF перевыпускается вместе с идентификатором сессии: привилегии
+    // сменились, и прежнее значение подходить больше не должно
+    let jar = csrf::issue(&session, jar, state.secure_cookies).await?;
 
     tracing::info!(user_id = %record.id, "login");
     Ok((jar, Json(UserDto::new(record, roles))))
@@ -274,16 +276,25 @@ pub async fn me(user: CurrentUser, session: Session) -> Result<Json<UserDto>, Ap
     ))
 }
 
-/// Выход: сессия уничтожается в Redis.
+/// Выход: сессия уничтожается в Redis, CSRF-токен гасится в браузере.
 #[utoipa::path(
     post,
     path = "/api/v1/auth/logout",
     tag = "auth",
     responses((status = 204, description = "Сессия завершена"))
 )]
-pub async fn logout(session: Session) -> Result<StatusCode, ApiError> {
+pub async fn logout(
+    State(state): State<AppState>,
+    session: Session,
+    jar: CookieJar,
+) -> Result<(CookieJar, StatusCode), ApiError> {
     session.flush().await.map_err(ApiError::internal)?;
-    Ok(StatusCode::NO_CONTENT)
+    // Без этого cookie переживает сессию: страница после выхода продолжала бы
+    // отдавать токен, которому на сервере уже ничего не соответствует
+    Ok((
+        csrf::revoke(jar, state.secure_cookies),
+        StatusCode::NO_CONTENT,
+    ))
 }
 
 fn crypto_error(err: impl std::fmt::Display) -> ApiError {

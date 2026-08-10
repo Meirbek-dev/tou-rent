@@ -71,6 +71,14 @@ x-api-image: &api-image
     OIDC_POST_LOGOUT_URL: ${OIDC_POST_LOGOUT_URL:-}
     OIDC_TRUSTED_AUDIENCES: ${OIDC_TRUSTED_AUDIENCES:-}
     OIDC_LABEL: ${OIDC_LABEL:-}
+    # Кто может открывать сокет комнаты торгов. Апгрейд протокола браузер
+    # выпускает мимо CORS, поэтому источник сверяет само приложение: иначе
+    # сокет к api открывает любая страница, у посетителя которой есть сессия,
+    # и читает ставки и имена участников в реальном времени (NFR-09).
+    # В проде сокет идет на свой origin через Caddy, отсюда домен стенда.
+    # Стенд за чужим фронтом отдает голый HTTP (SITE_SCHEME) - там значение
+    # задается в .env целиком, схема по умолчанию не подойдет
+    WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:-https://${TOU_DOMAIN}}
 
 services:
   caddy:

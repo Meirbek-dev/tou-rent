@@ -2519,10 +2519,8 @@ name = "jobs"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "serde_json",
  "tokio",
  "tou-db",
- "tou-domain",
  "tracing",
  "tracing-subscriber",
 ]

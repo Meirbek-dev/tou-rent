@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE audit.chain_checks SET intact = true WHERE id = (SELECT max(id) FROM audit.chain_checks)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "d408c85725aef70c4f93e7b11dc74ea327bd5048435ff29985bc55f21f8c4167"
+}

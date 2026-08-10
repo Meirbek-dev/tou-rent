@@ -232,6 +232,37 @@ pub async fn bids_of(
     .await
 }
 
+/// Текущий максимум ленты (INV-063) - одним запросом, а не перебором ставок.
+///
+/// Минимум следующей ставки показывается на каждом событии комнаты, а лента
+/// за час торгов растет. Считать максимум по выборке [`bids_of`] значило
+/// тянуть ее целиком на каждую трансляцию (NFR-02) и, что хуже, ошибаться:
+/// выборка обрезана `LIMIT` по возрастанию `seq`, то есть после
+/// [`crate::MAX_ROWS`]-й ставки максимум остается за ее пределами - клиенту
+/// уходит заниженный минимум, а триггер `core.enforce_bid_rules` (он считает
+/// максимум по всей таблице и потому прав) отбивает каждую следующую ставку.
+///
+/// `max()` по пустой выборке дает NULL - отсюда `Option`, а не «ноль ставок
+/// значит ноль тенге».
+pub async fn max_amount(db: &Db, auction_id: Uuid) -> Result<Option<Decimal>, sqlx::Error> {
+    let mut conn = db.acquire().await?;
+    max_amount_on(&mut conn, auction_id).await
+}
+
+/// Тот же максимум в транзакции вызывающего - вариант `*_on` (арх. v3 § 6):
+/// тест наполняет ленту и откатывает ее, не засоряя стенд.
+pub async fn max_amount_on(
+    conn: &mut sqlx::PgConnection,
+    auction_id: Uuid,
+) -> Result<Option<Decimal>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT max(amount) FROM core.bids WHERE auction_id = $1",
+        auction_id
+    )
+    .fetch_one(conn)
+    .await
+}
+
 /// Допущенная заявка участника на лот - право торговаться (п. 62).
 pub async fn admitted_application_of(
     db: &Db,

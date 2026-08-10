@@ -101,6 +101,38 @@
         }
       }
     },
+    "/api/v1/admin/audit/chain": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Состояние hash-цепочки аудита (INV-A01, FR-1601).",
+        "description": "Отвечает не «цела ли цепочка прямо сейчас», а «что показала последняя\nсверка и когда она была»: пересчет журнала по запросу из браузера дал бы\nпроизвольному нажатию кнопки полный проход по всему аудиту. Сверку ведет\nфоновый воркер по расписанию, здесь - чтение его следа. Пустой ответ\n(`checked_at = null`) значит, что сверок не было вовсе, - для дежурного\nэто такой же сигнал, как и разрыв.",
+        "operationId": "audit_chain",
+        "responses": {
+          "200": {
+            "description": "Состояние цепочки аудита",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditChainDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
@@ -974,6 +1006,26 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Участник не допущен к лоту этих торгов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Торги не найдены",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       },
@@ -1390,7 +1442,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Выход: сессия уничтожается в Redis.",
+        "summary": "Выход: сессия уничтожается в Redis, CSRF-токен гасится в браузере.",
         "operationId": "logout",
         "responses": {
           "204": {
@@ -8448,6 +8500,50 @@
             "type": "string",
             "format": "date-time",
             "description": "Часы сервера на момент ответа: клиент считает остаток по ним (FR-602)"
+          }
+        }
+      },
+      "AuditChainDto": {
+        "type": "object",
+        "properties": {
+          "broken_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`audit.log.id` первой разошедшейся записи; заполнен только при разрыве"
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Момент последней сверки; `null` - сверок еще не было ни одной"
+          },
+          "entries": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Записей в журнале на момент последней сверки"
+          },
+          "intact": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Итог последней сверки; `null` - сверок еще не было"
+          },
+          "last_intact_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Момент последней сверки, на которой цепочка сходилась"
           }
         }
       },

@@ -60,6 +60,25 @@ export const revokeRole = (userId: string, role: string) =>
     })
   )
 
+/**
+ * Состояние hash-цепочки аудита (INV-A01, FR-1601).
+ *
+ * Отвечает не «цела ли цепочка прямо сейчас», а «что показала последняя
+ * сверка»: пересчет всего журнала по открытию страницы стоил бы полного
+ * прохода по аудиту. Сверку ведет фоновый воркер по расписанию - здесь
+ * читается его след.
+ */
+export const auditChainQuery = queryOptions({
+  queryKey: ["audit", "chain"],
+  queryFn: async () => {
+    const { data, error } = await api.GET("/api/v1/admin/audit/chain")
+    if (error !== undefined || data === undefined) {
+      throw (error as unknown) ?? new Error("failed to load audit chain")
+    }
+    return data
+  },
+})
+
 /** МРП по годам (FR-1901): база расчета ставки Прил. 4. */
 export const mrpQuery = queryOptions({
   queryKey: ["refdata", "mrp"],

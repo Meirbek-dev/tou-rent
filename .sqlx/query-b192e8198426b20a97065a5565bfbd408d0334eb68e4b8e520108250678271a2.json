@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO audit.chain_checks (intact, entries) VALUES (true, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b192e8198426b20a97065a5565bfbd408d0334eb68e4b8e520108250678271a2"
+}

@@ -44,6 +44,7 @@ pub mod state;
 pub mod storage;
 pub mod tenders;
 pub mod timeout;
+pub mod upload;
 
 use std::sync::LazyLock;
 
@@ -95,6 +96,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::list_users))
         .routes(routes!(admin::grant_role))
         .routes(routes!(admin::revoke_role))
+        .routes(routes!(admin::audit_chain))
         .routes(routes!(objects::list_objects, objects::create_object))
         .routes(routes!(
             objects::get_object,
@@ -352,7 +354,7 @@ mod tests {
     fn schema_type_names_are_unique_across_modules() {
         use std::collections::BTreeMap;
 
-        let sources: [(&str, &str); 40] = [
+        let sources: [(&str, &str); 41] = [
             ("acts", include_str!("acts.rs")),
             ("admin", include_str!("admin.rs")),
             ("admission", include_str!("admission.rs")),
@@ -396,6 +398,7 @@ mod tests {
             ("storage", include_str!("storage.rs")),
             ("tenders", include_str!("tenders.rs")),
             ("timeout", include_str!("timeout.rs")),
+            ("upload", include_str!("upload.rs")),
         ];
 
         // Новый модуль обязан попасть в перечень: иначе проверка тихо

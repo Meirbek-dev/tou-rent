@@ -32,6 +32,7 @@ use crate::extract::CurrentUser;
 use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
 use crate::storage;
+use crate::upload;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ApplicationFileDto {
@@ -286,44 +287,29 @@ pub async fn upload_file(
 ) -> Result<(StatusCode, Json<ApplicationFileDto>), ApiError> {
     user.require(Action::ApplicationSubmit)?;
 
-    let mut part = None;
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| ApiError::Validation(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("attachment")
-                .chars()
-                .take(255)
-                .collect::<String>();
-            let content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_owned();
-            let bytes = field
-                .bytes()
-                .await
-                .map_err(|e| ApiError::Validation(e.to_string()))?;
-            part = Some((filename, content_type, bytes));
-            break;
-        }
-    }
-    let (filename, content_type, bytes) =
-        part.ok_or_else(|| ApiError::Validation("часть 'file' отсутствует".into()))?;
+    // Право `ApplicationSubmit` есть у любого участника, поэтому одного его
+    // мало: до этой проверки чужой (или несуществующий) id заявки доходил
+    // до `put`, а отказ приходил уже после записи в бакет. Бакет досье -
+    // Object Lock в режиме compliance на пять лет (INV-042), удалять из него
+    // не вправе ни api, ни владелец хранилища, так что каждый такой отказ
+    // занимал место навсегда. Атомарная проверка в `add_file` остается
+    // последним рубежом от гонки с дедлайном, эта - закрывает дешевый способ
+    // засорить WORM.
+    ensure_open_own_application(&state, &user, id).await?;
+
+    let file =
+        upload::take_file(&mut multipart, "file", "attachment", upload::MAX_FILE_BYTES).await?;
+    let size_bytes = i64::try_from(file.bytes.len()).map_err(ApiError::internal)?;
 
     // Ключ не зависит от id строки метаданных: объект кладется до вставки.
     // Компенсации при отказе БД нет - бакет досье под Object Lock, и права
     // на удаление у приложения нет (INV-042); см. ветку `None` ниже.
     let file_key = storage::application_file_key(id, Uuid::now_v7());
     let object_path = ObjectPath::from(file_key.as_str());
-    let size_bytes = i64::try_from(bytes.len()).map_err(ApiError::internal)?;
 
     state
         .storage
-        .put(&object_path, PutPayload::from_bytes(bytes))
+        .put(&object_path, PutPayload::from_bytes(file.bytes))
         .await
         .map_err(ApiError::internal)?;
 
@@ -332,8 +318,8 @@ pub async fn upload_file(
         user.id(),
         id,
         &file_key,
-        &filename,
-        &content_type,
+        &file.filename,
+        file.content_type,
         size_bytes,
     )
     .await?;
@@ -351,6 +337,49 @@ pub async fn upload_file(
             ))
         }
     }
+}
+
+/// Предварительная проверка перед записью в бакет: заявка есть, она своя
+/// и прием по тендеру еще открыт.
+///
+/// Дублирует условие `applications::add_file` намеренно. Та проверка атомарна
+/// и остается решающей, но выполняется после `put`; эта - до, и потому решает
+/// другую задачу: не пустить в WORM объект, который заведомо будет отвергнут.
+/// Время берется у БД (`core.now()`, ADR-0005) - тем же источником, которым
+/// его меряет триггер INV-037, иначе граница дедлайна у двух проверок разъедется.
+async fn ensure_open_own_application(
+    state: &AppState,
+    user: &CurrentUser,
+    id: Uuid,
+) -> Result<(), ApiError> {
+    let record = applications::get(&state.db, user.id(), id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+
+    // Чужая заявка - 404, а не 403: иначе по коду ответа перебираются
+    // идентификаторы чужих заявок (NFR-07)
+    if record.participant_id != user.id() {
+        return Err(ApiError::NotFound);
+    }
+
+    if record.status != "submitted" {
+        return Err(ApiError::RuleViolation(
+            "файл можно приложить только к своей поданной заявке до дедлайна (п. 36–39)".into(),
+        ));
+    }
+
+    let tender = tenders::get(&state.db, record.tender_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if let Some(deadline) = tender.submission_deadline
+        && tou_db::refdata::now(&state.db).await? > deadline
+    {
+        return Err(ApiError::RuleViolation(
+            "прием заявок по тендеру закрыт - состав заявки зафиксирован (п. 36–39)".into(),
+        ));
+    }
+
+    Ok(())
 }
 
 /// Скачивание вложения: владелец - всегда; secretary/commission - после
@@ -408,20 +437,13 @@ pub async fn download_file(
                 header::CONTENT_DISPOSITION,
                 format!(
                     "attachment; filename=\"{}\"",
-                    sanitize_filename(&file.filename)
+                    upload::sanitize_filename(&file.filename)
                 ),
             ),
         ],
         bytes.to_vec(),
     )
         .into_response())
-}
-
-/// Заголовок не должен ломаться кавычками/переводами строк в имени файла.
-fn sanitize_filename(name: &str) -> String {
-    name.chars()
-        .map(|c| if c == '"' || c.is_control() { '_' } else { c })
-        .collect()
 }
 
 /// Заявки тендера (secretary/commission): цены до вскрытия скрыты RLS (INV-040).

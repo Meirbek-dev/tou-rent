@@ -34,6 +34,10 @@ pub struct AppState {
     /// Внешний провайдер идентичности (FR-1502, ADR-0003); `None` - стенд
     /// работает на локальном входе контура 1
     pub oidc: Option<Arc<OidcProvider>>,
+    /// Источники, которым разрешен апгрейд WS-комнаты торгов
+    /// (`WS_ALLOWED_ORIGINS`). Пустой список - проверка не выполняется:
+    /// см. [`allowed_ws_origins_from_env`]
+    pub ws_allowed_origins: Arc<[String]>,
 }
 
 impl AppState {
@@ -47,7 +51,33 @@ impl AppState {
             secure_cookies: false,
             auction_minutes: DEFAULT_DURATION_MINUTES,
             oidc: None,
+            ws_allowed_origins: Arc::from([]),
         }
+    }
+
+    /// Источники, которым разрешен апгрейд WS-комнаты торгов (FR-603).
+    ///
+    /// Значение читает композиция (`apps/api`), а не конструктор состояния:
+    /// окружение разбирается в одном месте - там же, где `COOKIE_SECURE`,
+    /// длительность торгов и реквизиты провайдера идентичности. Состояние,
+    /// само лезущее в переменные окружения, нельзя собрать в тесте иначе,
+    /// чем подменив процессу окружение.
+    pub fn with_ws_origins(mut self, origins: Arc<[String]>) -> Self {
+        self.ws_allowed_origins = origins;
+        self
+    }
+
+    /// Разрешен ли источник апгрейда WS-комнаты торгов.
+    ///
+    /// Апгрейд протокола браузер выпускает мимо CORS: политика источников
+    /// на него не распространяется, и сокет к api открывает любая страница,
+    /// у посетителя которой есть сессия. Отсюда сверка `Origin` руками.
+    ///
+    /// Заголовка нет - проверять нечего: его не ставят не-браузерные клиенты
+    /// (тесты, диагностика), а браузер ставит всегда, и подделать его со
+    /// страницы нельзя.
+    pub fn ws_origin_allowed(&self, origin: Option<&str>) -> bool {
+        origin_allowed(&self.ws_allowed_origins, origin)
     }
 
     /// `COOKIE_SECURE=1` в проде (за Caddy TLS).
@@ -99,6 +129,49 @@ impl AppState {
         self.notifier.attach(bus.clone());
         self.auction_hub.attach(bus);
         Ok(())
+    }
+}
+
+/// Список разрешенных источников из `WS_ALLOWED_ORIGINS` (значения через
+/// запятую).
+///
+/// Пустое значение оставляет апгрейд WS-комнаты без проверки источника.
+/// Это осознанный запасной путь - стенд без обратного прокси (A-024, A-092)
+/// открывает сокет кросс-доменно, и жесткое требование списка сделало бы
+/// торги там непроверяемыми. Но молчать об этом нельзя: конфигурация,
+/// ослабляющая защиту по умолчанию, обязана быть видна в журнале старта.
+pub fn allowed_ws_origins_from_env() -> Arc<[String]> {
+    let origins = parse_origins(&std::env::var("WS_ALLOWED_ORIGINS").unwrap_or_default());
+    if origins.is_empty() {
+        tracing::warn!(
+            "WS_ALLOWED_ORIGINS не задан: источник апгрейда комнаты торгов не проверяется"
+        );
+    }
+    Arc::from(origins)
+}
+
+/// Разбор списка: значения через запятую, лишние пробелы, хвостовой слэш
+/// и регистр не считаются - `Origin` браузера приходит без слэша и в нижнем
+/// регистре, а в конфигурации его пишет человек.
+fn parse_origins(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(normalize_origin)
+        .filter(|origin| !origin.is_empty())
+        .collect()
+}
+
+fn normalize_origin(raw: &str) -> String {
+    raw.trim().trim_end_matches('/').to_ascii_lowercase()
+}
+
+/// Правило сверки отдельно от состояния - его и проверяют тесты.
+fn origin_allowed(allowed: &[String], origin: Option<&str>) -> bool {
+    if allowed.is_empty() {
+        return true;
+    }
+    match origin {
+        None => true,
+        Some(raw) => allowed.contains(&normalize_origin(raw)),
     }
 }
 
@@ -239,5 +312,58 @@ impl NotificationPublisher for Notifier {
                 tracing::error!(%error, notification_id = %notification.event.id, "serialize notification event");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn origin_list_ignores_spaces_slash_and_case() {
+        assert_eq!(
+            parse_origins(" https://Rent.tou.edu.kz/ , http://localhost:3000 "),
+            vec![
+                "https://rent.tou.edu.kz".to_owned(),
+                "http://localhost:3000".to_owned()
+            ]
+        );
+    }
+
+    /// Пустое значение и одни разделители дают пустой список - то есть
+    /// «проверка выключена», а не «разрешен пустой origin».
+    #[test]
+    fn empty_setting_yields_empty_list() {
+        assert!(parse_origins("").is_empty());
+        assert!(parse_origins(" , ,").is_empty());
+    }
+
+    #[test]
+    fn without_a_list_every_origin_passes() {
+        assert!(origin_allowed(&[], Some("https://evil.example")));
+        assert!(origin_allowed(&[], None));
+    }
+
+    #[test]
+    fn listed_origin_passes_and_foreign_one_does_not() {
+        let allowed = parse_origins("http://localhost:3000");
+        assert!(origin_allowed(&allowed, Some("http://localhost:3000")));
+        assert!(origin_allowed(&allowed, Some("http://LOCALHOST:3000/")));
+        assert!(!origin_allowed(&allowed, Some("http://localhost:3001")));
+        assert!(!origin_allowed(&allowed, Some("https://evil.example")));
+        // Пустой заголовок (и нечитаемый, который хендлер сводит к нему) -
+        // не то же самое, что отсутствующий
+        assert!(!origin_allowed(&allowed, Some("")));
+    }
+
+    /// Не-браузерный клиент заголовка не ставит, и требовать его нельзя:
+    /// подделать `Origin` со страницы все равно нельзя, а сломать
+    /// диагностику и тесты - можно.
+    #[test]
+    fn missing_header_is_not_a_foreign_origin() {
+        assert!(origin_allowed(
+            &parse_origins("http://localhost:3000"),
+            None
+        ));
     }
 }

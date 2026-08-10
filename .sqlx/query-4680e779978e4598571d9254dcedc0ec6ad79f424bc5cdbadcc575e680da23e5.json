@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM core.obligations\n         WHERE status = 'pending' AND due_at < core.now() AND escalated_at IS NULL\n         ORDER BY due_at\n         LIMIT $1\n         FOR UPDATE SKIP LOCKED",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4680e779978e4598571d9254dcedc0ec6ad79f424bc5cdbadcc575e680da23e5"
+}

@@ -155,6 +155,9 @@ async fn serve() -> anyhow::Result<()> {
         .with_auction_minutes(auction_minutes()?)
         .with_secure_cookies(secure_cookies)
         .with_rate_limit(redis.clone())
+        // Источники апгрейда WS-комнаты торгов (FR-603): окружение разбирает
+        // композиция, как и остальную конфигурацию стенда
+        .with_ws_origins(tou_http::state::allowed_ws_origins_from_env())
         .with_oidc(oidc);
 
     // Реалтайм между экземплярами (NFR-12): публикация уходит в Redis

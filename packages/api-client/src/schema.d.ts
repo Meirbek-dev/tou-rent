@@ -38,6 +38,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/audit/chain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Состояние hash-цепочки аудита (INV-A01, FR-1601).
+         * @description Отвечает не «цела ли цепочка прямо сейчас», а «что показала последняя
+         *     сверка и когда она была»: пересчет журнала по запросу из браузера дал бы
+         *     произвольному нажатию кнопки полный проход по всему аудиту. Сверку ведет
+         *     фоновый воркер по расписанию, здесь - чтение его следа. Пустой ответ
+         *     (`checked_at = null`) значит, что сверок не было вовсе, - для дежурного
+         *     это такой же сигнал, как и разрыв.
+         */
+        get: operations["audit_chain"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -465,7 +490,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Выход: сессия уничтожается в Redis. */
+        /** Выход: сессия уничтожается в Redis, CSRF-токен гасится в браузере. */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -3040,6 +3065,30 @@ export interface components {
              */
             server_time: string;
         };
+        AuditChainDto: {
+            /**
+             * Format: int64
+             * @description `audit.log.id` первой разошедшейся записи; заполнен только при разрыве
+             */
+            broken_at?: number | null;
+            /**
+             * Format: date-time
+             * @description Момент последней сверки; `null` - сверок еще не было ни одной
+             */
+            checked_at?: string | null;
+            /**
+             * Format: int64
+             * @description Записей в журнале на момент последней сверки
+             */
+            entries?: number | null;
+            /** @description Итог последней сверки; `null` - сверок еще не было */
+            intact?: boolean | null;
+            /**
+             * Format: date-time
+             * @description Момент последней сверки, на которой цепочка сходилась
+             */
+            last_intact_at?: string | null;
+        };
         AuthProvidersDto: {
             oidc?: null | components["schemas"]["OidcProviderDto"];
         };
@@ -4661,6 +4710,35 @@ export interface operations {
             };
         };
     };
+    audit_chain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Состояние цепочки аудита */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditChainDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_users: {
         parameters: {
             query?: {
@@ -5280,6 +5358,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BidDto"][];
+                };
+            };
+            /** @description Участник не допущен к лоту этих торгов */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Торги не найдены */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };

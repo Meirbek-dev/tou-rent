@@ -441,7 +441,9 @@ pub async fn oidc_callback(
         .await
         .map_err(ApiError::internal)?;
 
-    let (jar, _token) = csrf::issue(jar, state.secure_cookies);
+    // Тот же порядок, что и у локального входа: без токена в сессии
+    // вошедший через провайдера не выполнил бы ни одной мутации
+    let jar = csrf::issue(&session, jar, state.secure_cookies).await?;
     tracing::info!(user_id = %user.id, ?outcome, "вход через провайдера идентичности");
 
     Ok((jar, Redirect::to(&config.post_login_path)))
@@ -461,13 +463,17 @@ pub async fn oidc_callback(
 pub async fn oidc_logout(
     State(state): State<AppState>,
     session: Session,
-) -> Result<Redirect, ApiError> {
+    jar: CookieJar,
+) -> Result<(CookieJar, Redirect), ApiError> {
     let provider = state.oidc.as_ref().ok_or(ApiError::NotFound)?;
     let id_token: Option<String> = session
         .get(SESSION_ID_TOKEN_KEY)
         .await
         .map_err(ApiError::internal)?;
     session.flush().await.map_err(ApiError::internal)?;
+    // Выход есть выход: cookie токена гасится и здесь, иначе она пережила бы
+    // уничтоженную сессию ровно так же, как при локальном выходе
+    let jar = csrf::revoke(jar, state.secure_cookies);
 
     let config = &provider.config;
     let target = match provider.discovered().await {
@@ -480,7 +486,7 @@ pub async fn oidc_logout(
         Err(_) => config.post_logout_url.clone(),
     };
 
-    Ok(Redirect::to(&target))
+    Ok((jar, Redirect::to(&target)))
 }
 
 fn end_session_url(endpoint: &str, id_token: Option<&str>, post_logout: &str) -> String {

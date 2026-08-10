@@ -26,6 +26,11 @@ x-rust-workspace: &rust-workspace
     S3_BUCKET_DOSSIERS: dossiers
     # Мастер-ключ шифрования цен (INV-040, п. 40; dev-only - на проде SOPS)
     PRICE_ENCRYPTION_KEY: tou_rent_dev_price_key
+    # Кто может открывать сокет комнаты торгов. На стенде источник заведомо
+    # чужой api: web живет на :3000, а апгрейд идет прямо в api на :8080 -
+    # dev-прокси его не проксирует (A-024). Поэтому в списке именно web,
+    # а не сам api; уберите :3000 - и торги на стенде перестанут открываться
+    WS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080
   volumes:
     - ../..:/w
     - cargo_registry:/usr/local/cargo/registry

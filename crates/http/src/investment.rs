@@ -31,6 +31,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
+use crate::upload;
 
 const CONTRACT_TEMPLATE: &str = include_str!("templates/investment_contract.typ");
 const ACT_TEMPLATE: &str = include_str!("templates/investment_act.typ");
@@ -302,45 +303,23 @@ pub async fn upload_attachment(
         .await?
         .ok_or(ApiError::NotFound)?;
 
-    let mut part = None;
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| ApiError::Validation(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("attachment")
-                .chars()
-                .take(255)
-                .collect::<String>();
-            let content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_owned();
-            let bytes = field
-                .bytes()
-                .await
-                .map_err(|e| ApiError::Validation(e.to_string()))?;
-            part = Some((filename, content_type, bytes));
-            break;
-        }
-    }
-    let (filename, content_type, bytes) =
-        part.ok_or_else(|| ApiError::Validation("часть 'file' отсутствует".into()))?;
+    // Права, перечень п. 91 и существование договора проверены выше - только
+    // теперь читается файл: в бакет досье (Object Lock, INV-042) не должно
+    // попадать ничего, что заведомо будет отвергнуто
+    let file =
+        upload::take_file(&mut multipart, "file", "attachment", upload::MAX_FILE_BYTES).await?;
+    let size_bytes = i64::try_from(file.bytes.len()).map_err(ApiError::internal)?;
 
     let file_key = format!(
         "investment-contracts/{}/{}",
         record.contract_id,
         attachment.as_str()
     );
-    let size_bytes = i64::try_from(bytes.len()).map_err(ApiError::internal)?;
     state
         .storage
         .put(
             &ObjectPath::from(file_key.as_str()),
-            PutPayload::from_bytes(bytes),
+            PutPayload::from_bytes(file.bytes),
         )
         .await
         .map_err(ApiError::internal)?;
@@ -352,8 +331,8 @@ pub async fn upload_attachment(
             contract_id: record.contract_id,
             code: attachment.as_str(),
             file_key: &file_key,
-            filename: &filename,
-            content_type: &content_type,
+            filename: &file.filename,
+            content_type: file.content_type,
             size_bytes,
         },
     )

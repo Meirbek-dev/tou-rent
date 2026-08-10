@@ -20,6 +20,7 @@ import {
   GRANTABLE_ROLES,
   addCoefficientVersion,
   addHoliday,
+  auditChainQuery,
   coefficientsQuery,
   grantRole,
   mrpQuery,
@@ -29,6 +30,7 @@ import {
   usersQuery,
 } from "@/lib/admin"
 import { problemMessage } from "@/lib/auth"
+import { formatDateTime } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
 
 import type { GrantableRole, UserDto } from "@/lib/admin"
@@ -48,11 +50,85 @@ function AdminHome() {
   return (
     <div className="flex flex-col gap-10">
       <MyDeadlines />
+      <AuditChainPanel />
       <UsersPanel />
       <MrpPanel />
       <CoefficientsPanel />
       <HolidaysPanel />
     </div>
+  )
+}
+
+/**
+ * INV-A01: состояние hash-цепочки аудита - дата и итог последней сверки.
+ *
+ * Сверку ведет фоновый воркер, и до сих пор ее итог существовал только
+ * строкой в журнале контейнера, которая уходила из ротации. Плашка стоит
+ * выше справочников намеренно: разрыв цепочки означает, что доказательная
+ * база системы под вопросом, и увидеть это нужно раньше, чем МРП.
+ *
+ * Отсутствие сверок - такое же состояние, как разрыв, и показывается так же
+ * заметно: «никто не проверял» и «проверено, цела» путать нельзя.
+ */
+function AuditChainPanel() {
+  const { data: chain } = useQuery(auditChainQuery)
+
+  if (chain === undefined) return null
+
+  const checked = formatDateTime(chain.checked_at)
+  const alarming = checked === null || chain.intact === false
+
+  return (
+    <section
+      aria-labelledby="admin-audit-chain"
+      className="flex flex-col gap-3"
+    >
+      <h2 id="admin-audit-chain" className="font-heading text-lg font-semibold">
+        {m.admin_audit_chain_title()}
+      </h2>
+      <div
+        data-testid="admin-audit-chain"
+        role={alarming ? "alert" : undefined}
+        className={
+          alarming
+            ? "flex flex-col gap-1.5 rounded-lg border border-destructive p-3 text-sm"
+            : "flex flex-col gap-1.5 rounded-lg border p-3 text-sm"
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={chain.intact === true ? "secondary" : "destructive"}>
+            {checked === null
+              ? m.admin_audit_chain_never()
+              : chain.intact === true
+                ? m.admin_audit_chain_intact()
+                : m.admin_audit_chain_broken()}
+          </Badge>
+          {checked !== null && (
+            <span className="text-muted-foreground" suppressHydrationWarning>
+              {m.admin_audit_chain_checked_at({ date: checked })}
+            </span>
+          )}
+          {chain.entries != null && (
+            <span className="text-muted-foreground">
+              {m.admin_audit_chain_entries({ count: chain.entries })}
+            </span>
+          )}
+        </div>
+        {chain.broken_at != null && (
+          <span className="font-medium text-destructive">
+            {m.admin_audit_chain_broken_at({ id: chain.broken_at })}
+          </span>
+        )}
+        {chain.intact === false && (
+          <span className="text-muted-foreground" suppressHydrationWarning>
+            {m.admin_audit_chain_last_ok({
+              date: formatDateTime(chain.last_intact_at) ?? "-",
+            })}
+          </span>
+        )}
+        <p className="text-muted-foreground">{m.admin_audit_chain_hint()}</p>
+      </div>
+    </section>
   )
 }
 

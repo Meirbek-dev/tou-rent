@@ -1,9 +1,13 @@
 //! Администрирование пользователей и ролей (FR-1503, М15).
 //! Каждое изменение ролей фиксирует audit-триггер `core.role_grants` (INV-AUDIT).
+//!
+//! Здесь же - состояние hash-цепочки аудита (INV-A01): сверку делает фоновый
+//! воркер, но до кабинета админа ее итог раньше не доходил вовсе.
 
 use axum::extract::State;
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use tou_domain::policy::Action;
 use tou_domain::role::Role;
 use utoipa::{IntoParams, ToSchema};
@@ -133,6 +137,57 @@ pub async fn revoke_role(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AuditChainDto {
+    /// Момент последней сверки; `null` - сверок еще не было ни одной
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub checked_at: Option<OffsetDateTime>,
+    /// Итог последней сверки; `null` - сверок еще не было
+    pub intact: Option<bool>,
+    /// Записей в журнале на момент последней сверки
+    pub entries: Option<i64>,
+    /// `audit.log.id` первой разошедшейся записи; заполнен только при разрыве
+    pub broken_at: Option<i64>,
+    /// Момент последней сверки, на которой цепочка сходилась
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub last_intact_at: Option<OffsetDateTime>,
+}
+
+/// Состояние hash-цепочки аудита (INV-A01, FR-1601).
+///
+/// Отвечает не «цела ли цепочка прямо сейчас», а «что показала последняя
+/// сверка и когда она была»: пересчет журнала по запросу из браузера дал бы
+/// произвольному нажатию кнопки полный проход по всему аудиту. Сверку ведет
+/// фоновый воркер по расписанию, здесь - чтение его следа. Пустой ответ
+/// (`checked_at = null`) значит, что сверок не было вовсе, - для дежурного
+/// это такой же сигнал, как и разрыв.
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/audit/chain",
+    tag = "admin",
+    responses(
+        (status = 200, description = "Состояние цепочки аудита", body = AuditChainDto),
+        (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
+    )
+)]
+pub async fn audit_chain(
+    user: CurrentUser,
+    State(state): State<AppState>,
+) -> Result<Json<AuditChainDto>, ApiError> {
+    user.require(Action::AuditRead)?;
+
+    let chain = tou_db::audit::chain_state(&state.db).await?;
+    Ok(Json(AuditChainDto {
+        checked_at: chain.last.map(|check| check.checked_at),
+        intact: chain.last.map(|check| check.intact),
+        entries: chain.last.map(|check| check.entries),
+        broken_at: chain.last.and_then(|check| check.broken_at),
+        last_intact_at: chain.last_intact_at,
+    }))
+}
+
 fn parse_grantable_role(raw: &str) -> Result<Role, ApiError> {
     let role: Role = raw
         .parse()
@@ -143,4 +198,66 @@ fn parse_grantable_role(raw: &str) -> Result<Role, ApiError> {
         ));
     }
     Ok(role)
+}
+
+#[cfg(test)]
+mod tests {
+    use tou_domain::policy::is_allowed;
+
+    use super::*;
+
+    /// Маршрут состояния цепочки зарегистрирован в реестре `api_router`.
+    ///
+    /// Проверяется через контракт: `routes!` кладет хендлер и в axum-роутер,
+    /// и в OpenAPI одновременно, поэтому путь в документе означает и
+    /// работающий маршрут, и то, что кабинет админа сможет собрать запрос
+    /// после кодогена (G5).
+    #[test]
+    fn audit_chain_route_is_registered_in_the_contract() {
+        let json = crate::openapi().to_json().expect("сериализация контракта");
+        assert!(
+            json.contains("/api/v1/admin/audit/chain"),
+            "маршрут состояния цепочки аудита не попал в контракт"
+        );
+        assert!(
+            json.contains("AuditChainDto"),
+            "схема ответа не попала в контракт - кодоген клиента ее не увидит"
+        );
+    }
+
+    /// Состояние цепочки читает только admin (INV-POL-01, `Action::AuditRead`).
+    ///
+    /// Разрыв цепочки - сведение о состоянии доказательной базы, а не
+    /// публичный факт: расширение права здесь должно быть решением, а не
+    /// побочным следствием правки матрицы.
+    #[test]
+    fn audit_chain_is_readable_by_admin_only() {
+        for role in Role::ALL {
+            let expected = role == Role::Admin;
+            assert_eq!(
+                is_allowed(role, Action::AuditRead),
+                expected,
+                "право AuditRead у роли {}",
+                role.as_str()
+            );
+        }
+    }
+
+    /// Пустой журнал сверок отвечает честным `null`, а не «цела».
+    ///
+    /// Отсутствие сверок и целая цепочка - разные состояния: первое значит,
+    /// что не проверял никто, и для дежурного это такой же сигнал, как разрыв.
+    #[test]
+    fn empty_chain_state_is_not_reported_as_intact() {
+        let dto = AuditChainDto {
+            checked_at: None,
+            intact: None,
+            entries: None,
+            broken_at: None,
+            last_intact_at: None,
+        };
+        let json = serde_json::to_value(&dto).expect("сериализация ответа");
+        assert_eq!(json["intact"], serde_json::Value::Null);
+        assert_eq!(json["checked_at"], serde_json::Value::Null);
+    }
 }

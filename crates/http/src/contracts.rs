@@ -29,6 +29,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
+use crate::upload;
 
 const TEMPLATE: &str = include_str!("templates/contract.typ");
 
@@ -442,26 +443,26 @@ pub async fn upload_scan(
 ) -> Result<Json<ContractDto>, ApiError> {
     // Подписанный экземпляр возвращает наниматель (п. 111) - до сих пор
     // это делал за него организатор, и следа действия самой стороны
-    // договора не оставалось
+    // договора не оставалось. Право проверяется до записи в бакет: досье
+    // под Object Lock (INV-042), сироту оттуда не убрать
     ensure_contract_party(&user, &state, id).await?;
 
-    let mut stored: Option<String> = None;
-    while let Some(field) = multipart.next_field().await.map_err(ApiError::internal)? {
-        let filename = field.file_name().unwrap_or("scan.pdf").to_owned();
-        let bytes = field.bytes().await.map_err(ApiError::internal)?;
-        if bytes.is_empty() {
-            continue;
-        }
-        let key = format!("contracts/{id}/signed-{filename}");
-        state
-            .storage
-            .put(&ObjectPath::from(key.as_str()), PutPayload::from(bytes))
-            .await
-            .map_err(ApiError::internal)?;
-        stored = Some(key);
-    }
+    // Прежний разбор клал в бакет КАЖДУЮ часть формы, а в БД записывал ключ
+    // только последней: все прочие оставались несносимыми сиротами. Плюс ключ
+    // строился из имени файла как есть - с путем и кавычками внутри
+    let file =
+        upload::take_file(&mut multipart, "file", "scan.pdf", upload::MAX_FILE_BYTES).await?;
 
-    let key = stored.ok_or_else(|| ApiError::Validation("файл не приложен".to_owned()))?;
+    let key = format!("contracts/{id}/signed-{}", file.filename);
+    state
+        .storage
+        .put(
+            &ObjectPath::from(key.as_str()),
+            PutPayload::from_bytes(file.bytes),
+        )
+        .await
+        .map_err(ApiError::internal)?;
+
     let record = contracts::attach_scan(&state.db, user.id(), id, &key)
         .await
         .map_err(contract_error)?;
