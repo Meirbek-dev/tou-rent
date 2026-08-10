@@ -10,6 +10,7 @@ use tou_domain::auction::DEFAULT_DURATION_MINUTES;
 use tou_ports::notifications::{NotificationEnvelope, NotificationPublisher};
 use uuid::Uuid;
 
+use crate::idempotency::IdempotencyStore;
 use crate::oidc::OidcProvider;
 use crate::ratelimit::RateLimiter;
 use crate::realtime::{Bus, BusMessage};
@@ -21,9 +22,12 @@ pub struct AppState {
     pub storage: Storage,
     pub notifier: Notifier,
     pub auction_hub: AuctionHub,
-    /// Счетчик попыток на дологинных маршрутах (NFR-07); без Redis - пустая
-    /// проверка
+    /// Счетчик попыток входа и обращений к дорогим маршрутам (NFR-07);
+    /// без Redis - пустая проверка
     pub rate_limit: RateLimiter,
+    /// Журнал идемпотентности мутаций (ТЗ § 7); без Redis - слой ничего
+    /// не меняет
+    pub idempotency: IdempotencyStore,
     /// Ставить ли `Secure` на выдаваемые cookie. Значение одно на все cookie
     /// приложения: сессионную ставит слой tower-sessions, CSRF-токен -
     /// [`crate::csrf::issue`], и разъехаться они не должны
@@ -48,6 +52,7 @@ impl AppState {
             notifier: Notifier::new(),
             auction_hub: AuctionHub::default(),
             rate_limit: RateLimiter::default(),
+            idempotency: IdempotencyStore::default(),
             secure_cookies: false,
             auction_minutes: DEFAULT_DURATION_MINUTES,
             oidc: None,
@@ -98,10 +103,17 @@ impl AppState {
         self
     }
 
-    /// Счетчик попыток входа в том же Redis, что и сессии (NFR-12): при двух
-    /// экземплярах api лимит обязан быть общим.
-    pub fn with_rate_limit(mut self, pool: crate::realtime::Pool) -> Self {
-        self.rate_limit = RateLimiter::new(pool);
+    /// Эфемерные механизмы в том же Redis, что и сессии (NFR-12): счетчик
+    /// попыток (NFR-07) и журнал идемпотентности (ТЗ § 7).
+    ///
+    /// Оба получают пул одним вызовом, а не двумя. Композиция подключается к
+    /// Redis один раз, и второй точки внедрения, которую можно забыть
+    /// вызвать, быть не должно: забытый счетчик - снятая защита, забытый
+    /// журнал - молча не работающая идемпотентность, и ни то, ни другое не
+    /// проявится ни в одном ответе.
+    pub fn with_redis(mut self, pool: crate::realtime::Pool) -> Self {
+        self.rate_limit = RateLimiter::new(pool.clone());
+        self.idempotency = IdempotencyStore::new(pool);
         self
     }
 

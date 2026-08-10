@@ -192,6 +192,137 @@
         }
       }
     },
+    "/api/v1/admin/users/{user_id}/active": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Деактивация и возврат учетной записи (W-07).",
+        "description": "Снятие ролей уволившемуся не отключает саму запись: она входит, видит\nпубличную часть и остается субъектом своих прошлых заявок. Отключение\nзакрывает оба пути сразу - и вход, и уже открытую сессию (`CurrentUser`\nсверяет `is_active` на каждом запросе).\n\nУдаления записи здесь нет и не будет: к ней привязаны поданные заявки,\nдоговоры и депозит, и «удалить пользователя» означало бы разорвать\nдоказательную базу.",
+        "operationId": "set_user_active",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "Пользователь",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetActiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Состояние изменено"
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Отключение самого себя",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/password-reset": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Сброс пароля админом (W-07, FR-1503).",
+        "description": "Канала доставки у контура 1 нет (почта - T41), поэтому «ссылка на\nвосстановление» здесь была бы выдумкой. Честный вариант без канала один:\nсистему генерирует одноразовый пароль сама, показывает его админу ровно\nв ответе на нажатие кнопки и больше нигде - ни в логе, ни в БД, ни в\nаудите (там от него остается только отпечаток, см. миграцию\n`20260811000000_user_account_audit.sql`). Дальше пароль передает человек\nчеловеку тем каналом, которым он и так подтверждает личность заявителя,\nа владелец учетной записи меняет его через `/api/v1/auth/password`.\n\nПароль не придумывает админ: придуманный человеком он и слаб, и известен\nпридумавшему заранее - тогда «сброс» ничем не отличается от «узнать\nчужой пароль». Сгенерированный известен админу ровно так же, но только\nдо первой смены, и владелец видит по журналу, что запись трогали.",
+        "operationId": "reset_password",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "Пользователь",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Одноразовый пароль выдан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "У записи нет локального пароля",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users/{user_id}/roles": {
       "post": {
         "tags": [
@@ -1580,6 +1711,61 @@
           },
           "404": {
             "description": "Провайдер не настроен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Смена собственного пароля из сессии (W-07).",
+        "description": "До нее вернуть себе доступ было нечем: маршрута восстановления нет, а\nсменить скомпрометированный пароль изнутри было негде.",
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Пароль изменен"
+          },
+          "401": {
+            "description": "Текущий пароль неверен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Данные не прошли проверку",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Слишком много попыток",
             "content": {
               "application/json": {
                 "schema": {
@@ -8865,6 +9051,23 @@
           }
         }
       },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "description": "Текущий пароль - обязателен: без него угнанная сессия становится\nугнанной учетной записью"
+          },
+          "new_password": {
+            "type": "string",
+            "description": "Те же границы, что и при регистрации"
+          }
+        }
+      },
       "CheckItemRequest": {
         "type": "object",
         "required": [
@@ -9654,6 +9857,7 @@
           "rule_violation",
           "provider_unavailable",
           "too_many_requests",
+          "idempotency_in_flight",
           "timeout",
           "internal"
         ]
@@ -11469,6 +11673,19 @@
           }
         }
       },
+      "PasswordResetDto": {
+        "type": "object",
+        "description": "Одноразовый пароль в ответе на сброс - единственный раз, когда он вообще\nсуществует в открытом виде.",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Показывается админу один раз и нигде не сохраняется"
+          }
+        }
+      },
       "PendingPublicationDto": {
         "type": "object",
         "description": "Материал, который Правила велят опубликовать (FR-1403).",
@@ -12334,6 +12551,18 @@
           "other_rule"
         ]
       },
+      "SetActiveRequest": {
+        "type": "object",
+        "required": [
+          "is_active"
+        ],
+        "properties": {
+          "is_active": {
+            "type": "boolean",
+            "description": "`false` - учетная запись отключается, `true` - возвращается"
+          }
+        }
+      },
       "SetMrpRequest": {
         "type": "object",
         "required": [
@@ -13035,6 +13264,7 @@
           "full_name",
           "locale",
           "roles",
+          "is_active",
           "external_session"
         ],
         "properties": {
@@ -13051,6 +13281,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "Учетная запись действует. Деактивированная не входит и не работает по\nуже открытой сессии (W-07); в кабинете админа это состояние видно\nи переключается"
           },
           "locale": {
             "type": "string"

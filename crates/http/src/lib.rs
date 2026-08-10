@@ -22,6 +22,7 @@ pub mod error;
 pub mod evasion;
 pub mod extract;
 pub mod failure;
+pub mod idempotency;
 pub mod investment;
 pub mod land;
 pub mod ledger;
@@ -101,6 +102,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(auth::login))
         .routes(routes!(auth::logout))
         .routes(routes!(auth::me))
+        .routes(routes!(auth::change_password))
         .routes(routes!(oidc::auth_providers))
         .routes(routes!(oidc::oidc_login))
         .routes(routes!(oidc::oidc_callback))
@@ -108,6 +110,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::list_users))
         .routes(routes!(admin::grant_role))
         .routes(routes!(admin::revoke_role))
+        .routes(routes!(admin::reset_password))
+        .routes(routes!(admin::set_user_active))
         .routes(routes!(admin::audit_chain))
         .routes(routes!(objects::list_objects, objects::create_object))
         .routes(routes!(
@@ -309,7 +313,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auctions/{id}/ws", get(auctions::room_socket))
         .fallback(|| async { error::ApiError::NotFound })
         .method_not_allowed_fallback(|| async { error::ApiError::MethodNotAllowed })
+        // Идемпотентность мутаций (ТЗ § 7): внутри CSRF - запрос, не прошедший
+        // проверку токена, не должен занимать ключ в журнале
+        .layer(middleware::from_fn_with_state(
+            state.idempotency.clone(),
+            idempotency::enforce,
+        ))
         .layer(middleware::from_fn(csrf::enforce))
+        // Ограничение дорогих маршрутов (NFR-07): снаружи CSRF - обращение,
+        // отбитое проверкой токена, считается так же, как обычное, а вот
+        // успеть выполнить печать или выгрузку до счетчика нельзя
+        .layer(middleware::from_fn_with_state(
+            state.rate_limit.clone(),
+            ratelimit::enforce,
+        ))
         // Потолок времени обработки (NFR-02): снаружи CSRF, чтобы зависнуть
         // не мог и он, но внутри метрик - отказ по таймауту должен быть виден
         .layer(middleware::from_fn(timeout::enforce))
@@ -366,7 +383,7 @@ mod tests {
     fn schema_type_names_are_unique_across_modules() {
         use std::collections::BTreeMap;
 
-        let sources: [(&str, &str); 41] = [
+        let sources: [(&str, &str); 42] = [
             ("acts", include_str!("acts.rs")),
             ("admin", include_str!("admin.rs")),
             ("admission", include_str!("admission.rs")),
@@ -388,6 +405,7 @@ mod tests {
             ("evasion", include_str!("evasion.rs")),
             ("extract", include_str!("extract.rs")),
             ("failure", include_str!("failure.rs")),
+            ("idempotency", include_str!("idempotency.rs")),
             ("investment", include_str!("investment.rs")),
             ("land", include_str!("land.rs")),
             ("ledger", include_str!("ledger.rs")),

@@ -33,8 +33,12 @@ pub enum ErrorCode {
     /// Внешний провайдер идентичности недоступен (FR-1502): вход через него
     /// временно невозможен, остальная система работает
     ProviderUnavailable,
-    /// Слишком часто: сработало ограничение попыток входа (NFR-07)
+    /// Слишком часто: сработало ограничение попыток входа либо обращений
+    /// к дорогим маршрутам (NFR-07)
     TooManyRequests,
+    /// Запрос с тем же `Idempotency-Key` еще выполняется (ТЗ § 7): повторять
+    /// нужно после того, как завершится первый, - тогда придет его ответ
+    IdempotencyInFlight,
     /// Обработка запроса не уложилась в отведенное время
     Timeout,
     Internal,
@@ -115,6 +119,11 @@ pub enum ApiError {
     /// заголовком `Retry-After` - иначе клиенту остается угадывать паузу.
     #[error("слишком много попыток - повторите позже")]
     TooManyRequests { retry_after_seconds: u64 },
+    /// Параллельный повтор мутации с тем же `Idempotency-Key`: первый запрос
+    /// еще выполняется, и выполнять операцию второй раз нельзя
+    /// (см. [`crate::idempotency`]).
+    #[error("запрос с этим ключом идемпотентности еще выполняется")]
+    IdempotencyInFlight,
     #[error("превышено время обработки запроса")]
     Timeout,
     #[error("внутренняя ошибка")]
@@ -156,6 +165,7 @@ impl ApiError {
             ApiError::RuleViolation(_) => ErrorCode::RuleViolation,
             ApiError::ProviderUnavailable(_) => ErrorCode::ProviderUnavailable,
             ApiError::TooManyRequests { .. } => ErrorCode::TooManyRequests,
+            ApiError::IdempotencyInFlight => ErrorCode::IdempotencyInFlight,
             ApiError::Timeout => ErrorCode::Timeout,
             ApiError::Internal(_) => ErrorCode::Internal,
         }
@@ -168,7 +178,7 @@ impl ApiError {
             ApiError::UnsupportedMediaType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ApiError::Unauthorized | ApiError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             ApiError::Forbidden | ApiError::CsrfRejected => StatusCode::FORBIDDEN,
-            ApiError::EmailTaken => StatusCode::CONFLICT,
+            ApiError::EmailTaken | ApiError::IdempotencyInFlight => StatusCode::CONFLICT,
             ApiError::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
             ApiError::NotFound => StatusCode::NOT_FOUND,
             ApiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
@@ -297,6 +307,18 @@ mod tests {
         assert_eq!(
             response.headers().get(header::RETRY_AFTER),
             Some(&header::HeaderValue::from_static("42"))
+        );
+    }
+
+    /// Параллельный повтор - конфликт состояния, а не отказ по правилу
+    /// предметной области: причины из перечня `RuleViolation` у него нет,
+    /// и подставлять чужую нельзя.
+    #[test]
+    fn parallel_repeat_maps_to_409_with_its_own_code() {
+        assert_eq!(ApiError::IdempotencyInFlight.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            ApiError::IdempotencyInFlight.code(),
+            ErrorCode::IdempotencyInFlight
         );
     }
 

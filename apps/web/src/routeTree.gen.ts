@@ -26,6 +26,7 @@ import { Route as AppParticipantRouteRouteImport } from './routes/app/participan
 import { Route as AppReportsRouteImport } from './routes/app/reports'
 import { Route as AppSecretaryRouteRouteImport } from './routes/app/secretary/route'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthPasswordRouteImport } from './routes/auth/password'
 import { Route as AuthRegisterRouteImport } from './routes/auth/register'
 import { Route as ObjectsIndexRouteImport } from './routes/objects/index'
 import { Route as TendersIndexRouteImport } from './routes/tenders/index'
@@ -136,6 +137,11 @@ const AppSecretaryRouteRoute = AppSecretaryRouteRouteImport.update({
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/auth/login',
   path: '/auth/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthPasswordRoute = AuthPasswordRouteImport.update({
+  id: '/auth/password',
+  path: '/auth/password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRegisterRoute = AuthRegisterRouteImport.update({
@@ -294,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
   '/tenders/$tenderId': typeof TendersTenderIdRoute
   '/app/': typeof AppIndexRoute
@@ -331,6 +338,7 @@ export interface FileRoutesByTo {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
   '/tenders/$tenderId': typeof TendersTenderIdRoute
   '/app': typeof AppIndexRoute
@@ -377,6 +385,7 @@ export interface FileRoutesById {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
   '/tenders/$tenderId': typeof TendersTenderIdRoute
   '/app/': typeof AppIndexRoute
@@ -424,6 +433,7 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/reports'
     | '/auth/login'
+    | '/auth/password'
     | '/auth/register'
     | '/tenders/$tenderId'
     | '/app/'
@@ -461,6 +471,7 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/reports'
     | '/auth/login'
+    | '/auth/password'
     | '/auth/register'
     | '/tenders/$tenderId'
     | '/app'
@@ -506,6 +517,7 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/reports'
     | '/auth/login'
+    | '/auth/password'
     | '/auth/register'
     | '/tenders/$tenderId'
     | '/app/'
@@ -543,6 +555,7 @@ export interface RootRouteChildren {
   LandPlotsRoute: typeof LandPlotsRoute
   SpecialOrdersRoute: typeof SpecialOrdersRoute
   AuthLoginRoute: typeof AuthLoginRoute
+  AuthPasswordRoute: typeof AuthPasswordRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
   TendersTenderIdRoute: typeof TendersTenderIdRoute
   ObjectsIndexRoute: typeof ObjectsIndexRoute
@@ -668,6 +681,13 @@ declare module '@tanstack/react-router' {
       path: '/auth/login'
       fullPath: '/auth/login'
       preLoaderRoute: typeof AuthLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth/password': {
+      id: '/auth/password'
+      path: '/auth/password'
+      fullPath: '/auth/password'
+      preLoaderRoute: typeof AuthPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/auth/register': {
@@ -1004,6 +1024,7 @@ const rootRouteChildren: RootRouteChildren = {
   LandPlotsRoute: LandPlotsRoute,
   SpecialOrdersRoute: SpecialOrdersRoute,
   AuthLoginRoute: AuthLoginRoute,
+  AuthPasswordRoute: AuthPasswordRoute,
   AuthRegisterRoute: AuthRegisterRoute,
   TendersTenderIdRoute: TendersTenderIdRoute,
   ObjectsIndexRoute: ObjectsIndexRoute,

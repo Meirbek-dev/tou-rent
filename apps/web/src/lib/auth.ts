@@ -22,6 +22,23 @@ export const meQuery = queryOptions({
 })
 
 /**
+ * Смена собственного пароля (W-07).
+ *
+ * Текущий пароль обязателен и проверяется сервером: без него перехваченная
+ * сессия превращалась бы в перехваченную навсегда учетную запись. Ответ -
+ * 204 без тела, поэтому проверяется только `error`.
+ */
+export async function changePassword(
+  current: string,
+  next: string
+): Promise<void> {
+  const { error } = await api.POST("/api/v1/auth/password", {
+    body: { current_password: current, new_password: next },
+  })
+  if (error !== undefined) throw error as unknown
+}
+
+/**
  * Человекочитаемое сообщение из problem+json (RFC 9457, NFR-08).
  *
  * Причина отказа по правилу читается первой и переводится по каталогу:

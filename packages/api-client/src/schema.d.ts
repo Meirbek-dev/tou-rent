@@ -80,6 +80,65 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/users/{user_id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Деактивация и возврат учетной записи (W-07).
+         * @description Снятие ролей уволившемуся не отключает саму запись: она входит, видит
+         *     публичную часть и остается субъектом своих прошлых заявок. Отключение
+         *     закрывает оба пути сразу - и вход, и уже открытую сессию (`CurrentUser`
+         *     сверяет `is_active` на каждом запросе).
+         *
+         *     Удаления записи здесь нет и не будет: к ней привязаны поданные заявки,
+         *     договоры и депозит, и «удалить пользователя» означало бы разорвать
+         *     доказательную базу.
+         */
+        put: operations["set_user_active"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Сброс пароля админом (W-07, FR-1503).
+         * @description Канала доставки у контура 1 нет (почта - T41), поэтому «ссылка на
+         *     восстановление» здесь была бы выдумкой. Честный вариант без канала один:
+         *     систему генерирует одноразовый пароль сама, показывает его админу ровно
+         *     в ответе на нажатие кнопки и больше нигде - ни в логе, ни в БД, ни в
+         *     аудите (там от него остается только отпечаток, см. миграцию
+         *     `20260811000000_user_account_audit.sql`). Дальше пароль передает человек
+         *     человеку тем каналом, которым он и так подтверждает личность заявителя,
+         *     а владелец учетной записи меняет его через `/api/v1/auth/password`.
+         *
+         *     Пароль не придумывает админ: придуманный человеком он и слаб, и известен
+         *     придумавшему заранее - тогда «сброс» ничем не отличается от «узнать
+         *     чужой пароль». Сгенерированный известен админу ровно так же, но только
+         *     до первой смены, и владелец видит по журналу, что запись трогали.
+         */
+        post: operations["reset_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users/{user_id}/roles": {
         parameters: {
             query?: never;
@@ -570,6 +629,27 @@ export interface paths {
         get: operations["oidc_logout"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Смена собственного пароля из сессии (W-07).
+         * @description До нее вернуть себе доступ было нечем: маршрута восстановления нет, а
+         *     сменить скомпрометированный пароль изнутри было негде.
+         */
+        post: operations["change_password"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3178,6 +3258,15 @@ export interface components {
             label_ru: string;
             required: boolean;
         };
+        ChangePasswordRequest: {
+            /**
+             * @description Текущий пароль - обязателен: без него угнанная сессия становится
+             *     угнанной учетной записью
+             */
+            current_password: string;
+            /** @description Те же границы, что и при регистрации */
+            new_password: string;
+        };
         CheckItemRequest: {
             /** @description `false` снимает отметку, пока договор не подписан наймодателем */
             checked: boolean;
@@ -3471,7 +3560,7 @@ export interface components {
          * @description Машинные коды ошибок контракта (enum без catch-all).
          * @enum {string}
          */
-        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "timeout" | "internal";
+        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "idempotency_in_flight" | "timeout" | "internal";
         EvaderDto: {
             /**
              * Format: int32
@@ -4129,6 +4218,14 @@ export interface components {
             /** @description Ссылка начала входа - обычная навигация, работает без JS (NFR-04) */
             login_url: string;
         };
+        /**
+         * @description Одноразовый пароль в ответе на сброс - единственный раз, когда он вообще
+         *     существует в открытом виде.
+         */
+        PasswordResetDto: {
+            /** @description Показывается админу один раз и нигде не сохраняется */
+            password: string;
+        };
         /** @description Материал, который Правила велят опубликовать (FR-1403). */
         PendingPublicationDto: {
             /** @description `decision` | `rate` | `investment_act` */
@@ -4438,6 +4535,10 @@ export interface components {
          * @enum {string}
          */
         Rule: "tender_status_transition" | "tender_publication_terms" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
+        SetActiveRequest: {
+            /** @description `false` - учетная запись отключается, `true` - возвращается */
+            is_active: boolean;
+        };
         SetMrpRequest: {
             /**
              * @description Величина МРП в тенге; ограничение «больше нуля» держит и БД
@@ -4684,6 +4785,12 @@ export interface components {
             full_name: string;
             /** Format: uuid */
             id: string;
+            /**
+             * @description Учетная запись действует. Деактивированная не входит и не работает по
+             *     уже открытой сессии (W-07); в кабинете админа это состояние видно
+             *     и переключается
+             */
+            is_active: boolean;
             locale: string;
             /**
              * @description Роли из `core.role_grants` (snake_case, см. enum `Role` домена)
@@ -4855,6 +4962,108 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    set_user_active: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Пользователь */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Состояние изменено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Отключение самого себя */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reset_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Пользователь */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Одноразовый пароль выдан */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description У записи нет локального пароля */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5910,6 +6119,55 @@ export interface operations {
             };
             /** @description Провайдер не настроен */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    change_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Пароль изменен */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Текущий пароль неверен */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Данные не прошли проверку */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много попыток */
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

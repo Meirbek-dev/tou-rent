@@ -133,6 +133,22 @@ function LoginPage() {
             {m.auth_register_submit()}
           </Link>
         </p>
+        {/*
+          W-07: канала восстановления по почте в контуре 1 нет (T41), и
+          обещать «ссылку на восстановление» было бы враньем. Здесь сказано,
+          как вернуть доступ на самом деле - через администратора, - и дана
+          ссылка на смену пароля для тех, кто его помнит.
+        */}
+        <p className="text-sm text-muted-foreground">
+          {m.auth_forgot_password()}{" "}
+          <Link
+            to="/auth/password"
+            className="underline underline-offset-4"
+            data-testid="go-to-change-password"
+          >
+            {m.auth_password_change_title()}
+          </Link>
+        </p>
       </main>
     </>
   )

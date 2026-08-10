@@ -25,11 +25,13 @@ import {
   grantRole,
   mrpQuery,
   removeHoliday,
+  resetPassword,
   revokeRole,
   setMrp,
+  setUserActive,
   usersQuery,
 } from "@/lib/admin"
-import { problemMessage } from "@/lib/auth"
+import { meQuery, problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
 
@@ -132,11 +134,22 @@ function AuditChainPanel() {
   )
 }
 
-/** FR-1902: список пользователей, назначение и отзыв роли (в аудит - триггером). */
+/**
+ * FR-1902, W-07: список пользователей, роли и жизненный цикл записи.
+ *
+ * Роли, сброс пароля и отключение стоят в одной таблице не для компактности:
+ * уволившемуся снимают роли и отключают запись одним движением, и разнеси эти
+ * действия по разным экранам - второе забудут. Все три пишутся в аудит.
+ */
 function UsersPanel() {
   const queryClient = useQueryClient()
   const { data: page } = useQuery(usersQuery)
+  const { data: me } = useQuery(meQuery)
   const [role, setRole] = useState<Record<string, GrantableRole>>({})
+  // Выданный одноразовый пароль живет только в состоянии страницы: ни в
+  // кеш запросов, ни в хранилище браузера он не кладется - перезагрузка
+  // его теряет, и это правильно
+  const [issued, setIssued] = useState<{ user: string; password: string }>()
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin"] })
 
@@ -150,6 +163,16 @@ function UsersPanel() {
       revokeRole(userId, next),
     onSuccess: refresh,
   })
+  const toggle = useMutation({
+    mutationFn: ({ userId, next }: { userId: string; next: boolean }) =>
+      setUserActive(userId, next),
+    onSuccess: refresh,
+  })
+  const reset = useMutation({
+    mutationFn: (user: UserDto) => resetPassword(user.id),
+    onSuccess: (password, user) =>
+      setIssued({ user: user.full_name, password }),
+  })
 
   const chosen = (user: UserDto): GrantableRole =>
     role[user.id] ?? GRANTABLE_ROLES[0]
@@ -160,6 +183,26 @@ function UsersPanel() {
         {m.admin_users_title()}
       </h2>
       <p className="text-sm text-muted-foreground">{m.admin_users_hint()}</p>
+      <p className="text-sm text-muted-foreground">
+        {m.admin_users_lifecycle_hint()}
+      </p>
+      {issued !== undefined && (
+        <div
+          role="status"
+          data-testid="admin-issued-password"
+          className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm"
+        >
+          <span>
+            {m.admin_reset_password_result({
+              user: issued.user,
+              password: issued.password,
+            })}
+          </span>
+          <span className="text-muted-foreground">
+            {m.admin_reset_password_warning()}
+          </span>
+        </div>
+      )}
       {page === undefined || page.items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{m.admin_users_empty()}</p>
       ) : (
@@ -170,6 +213,7 @@ function UsersPanel() {
                 <TableHead scope="col">{m.admin_user()}</TableHead>
                 <TableHead scope="col">{m.admin_roles()}</TableHead>
                 <TableHead scope="col">{m.admin_grant_role()}</TableHead>
+                <TableHead scope="col">{m.admin_user_state()}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -242,6 +286,50 @@ function UsersPanel() {
                         }
                       >
                         {m.admin_grant_role()}
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={user.is_active ? "secondary" : "destructive"}
+                      >
+                        {user.is_active
+                          ? m.admin_user_active()
+                          : m.admin_user_disabled()}
+                      </Badge>
+                      {/*
+                        Отключить себя нельзя: вернуть запись было бы некому,
+                        а других админов может не быть. Сервер это тоже
+                        отвергает - кнопка лишь не предлагает тупика.
+                      */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid={`toggle-active-${user.id}`}
+                        disabled={
+                          toggle.isPending ||
+                          (user.id === me?.id && user.is_active)
+                        }
+                        onClick={() =>
+                          toggle.mutate({
+                            userId: user.id,
+                            next: !user.is_active,
+                          })
+                        }
+                      >
+                        {user.is_active
+                          ? m.admin_deactivate()
+                          : m.admin_activate()}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid={`reset-password-${user.id}`}
+                        disabled={reset.isPending}
+                        onClick={() => reset.mutate(user)}
+                      >
+                        {m.admin_reset_password()}
                       </Button>
                     </div>
                   </TableCell>

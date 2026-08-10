@@ -218,6 +218,60 @@ pub async fn revoke_role(
     .await
 }
 
+/// Новый пароль учетной записи (W-07): и смена своего из сессии, и сброс
+/// админом. Актор - тот, кто выполняет действие, поэтому в журнале видно,
+/// сам ли человек сменил пароль или его сбросили извне.
+///
+/// Сам хеш в аудит не уезжает: триггер `audit.record_user()` кладет в payload
+/// его отпечаток (см. миграцию `20260811000000_user_account_audit.sql`).
+///
+/// `false` - такой учетной записи нет; вызывающий отвечает 404, а не «готово».
+pub async fn set_password(
+    db: &Db,
+    actor: Uuid,
+    user_id: Uuid,
+    password_hash: &str,
+) -> Result<bool, sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        let updated = sqlx::query_scalar!(
+            "UPDATE core.users SET password_hash = $2 WHERE id = $1 RETURNING id",
+            user_id,
+            password_hash
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        Ok(updated.is_some())
+    })
+    .await
+}
+
+/// Деактивация и возврат учетной записи (W-07).
+///
+/// `is_active = false` закрывает оба пути сразу: [`find_by_email`] отдает
+/// строку, но вход ее отвергает, а экстрактор `CurrentUser` перестает
+/// признавать уже открытую сессию - живая вкладка уволившегося умирает на
+/// первом же запросе, а не через восемь часов бездействия.
+///
+/// `false` в ответе - такой учетной записи нет.
+pub async fn set_active(
+    db: &Db,
+    actor: Uuid,
+    user_id: Uuid,
+    is_active: bool,
+) -> Result<bool, sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        let updated = sqlx::query_scalar!(
+            "UPDATE core.users SET is_active = $2 WHERE id = $1 RETURNING id",
+            user_id,
+            is_active
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        Ok(updated.is_some())
+    })
+    .await
+}
+
 /// Список пользователей для админки (cursor-пагинация по uuid v7, ТЗ § 7).
 pub async fn list_users(
     db: &Db,

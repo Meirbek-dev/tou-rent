@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT actor_id,\n                  payload::text                              AS \"body!\",\n                  payload -> 'old' ->> 'password_fingerprint' AS old_fingerprint,\n                  payload -> 'new' ->> 'password_fingerprint' AS new_fingerprint\n             FROM audit.log\n            WHERE table_name = 'core.users' AND row_id = $1 AND action = 'UPDATE'\n            ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "actor_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "body!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "old_fingerprint",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "new_fingerprint",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8ebdf59df6f64f5a01a31e230b1dc5acf16de9b74a6c3d8cd95e737ba6e3deee"
+}

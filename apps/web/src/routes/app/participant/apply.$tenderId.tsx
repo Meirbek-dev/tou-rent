@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { createFileRoute, notFound, useNavigate } from "@tanstack/react-router"
 import {
   useMutation,
@@ -73,11 +73,19 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
   const shownError = (field: keyof typeof details) =>
     submitAttempted || details[field] !== "" ? errors[field] : undefined
 
+  // Ключ идемпотентности живет столько же, сколько открытая форма (ТЗ § 7):
+  // второе нажатие и повтор после обрыва идут с тем же ключом и получают
+  // ответ первой попытки, а не второй отказ по UNIQUE (lot_id, participant_id).
+  // Ключ на каждый вызов не годится - двойное нажатие дало бы два разных
+  // ключа, то есть ровно ту дырку, ради которой заголовок и заводился
+  const idempotencyKey = useRef(crypto.randomUUID())
+
   const submit = useMutation({
     mutationFn: async () => {
       const { data, error } = await api.POST(
         "/api/v1/tenders/{id}/applications",
         {
+          headers: { "Idempotency-Key": idempotencyKey.current },
           params: { path: { id: tender.id } },
           body: {
             lot_id: lotId,
