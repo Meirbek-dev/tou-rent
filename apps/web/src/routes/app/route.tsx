@@ -13,7 +13,7 @@ import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { api } from "@/lib/api"
-import { CABINET_PATHS, cabinetLabel, meQuery } from "@/lib/auth"
+import { cabinetLabel, meQuery, userCabinets } from "@/lib/auth"
 
 // Каркас кабинетов (ТЗ § 8). Кабинеты - client-only (ssr: false):
 // NFR-04 требует работы без JS только от публичного портала, а клиентский
@@ -60,17 +60,15 @@ function AppLayout() {
               <AppLogo />
             </Link>
             <nav className="ml-4 flex min-w-0 items-center gap-1 overflow-x-auto">
-              {user.roles
-                .filter((role) => role in CABINET_PATHS)
-                .map((role) => (
-                  <Link
-                    key={role}
-                    to={CABINET_PATHS[role]}
-                    className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
-                  >
-                    {cabinetLabel(role)}
-                  </Link>
-                ))}
+              {userCabinets(user.roles).map(({ role, path }) => (
+                <Link
+                  key={role}
+                  to={path}
+                  className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
+                >
+                  {cabinetLabel(role)}
+                </Link>
+              ))}
               {/* Отчетность (арх. § 9): реестры ведут организатор,
                   финансы, Правление и админ */}
               {user.roles.some((role) => REPORT_ROLES.includes(role)) && (

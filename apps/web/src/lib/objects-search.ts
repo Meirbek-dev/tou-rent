@@ -11,13 +11,17 @@ export const OBJECT_KINDS: ObjectKind[] = [
   "land_plot",
 ]
 
+// `| undefined` у каждого поля - не шум: нормализация ниже возвращает ключ
+// всегда, а отброшенное значение кладет как undefined. При
+// exactOptionalPropertyTypes «ключа нет» и «ключ есть, значение undefined» -
+// разные типы, и второй нужно объявить.
 export type ObjectsSearch = {
-  status?: ObjectStatus
-  kind?: ObjectKind
-  q?: string
-  area_min?: number
-  area_max?: number
-  after?: string
+  status?: ObjectStatus | undefined
+  kind?: ObjectKind | undefined
+  q?: string | undefined
+  area_min?: number | undefined
+  area_max?: number | undefined
+  after?: string | undefined
 }
 
 /**

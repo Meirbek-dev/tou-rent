@@ -51,7 +51,7 @@ async function mutate<T>(
 ): Promise<T> {
   const { data, error } = await call
   if (error !== undefined || data === undefined) {
-    throw (error as unknown) ?? new Error("auction request failed")
+    throw error ?? new Error("auction request failed")
   }
   return data
 }

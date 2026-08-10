@@ -30,7 +30,10 @@ export const registryQuery = (registry: string, from: string, to: string) =>
         api.GET("/api/v1/reports/{registry}", {
           params: {
             path: { registry },
-            query: { from: from || undefined, to: to || undefined },
+            // Пустая граница периода не отправляется вовсе, а не отправляется
+            // со значением undefined: в контракте `from`/`to` необязательны,
+            // и «ключа нет» - это именно «границы нет»
+            query: { ...(from ? { from } : {}), ...(to ? { to } : {}) },
           },
         })
       ),

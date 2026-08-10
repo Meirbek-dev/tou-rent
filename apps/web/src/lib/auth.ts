@@ -45,6 +45,24 @@ export const CABINET_PATHS: Record<string, string> = {
   admin: "/app/admin",
 }
 
+/**
+ * Кабинеты пользователя вместе с адресами (ТЗ § 8).
+ *
+ * Возвращается пара, а не одна роль: иначе на каждом месте вызова словарь
+ * читается дважды - сперва `role in CABINET_PATHS`, затем `CABINET_PATHS[role]`,
+ * - и связь между проверкой и чтением остается на совести пишущего. При
+ * noUncheckedIndexedAccess второе чтение к тому же дает `string | undefined`,
+ * которого `<Link to>` не принимает. Здесь проверка и есть чтение.
+ */
+export function userCabinets(
+  roles: readonly string[]
+): { role: string; path: string }[] {
+  return roles.flatMap((role) => {
+    const path = CABINET_PATHS[role]
+    return path === undefined ? [] : [{ role, path }]
+  })
+}
+
 /** Подпись кабинета роли: одна на весь интерфейс (ТЗ § 8). */
 const CABINET_LABELS: Record<string, () => string> = {
   participant: m.cabinet_participant,

@@ -17,7 +17,7 @@ export function AmendmentsBanner({
   applicationId,
 }: {
   tenderId: string
-  applicationId?: string
+  applicationId?: string | undefined
 }) {
   const queryClient = useQueryClient()
   const { data: amendments } = useQuery(tenderAmendmentsQuery(tenderId))

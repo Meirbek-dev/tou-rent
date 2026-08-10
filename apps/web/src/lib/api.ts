@@ -55,12 +55,12 @@ export const tendersPageQuery = (after?: string) =>
  * страница отдается SSR без авторизации.
  */
 export const objectsPageQuery = (params: {
-  status?: string
-  kind?: string
-  q?: string
-  area_min?: number
-  area_max?: number
-  after?: string
+  status?: string | undefined
+  kind?: string | undefined
+  q?: string | undefined
+  area_min?: number | undefined
+  area_max?: number | undefined
+  after?: string | undefined
 }) =>
   queryOptions({
     queryKey: ["objects", params],

@@ -34,7 +34,11 @@ export const env = createEnv({
    * What object holds the environment variables at runtime. This is usually
    * `process.env` or `import.meta.env`.
    */
-  runtimeEnv: import.meta.env,
+  // Разворот, а не сама `import.meta.env`: со снятой индексной сигнатурой
+  // (`strictImportMetaEnv`, см. vite-env.d.ts) интерфейс перестал подходить
+  // под `Record<string, ...>`, которого ждет createEnv. Содержимое то же -
+  // в сборке Vite подставляет сюда объект целиком.
+  runtimeEnv: { ...import.meta.env },
 
   /**
    * Treat empty strings as undefined so defaults and optionality behave

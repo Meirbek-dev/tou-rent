@@ -385,7 +385,13 @@ function LotCancellation({
   )
 }
 
-function DateView({ label, value }: { label: string; value?: string | null }) {
+function DateView({
+  label,
+  value,
+}: {
+  label: string
+  value?: string | null | undefined
+}) {
   return (
     <div className="flex flex-col gap-0.5">
       <dt className="text-sm text-muted-foreground">{label}</dt>

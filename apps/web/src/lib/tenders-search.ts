@@ -13,10 +13,12 @@ export const PUBLIC_STATUSES: TenderStatus[] = [
   "cancelled",
 ]
 
+// `| undefined` - по той же причине, что и в objects-search.ts: нормализация
+// возвращает ключ всегда, отброшенное значение кладет как undefined.
 export type TendersSearch = {
-  status?: TenderStatus
-  q?: string
-  after?: string
+  status?: TenderStatus | undefined
+  q?: string | undefined
+  after?: string | undefined
 }
 
 /**

@@ -17,9 +17,9 @@ import ru from "#/../messages/ru.json" with { type: "json" }
 type Messages = Record<string, string>
 
 const messages: Record<"ru" | "kk" | "en", Messages> = {
-  ru: ru as Messages,
-  kk: kk as Messages,
-  en: en as Messages,
+  ru: ru,
+  kk: kk,
+  en: en,
 }
 
 /** `$schema` - служебное поле файла сообщений, не строка интерфейса. */
@@ -66,17 +66,21 @@ function publicKeys(): string[] {
       if (key !== undefined && key in messages.ru) used.add(key)
     }
   }
-  return [...used].sort()
+  return [...used].toSorted()
 }
 
 /** Параметры сообщения: `{count}`, `{months}` и т.д. */
 const params = (value: string): string[] =>
-  [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? "").sort()
+  [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? "").toSorted()
 
 describe("i18n: полнота переводов (NFR-01, G14)", () => {
   it("файлы локалей лежат рядом с проектом inlang", () => {
     const dir = join(import.meta.dirname, "..", "..", "messages")
-    expect(readdirSync(dir).sort()).toEqual(["en.json", "kk.json", "ru.json"])
+    expect(readdirSync(dir).toSorted()).toEqual([
+      "en.json",
+      "kk.json",
+      "ru.json",
+    ])
   })
 
   for (const locale of ["kk", "en"] as const) {
