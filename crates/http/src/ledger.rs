@@ -294,9 +294,12 @@ pub struct RefundReasonDto {
     responses((status = 200, description = "Основания п. 26", body = [RefundReasonDto]))
 )]
 pub async fn refund_reasons(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<RefundReasonDto>>, ApiError> {
+    // Закрытый перечень из Правил: по нему участник понимает судьбу взноса
+    user.require(Action::RefdataRead)?;
+
     let rows = ledger::refund_reasons(&state.db).await?;
     Ok(Json(
         rows.into_iter()

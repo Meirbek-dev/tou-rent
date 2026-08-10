@@ -1,10 +1,27 @@
 //! Политика доступа «роль × действие» (ТЗ § 3, INV-POL-01).
 //!
-//! Единственный источник прав в системе: слой http спрашивает
-//! [`is_allowed`] перед каждой операцией. `match` по роли исчерпывающий,
-//! без catch-all - новая роль не скомпилируется, пока не описаны ее права.
-//! Матрица генерируется тестом в снапшот (`tests/policy_matrix.rs`):
-//! изменение прав видно в диффе и требует аппрува инженера (защищенный путь).
+//! Единственный источник прав в системе: слой http спрашивает [`is_allowed`]
+//! перед каждой операцией и не решает ничего сам. `match` по роли
+//! исчерпывающий, без catch-all - новая роль не скомпилируется, пока не
+//! описаны ее права.
+//!
+//! Права разведены по областям ответственности Правил, а не по модулям кода:
+//! кто ведет договоры (п. 108–125), кто акты (Прил. 7–8), кто участки
+//! (раздел 14), кто рассматривает особый порядок (п. 87–90), кто публикует
+//! сведения (п. 97) - у каждой области свое действие. Одно право
+//! «организатор может все» матрицу не описывало, а прятало: половина мутаций
+//! системы стояла в снимке одной строкой.
+//!
+//! Область, которую по Правилам ведут несколько ролей, описывается
+//! составным правом [`Compound`] («любое из») и тоже живет здесь.
+//! Дизъюнкция в обработчике (`require(A).is_ok() || require(B).is_ok()`)
+//! запрещена: снимок такой проверки не видит, и матрица доказывает меньше,
+//! чем кажется.
+//!
+//! Матрица - действия и составные права - генерируется тестом в снапшот
+//! (`tests/policy_matrix.rs`): изменение прав видно в диффе и требует
+//! аппрува инженера (защищенный путь). Что новое разведение прав никому
+//! не расширило доступ, стережет `tests/policy_no_widening.rs`.
 
 use serde::{Deserialize, Serialize};
 
@@ -21,6 +38,13 @@ pub enum Action {
     RateCalculate,
     // М3: тендеры и объявления
     TenderRead,
+    /// Жизненный цикл самого тендера (FR-301, FR-70x): создание и правка
+    /// черновика, изменение объявления, отмена тендера и лота, повторный
+    /// тендер после несостоявшегося, видимость неопубликованного.
+    ///
+    /// Только про тендер. Договоры, акты, участки, особый порядок,
+    /// публикации и инвестиционные договоры имеют собственные действия -
+    /// раньше все это стояло здесь и в матрице выглядело одной строкой.
     TenderManage,
     TenderPublish,
     // М4: заявки и журнал
@@ -48,6 +72,16 @@ pub enum Action {
     /// Свой договор наниматель читает не этим правом, а участием
     /// в нем (`GET /contracts/my`).
     ContractRead,
+    /// Ведение договора найма (FR-901–FR-903, п. 108–125): составление по
+    /// итогам торгов, сверка п. 113, продвижение состояния, регистрация,
+    /// допсоглашения (п. 125), признание уклонения (п. 116) и применение
+    /// льготной схемы к договору (п. 95–96).
+    ContractManage,
+    /// Акты приема-передачи и возврата (FR-904, Прил. 7–8): с даты передачи
+    /// начисляется плата (п. 128–129), возврат закрывает договор. Отдельно
+    /// от [`Action::ContractManage`]: акт меняет состояние аренды и объекта,
+    /// а не условия договора.
+    ActManage,
     // М10: взносы и депозиты
     FeeConfirm,
     LedgerRead,
@@ -61,18 +95,48 @@ pub enum Action {
     VoteCast,
     // М12: особый порядок (контур 3)
     BoardDecide,
+    /// Рассмотрение заявки особого порядка уполномоченным подразделением
+    /// (FR-1202, п. 89): проверка комплектности и заключение, после которого
+    /// вопрос идет Правлению. Решение принимает Правление
+    /// ([`Action::BoardDecide`]), а не обладатель этого права.
+    SpecialReview,
+    /// Инвестиционный договор (FR-1204, п. 91–94): составление по
+    /// удовлетворенной заявке и приложения проекта (п. 91). Отдельно от
+    /// [`Action::ContractManage`]: договор найма и инвестиционный договор
+    /// заключаются по разным основаниям и разными процедурами.
+    InvestmentManage,
+    /// Публикация сведений о решениях особого порядка (FR-1403, п. 97):
+    /// рабочий список ожидающего публикации и сама публикация материала.
+    /// Отдельно от [`Action::TenderPublish`]: то - объявление о торгах
+    /// (п. 5–6), это - раскрытие решений и обоснований ставок.
+    RecordPublish,
+    // М14: земельные участки (раздел 14)
+    /// Земельные участки (FR-1801, п. 104–107): характеристики участка и их
+    /// публикация, договор с особыми условиями (INV-105). Заявки на участки
+    /// рассматривает Правление - см. [`Compound::LAND_APPLICATION_REVIEW`].
+    LandManage,
     // М13: уведомления
     NotificationReadOwn,
     // М15: администрирование
     UserManage,
     RoleGrant,
     RefdataManage,
+    /// Чтение закрытых перечней из Правил (основания отклонения п. 52,
+    /// основания возврата п. 26, категории особого порядка п. 87, приложения
+    /// п. 91, льготные схемы п. 95–96, производственный календарь).
+    ///
+    /// Право намеренно широкое - им обладает любая роль: перечни нужны
+    /// заявителю и участнику, чтобы заполнить форму и понять отказ, а сами
+    /// Правила - открытый документ. Действие заведено, чтобы «достаточно
+    /// быть вошедшим» было написано в коде и стояло в матрице, а не
+    /// выглядело забытой проверкой.
+    RefdataRead,
     // М16: аудит
     AuditRead,
 }
 
 impl Action {
-    pub const ALL: [Action; 30] = [
+    pub const ALL: [Action; 37] = [
         Action::ObjectRead,
         Action::ObjectManage,
         Action::RateCalculate,
@@ -91,6 +155,8 @@ impl Action {
         Action::BidPlace,
         Action::AuctionWatch,
         Action::ContractRead,
+        Action::ContractManage,
+        Action::ActManage,
         Action::FeeConfirm,
         Action::LedgerRead,
         Action::CommissionManage,
@@ -98,11 +164,112 @@ impl Action {
         Action::CoiDeclare,
         Action::VoteCast,
         Action::BoardDecide,
+        Action::SpecialReview,
+        Action::InvestmentManage,
+        Action::RecordPublish,
+        Action::LandManage,
         Action::NotificationReadOwn,
         Action::UserManage,
         Action::RoleGrant,
         Action::RefdataManage,
+        Action::RefdataRead,
         Action::AuditRead,
+    ];
+}
+
+/// Составное право «любое из действий»: область, которую по Правилам ведут
+/// несколько ролей сразу, и ни одно одиночное действие не описывает доступ
+/// к ней целиком.
+///
+/// Живет в домене и попадает в снимок матрицы. Раньше такие места стояли в
+/// обработчиках россыпью `require(A).is_ok() || require(B).is_ok()`, и
+/// снимок их не видел: матрица выглядела полным описанием прав, оставаясь
+/// неполной ровно там, где право сложнее всего.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Compound {
+    /// Имя для снимка матрицы и сообщений.
+    pub name: &'static str,
+    /// Достаточно любого из этих действий.
+    pub any_of: &'static [Action],
+}
+
+impl Compound {
+    /// Тендерный процесс целиком: организатор ведет тендер, секретарь и
+    /// комиссия - заявки по нему. Досье тендера (FR-1602, п. 16) и причина
+    /// с последствием несостоявшегося (FR-802, п. 82) нужны обеим сторонам:
+    /// повторный тендер объявляет организатор, а решение принимала комиссия.
+    pub const TENDER_PROCESS_READ: Self = Self {
+        name: "TenderProcessRead",
+        any_of: &[Action::TenderManage, Action::ApplicationReadAll],
+    };
+
+    /// Чужой договор и его допсоглашения: ведет их организатор, а секретарь
+    /// и комиссия видят как продолжение материалов торгов. Свой договор
+    /// наниматель читает участием в нем, а не этим правом.
+    pub const CONTRACT_PROCESS_READ: Self = Self {
+        name: "ContractProcessRead",
+        any_of: &[Action::ContractManage, Action::ApplicationReadAll],
+    };
+
+    /// Реестр договоров (FR-1601): его ведет организатор, а финансы читают
+    /// как основание поступлений.
+    pub const CONTRACT_REGISTRY_READ: Self = Self {
+        name: "ContractRegistryRead",
+        any_of: &[Action::ContractManage, Action::LedgerRead],
+    };
+
+    /// Заявка особого порядка и решение по ней: заключение готовит
+    /// уполномоченное подразделение (п. 89), решает Правление (п. 90).
+    /// Обе стороны видят рабочий список, саму заявку, досье решения
+    /// (FR-1206, п. 97) и реестр решений (FR-1601).
+    pub const SPECIAL_DECISION_ACCESS: Self = Self {
+        name: "SpecialDecisionAccess",
+        any_of: &[Action::SpecialReview, Action::BoardDecide],
+    };
+
+    /// Заявки на земельные участки (п. 105–107): решение принимает
+    /// Правление, договор по решению ведет организатор.
+    pub const LAND_APPLICATION_REVIEW: Self = Self {
+        name: "LandApplicationReview",
+        any_of: &[Action::LandManage, Action::BoardDecide],
+    };
+
+    /// Льгота по договору (FR-1205, п. 95–96): применяет ее тот, кто ведет
+    /// договор, а видят и те, кто ведет особый порядок - льгота следствие
+    /// категории заявки.
+    pub const BENEFIT_READ: Self = Self {
+        name: "BenefitRead",
+        any_of: &[Action::ContractManage, Action::BoardDecide],
+    };
+
+    /// Инвестиционный договор (п. 91–94, A-072): составляет организатор,
+    /// продление оформляет Правление, приемку - секретарь комиссии.
+    pub const INVESTMENT_CONTRACT_READ: Self = Self {
+        name: "InvestmentContractRead",
+        any_of: &[
+            Action::InvestmentManage,
+            Action::BoardDecide,
+            Action::ProtocolGenerate,
+        ],
+    };
+
+    /// Величина МРП и коэффициенты Прил. 4 (FR-201): их читает всякий, кто
+    /// вправе считать ставку, и тот, кто ведет справочник. Значение
+    /// показателя закрытым сведением не является.
+    pub const RATE_REFDATA_READ: Self = Self {
+        name: "RateRefdataRead",
+        any_of: &[Action::RateCalculate, Action::RefdataManage],
+    };
+
+    pub const ALL: [Compound; 8] = [
+        Compound::TENDER_PROCESS_READ,
+        Compound::CONTRACT_PROCESS_READ,
+        Compound::CONTRACT_REGISTRY_READ,
+        Compound::SPECIAL_DECISION_ACCESS,
+        Compound::LAND_APPLICATION_REVIEW,
+        Compound::BENEFIT_READ,
+        Compound::INVESTMENT_CONTRACT_READ,
+        Compound::RATE_REFDATA_READ,
     ];
 }
 
@@ -125,9 +292,13 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::BidPlace
                 | A::AuctionWatch
                 | A::NotificationReadOwn
+                | A::RefdataRead
         ),
 
-        // Юридическая служба - организатор тендера (п. 2.4)
+        // Юридическая служба (п. 2.4): организатор тендера и одновременно
+        // уполномоченное подразделение особого порядка (A-068). Ведет тендер,
+        // договоры, акты, участки и публикацию решений - каждая область
+        // отдельным правом, чтобы объем доступа был виден в матрице.
         Role::Organizer => matches!(
             action,
             A::ObjectRead
@@ -137,8 +308,15 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::TenderManage
                 | A::TenderPublish
                 | A::ContractRead
+                | A::ContractManage
+                | A::ActManage
+                | A::LandManage
+                | A::SpecialReview
+                | A::InvestmentManage
+                | A::RecordPublish
                 | A::AuctionWatch
                 | A::NotificationReadOwn
+                | A::RefdataRead
         ),
 
         // Секретарь комиссии (п. 17): журнал, вскрытие, заседания, протоколы
@@ -156,6 +334,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::AuctionManage
                 | A::AuctionWatch
                 | A::NotificationReadOwn
+                | A::RefdataRead
         ),
 
         // Член комиссии: материалы после вскрытия, голосование (контур 2)
@@ -169,6 +348,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::CoiDeclare
                 | A::VoteCast
                 | A::NotificationReadOwn
+                | A::RefdataRead
         ),
 
         // Правление: особый порядок, спорные случаи (раздел 12, контур 3)
@@ -179,6 +359,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::ContractRead
                 | A::BoardDecide
                 | A::NotificationReadOwn
+                | A::RefdataRead
         ),
 
         // Департамент финансов: взносы, депозитная книга
@@ -190,6 +371,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::FeeConfirm
                 | A::LedgerRead
                 | A::NotificationReadOwn
+                | A::RefdataRead
         ),
 
         // Департамент цифрового развития: пользователи, роли, справочники, аудит.
@@ -204,8 +386,22 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::CommissionManage
                 | A::AuditRead
                 | A::NotificationReadOwn
+                | A::RefdataRead
         ),
     }
+}
+
+/// Право «любое из перечисленных» (INV-POL-01): единственный разрешенный
+/// способ выразить дизъюнкцию прав. Обработчик спрашивает не набор действий,
+/// а именованное составное право [`Compound`] - чтобы проверка была видна
+/// в снимке матрицы и имела в Правилах обоснование, а не только в коде.
+pub fn is_allowed_any(role: Role, actions: &[Action]) -> bool {
+    actions.iter().any(|action| is_allowed(role, *action))
+}
+
+/// Разрешает ли роли составное право (см. [`Compound`]).
+pub fn is_compound_allowed(role: Role, compound: Compound) -> bool {
+    is_allowed_any(role, compound.any_of)
 }
 
 #[cfg(test)]

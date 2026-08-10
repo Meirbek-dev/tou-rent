@@ -22,7 +22,7 @@ use time::OffsetDateTime;
 use tou_db::publications::{self, ProtocolRecord, PublicationError};
 use tou_db::tenders;
 use tou_domain::notification::NotificationKind;
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use tou_domain::publication::{DossierKind, DossierSubject};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -300,10 +300,10 @@ fn dossier_dto(item: tou_db::publications::DossierItem) -> DossierItemDto {
     }
 }
 
-/// Досье ведут те же, кто ведет процесс: организатор и секретарь комиссии.
+/// Досье ведут те же, кто ведет процесс: организатор и секретарь комиссии
+/// (`Compound::TENDER_PROCESS_READ`).
 fn require_dossier_access(user: &CurrentUser) -> Result<(), ApiError> {
-    user.require(Action::TenderManage)
-        .or_else(|_| user.require(Action::ApplicationReadAll))
+    user.require_any(Compound::TENDER_PROCESS_READ)
 }
 
 /// Досье тендера (FR-1602, п. 16): состав собирается автоматически.
@@ -351,10 +351,9 @@ pub async fn special_dossier(
 }
 
 /// Досье решения ведут те, кто его готовит: подразделение (п. 89) и
-/// Правление (п. 90).
+/// Правление (п. 90) - `Compound::SPECIAL_DECISION_ACCESS`.
 fn require_special_dossier_access(user: &CurrentUser) -> Result<(), ApiError> {
-    user.require(Action::BoardDecide)
-        .or_else(|_| user.require(Action::TenderManage))
+    user.require_any(Compound::SPECIAL_DECISION_ACCESS)
 }
 
 /// Выгрузка досье тендера архивом (FR-1602): файлы по папкам видов

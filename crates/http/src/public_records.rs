@@ -224,7 +224,7 @@ pub async fn pending_publications(
     user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<PendingPublicationPage>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::RecordPublish)?;
 
     let page = public_records::pending(&state.db).await?;
     let truncated = page.truncated;
@@ -274,7 +274,7 @@ pub async fn publish_record(
     State(state): State<AppState>,
     Json(body): Json<PublishRecordRequest>,
 ) -> Result<(StatusCode, Json<PublicRecordDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::RecordPublish)?;
 
     let kind: PublicRecordKind = body
         .kind

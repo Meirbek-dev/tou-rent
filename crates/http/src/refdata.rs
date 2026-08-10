@@ -14,7 +14,7 @@ use garde::Validate as _;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tou_db::refdata::{self, NewCoefficientVersion};
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -45,8 +45,7 @@ pub async fn list_mrp(
     user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<MrpDto>>, ApiError> {
-    user.require(Action::RateCalculate)
-        .or_else(|_| user.require(Action::RefdataManage))?;
+    user.require_any(Compound::RATE_REFDATA_READ)?;
 
     let items = refdata::mrp_all(&state.db)
         .await?

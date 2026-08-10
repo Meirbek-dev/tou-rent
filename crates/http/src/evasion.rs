@@ -126,7 +126,7 @@ pub async fn declare_evasion(
     Path(id): Path<Uuid>,
     Json(body): Json<DeclareEvasionRequest>,
 ) -> Result<(StatusCode, Json<DeclaredEvasionDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let ground: EvasionGround = body.ground.parse().map_err(|_| {
         ApiError::Validation(format!("неизвестное основание уклонения: {}", body.ground))

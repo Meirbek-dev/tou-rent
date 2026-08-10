@@ -98,9 +98,13 @@ pub struct HolidayDto {
     responses((status = 200, description = "Праздничные дни", body = [HolidayDto]))
 )]
 pub async fn list_holidays(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<HolidayDto>>, ApiError> {
+    // Календарь открыт всем: от него считаются сроки, которые касаются
+    // и участника - он проверяет, когда истекает его собственный срок
+    user.require(Action::RefdataRead)?;
+
     let rows = obligations::holidays(&state.db).await?;
     Ok(Json(
         rows.into_iter()

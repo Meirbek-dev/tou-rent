@@ -16,7 +16,7 @@ use serde_json::json;
 use tou_db::failure::{self, FailureError};
 use tou_db::results::MeetingError;
 use tou_db::{admission, applications, results, tenders};
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -82,8 +82,7 @@ pub async fn failure_state(
 ) -> Result<Json<FailureStateDto>, ApiError> {
     // Основание и следствие видят и те, кто решает (секретарь, комиссия),
     // и организатор: повторный тендер объявляет он (FR-802, п. 82)
-    user.require(Action::ApplicationReadAll)
-        .or_else(|_| user.require(Action::TenderManage))?;
+    user.require_any(Compound::TENDER_PROCESS_READ)?;
 
     let found = failure::state(&state.db, id)
         .await?

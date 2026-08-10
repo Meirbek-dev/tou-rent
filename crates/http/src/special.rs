@@ -25,7 +25,7 @@ use time::OffsetDateTime;
 use tou_db::special::{self, FileRecord, RequestRecord, SpecialError};
 use tou_domain::notification::NotificationKind;
 use tou_domain::obligation::Term;
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use tou_domain::special::{
     BoardDecision, Competition, Conclusion, SpecialCategory, SpecialDecision, SpecialRequestStatus,
 };
@@ -98,9 +98,12 @@ pub struct SpecialCategoryDto {
     responses((status = 200, description = "Категории п. 87", body = [SpecialCategoryDto]))
 )]
 pub async fn special_categories(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SpecialCategoryDto>>, ApiError> {
+    // Закрытый перечень из Правил: с него заявитель начинает заявку
+    user.require(Action::RefdataRead)?;
+
     let categories = special::list_categories(&state.db).await?;
     let mut documents: HashMap<String, Vec<CategoryDocumentDto>> = HashMap::new();
     for document in special::list_category_documents(&state.db).await? {
@@ -747,7 +750,7 @@ pub async fn review_special_request(
 ) -> Result<(StatusCode, Json<SpecialReviewDto>), ApiError> {
     // Проверку ведет уполномоченное подразделение - в модели ролей
     // организатор (юридическая служба, п. 2.4; A-068)
-    user.require(Action::TenderManage)?;
+    user.require(Action::SpecialReview)?;
     body.validate()
         .map_err(|r| ApiError::Validation(r.to_string()))?;
 
@@ -987,9 +990,7 @@ pub async fn pending_special_requests(
     Query(params): Query<SpecialListParams>,
 ) -> Result<Json<Vec<SpecialRequestDto>>, ApiError> {
     // Список видят те, кто ведет рассмотрение: подразделение и Правление
-    if user.require(Action::BoardDecide).is_err() {
-        user.require(Action::TenderManage)?;
-    }
+    user.require_any(Compound::SPECIAL_DECISION_ACCESS)?;
 
     let statuses: Vec<&str> = match params.status.as_deref() {
         None | Some("") => vec![
@@ -1022,8 +1023,7 @@ async fn load_visible(
     let record = special::get(&state.db, id)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let handles_review =
-        user.require(Action::BoardDecide).is_ok() || user.require(Action::TenderManage).is_ok();
+    let handles_review = user.require_any(Compound::SPECIAL_DECISION_ACCESS).is_ok();
     if record.applicant_id != user.id() && !handles_review {
         return Err(ApiError::NotFound);
     }

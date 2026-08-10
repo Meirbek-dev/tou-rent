@@ -135,7 +135,7 @@ pub async fn create_act(
     Path(id): Path<Uuid>,
     Json(body): Json<CreateActRequest>,
 ) -> Result<(StatusCode, Json<ActDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ActManage)?;
 
     let kind: ActKind = body
         .kind
@@ -265,7 +265,7 @@ pub async fn upload_act_scan(
     Path(id): Path<Uuid>,
     mut multipart: Multipart,
 ) -> Result<Json<ActDto>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ActManage)?;
 
     // `attach_scan` - это UPDATE без проверки существования: по несуществующему
     // id он молча обновлял ноль строк, а объект к этому моменту уже лежал

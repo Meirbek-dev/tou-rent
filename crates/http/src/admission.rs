@@ -291,9 +291,13 @@ pub struct RejectionReasonDto {
     responses((status = 200, description = "Основания п. 52", body = [RejectionReasonDto]))
 )]
 pub async fn rejection_reasons(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<RejectionReasonDto>>, ApiError> {
+    // Закрытый перечень из Правил: отклоненный участник вправе знать,
+    // по какому из оснований п. 52 его заявку не допустили
+    user.require(Action::RefdataRead)?;
+
     let reasons = tou_db::refdata::rejection_reasons(&state.db).await?;
     Ok(Json(
         reasons

@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use time::Date;
 use tou_db::RowCursor;
 use tou_db::reports::{self, Period, RegistryRow};
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use tou_domain::report::{Registry, to_csv};
 use utoipa::{IntoParams, ToSchema};
 
@@ -88,14 +88,13 @@ impl RegistryParams {
 
 /// Реестр видят те, кто его ведет: решения - Правление и подразделение,
 /// договоры - организатор и финансы, поступления - финансы.
+///
+/// Реестр не отдельная область ответственности, а срез трех уже разведенных:
+/// поэтому права на него нет, а есть право на саму область (INV-POL-01).
 fn require_access(user: &CurrentUser, registry: Registry) -> Result<(), ApiError> {
     match registry {
-        Registry::Decisions => user
-            .require(Action::BoardDecide)
-            .or_else(|_| user.require(Action::TenderManage)),
-        Registry::Contracts => user
-            .require(Action::TenderManage)
-            .or_else(|_| user.require(Action::LedgerRead)),
+        Registry::Decisions => user.require_any(Compound::SPECIAL_DECISION_ACCESS),
+        Registry::Contracts => user.require_any(Compound::CONTRACT_REGISTRY_READ),
         Registry::Receipts => user.require(Action::LedgerRead),
     }
 }

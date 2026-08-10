@@ -198,7 +198,7 @@ pub async fn draft_contract(
     State(state): State<AppState>,
     Path(lot_id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<ContractDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let record = contracts::draft_from_auction(&state.db, user.id(), lot_id)
         .await
@@ -356,7 +356,7 @@ pub async fn check_checklist_item(
     Path(id): Path<Uuid>,
     Json(body): Json<CheckItemRequest>,
 ) -> Result<Json<Vec<ChecklistItemDto>>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let rows = contracts::check_item(&state.db, user.id(), id, &body.item_code, body.checked)
         .await
@@ -390,7 +390,7 @@ pub async fn advance_contract(
     Path(id): Path<Uuid>,
     Json(body): Json<AdvanceRequest>,
 ) -> Result<Json<ContractDto>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let stage: Stage = body
         .stage
@@ -432,7 +432,7 @@ pub async fn register_contract(
     Path(id): Path<Uuid>,
     Json(body): Json<RegisterContractRequest>,
 ) -> Result<Json<ContractDto>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let record = contracts::register(&state.db, user.id(), id, &body.reg_number)
         .await
@@ -508,7 +508,7 @@ pub async fn contract_pdf(
 
     // Свой договор видит наниматель; чужие - организатор и секретарь
     if record.tenant_id != user.id() {
-        user.require(Action::TenderManage)?;
+        user.require(Action::ContractManage)?;
     }
     let pdf_key = record.pdf_key.ok_or(ApiError::NotFound)?;
 

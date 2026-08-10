@@ -14,7 +14,7 @@ use time::Date;
 use tou_db::benefit::{self, BenefitError, GrantRecord};
 use tou_domain::benefit::{Benefit, Conditions, YearPayment};
 use tou_domain::money::Money;
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use tou_domain::special::BenefitScheme;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -63,9 +63,12 @@ pub struct BenefitSchemeDto {
     responses((status = 200, description = "Льготные схемы п. 95–96", body = [BenefitSchemeDto]))
 )]
 pub async fn benefit_schemes(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<BenefitSchemeDto>>, ApiError> {
+    // Закрытый перечень из Правил: его знает и заявитель, выбирая категорию
+    user.require(Action::RefdataRead)?;
+
     let rows = benefit::list_schemes(&state.db).await?;
     Ok(Json(
         rows.into_iter()
@@ -235,7 +238,7 @@ pub async fn grant_benefit(
     Path(id): Path<Uuid>,
     Json(body): Json<GrantBenefitRequest>,
 ) -> Result<(StatusCode, Json<BenefitGrantDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
     body.validate()
         .map_err(|r| ApiError::Validation(r.to_string()))?;
 
@@ -303,10 +306,8 @@ async fn contract_term_months(state: &AppState, contract_id: Uuid) -> Result<i32
     Ok(months.unwrap_or(12))
 }
 
-/// Льготу ведет организатор; видят ее и те, кто ведет особый порядок.
+/// Льготу применяет тот, кто ведет договор; видят ее и те, кто ведет особый
+/// порядок - состав прав описан в домене (`Compound::BENEFIT_READ`).
 fn require_benefit_access(user: &CurrentUser) -> Result<(), ApiError> {
-    if user.require(Action::TenderManage).is_ok() || user.require(Action::BoardDecide).is_ok() {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
+    user.require_any(Compound::BENEFIT_READ)
 }
