@@ -36,21 +36,35 @@ pub struct ObligationDto {
     pub status: String,
 }
 
+/// Дашборд сроков (ТЗ § 7).
+///
+/// `next_after` всегда `null`: рабочий список разгружается работой, а не
+/// листанием. Поднятый `truncated` здесь значит, что сроков накопилось
+/// больше, чем дашборд показывает, - это про завал, а не про страницу.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ObligationPage {
+    pub items: Vec<ObligationDto>,
+    pub next_after: Option<String>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
 /// «Мои сроки» (FR-1702): открытые обязательства ролей пользователя.
 #[utoipa::path(
     get,
     path = "/api/v1/obligations/my",
     tag = "obligations",
-    responses((status = 200, description = "Открытые сроки", body = [ObligationDto]))
+    responses((status = 200, description = "Открытые сроки", body = ObligationPage))
 )]
 pub async fn my_obligations(
     user: CurrentUser,
     State(state): State<AppState>,
-) -> Result<Json<Vec<ObligationDto>>, ApiError> {
-    let records = obligations::for_roles(&state.db, &user.roles).await?;
+) -> Result<Json<ObligationPage>, ApiError> {
+    let page = obligations::for_roles(&state.db, &user.roles).await?;
+    let truncated = page.truncated;
 
-    Ok(Json(
-        records
+    Ok(Json(ObligationPage {
+        items: page
             .into_iter()
             .map(|record| ObligationDto {
                 id: record.id,
@@ -63,7 +77,9 @@ pub async fn my_obligations(
                 status: record.status,
             })
             .collect(),
-    ))
+        next_after: None,
+        truncated,
+    }))
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -82,9 +98,13 @@ pub struct HolidayDto {
     responses((status = 200, description = "Праздничные дни", body = [HolidayDto]))
 )]
 pub async fn list_holidays(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<HolidayDto>>, ApiError> {
+    // Календарь открыт всем: от него считаются сроки, которые касаются
+    // и участника - он проверяет, когда истекает его собственный срок
+    user.require(Action::RefdataRead)?;
+
     let rows = obligations::holidays(&state.db).await?;
     Ok(Json(
         rows.into_iter()

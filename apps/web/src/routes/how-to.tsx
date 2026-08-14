@@ -1,7 +1,9 @@
 import { Link, createFileRoute } from "@tanstack/react-router"
+
 import { m } from "#/paraglide/messages"
-import { SiteHeader } from "@/components/site-header"
+import { PublicShell } from "@/components/public-shell"
 import { buttonVariants } from "@/components/ui/button"
+import { howToSteps } from "@/lib/how-to-steps"
 import { cn } from "@/lib/utils"
 
 // FR-1401: статичная страница «как участвовать» (п. 5–6)
@@ -10,57 +12,38 @@ export const Route = createFileRoute("/how-to")({
   component: HowToPage,
 })
 
-const STEPS: (() => { title: string; text: string })[] = [
-  () => ({
-    title: m.howto_step_register_title(),
-    text: m.howto_step_register_text(),
-  }),
-  () => ({
-    title: m.howto_step_prepare_title(),
-    text: m.howto_step_prepare_text(),
-  }),
-  () => ({
-    title: m.howto_step_submit_title(),
-    text: m.howto_step_submit_text(),
-  }),
-  () => ({
-    title: m.howto_step_trade_title(),
-    text: m.howto_step_trade_text(),
-  }),
-]
-
 function HowToPage() {
+  const steps = howToSteps()
+
   return (
-    <>
-      <SiteHeader />
-      <main className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10">
+    <PublicShell className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
+      <div className="flex flex-col gap-10">
         <header className="flex flex-col gap-3">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight">
             {m.howto_title()}
           </h1>
-          <p className="text-lg text-muted-foreground">{m.howto_intro()}</p>
+          <p className="max-w-[68ch] text-lg text-muted-foreground">
+            {m.howto_intro()}
+          </p>
         </header>
 
         <ol className="flex list-none flex-col gap-6">
-          {STEPS.map((step, index) => {
-            const { title, text } = step()
-            return (
-              <li key={title} className="flex gap-4">
-                <span
-                  aria-hidden="true"
-                  className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-heading font-semibold text-primary-foreground"
-                >
-                  {index + 1}
-                </span>
-                <div className="flex flex-col gap-1">
-                  <h2 className="font-heading text-lg font-semibold">
-                    {title}
-                  </h2>
-                  <p className="text-muted-foreground">{text}</p>
-                </div>
-              </li>
-            )
-          })}
+          {steps.map((step, index) => (
+            <li key={step.title} className="flex gap-4">
+              <span
+                aria-hidden="true"
+                className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 font-mono text-sm font-semibold text-primary ring-1 ring-primary/20"
+              >
+                {index + 1}
+              </span>
+              <div className="flex flex-col gap-1">
+                <h2 className="text-lg font-semibold">{step.title}</h2>
+                <p className="max-w-[68ch] text-muted-foreground">
+                  {step.text}
+                </p>
+              </div>
+            </li>
+          ))}
         </ol>
 
         <div className="flex flex-wrap gap-3">
@@ -77,7 +60,26 @@ function HowToPage() {
             {m.portal_cta_tenders()}
           </Link>
         </div>
-      </main>
-    </>
+
+        {/* Куда идти дальше: условия конкретной процедуры живут в объявлении */}
+        <section
+          aria-labelledby="howto-questions"
+          className="flex flex-col gap-2 rounded-xl border bg-muted p-5"
+        >
+          <h2 id="howto-questions" className="text-base font-semibold">
+            {m.howto_questions_title()}
+          </h2>
+          <p className="max-w-[68ch] text-sm text-muted-foreground">
+            {m.howto_questions_text()}
+          </p>
+          <Link
+            to="/tenders"
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {m.tenders_title()}
+          </Link>
+        </section>
+      </div>
+    </PublicShell>
   )
 }

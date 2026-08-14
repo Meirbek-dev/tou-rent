@@ -31,7 +31,9 @@ test("организатор: объект → расчет ставки → т�
   await loginAsUi(page, accounts.organizer)
 
   await test.step("объект имущества (FR-101)", async () => {
-    await page.goto("/app/organizer")
+    await page.goto("/app/organizer/objects")
+    // Форма создания живет в диалоге - его сперва открывают кнопкой
+    await page.getByTestId("open-create-object").click()
     await page.locator("#obj-name").fill(objectName)
     await page.locator("#obj-address").fill("г. Павлодар, ул. Ломова, 64")
     await page.locator("#obj-area").fill("42")
@@ -91,7 +93,7 @@ test("комиссия и торги: вскрытие → допуск → ув
   const tenderId = provisionDemoTender()
 
   await loginAsUi(page, accounts.secretary)
-  await page.goto(`/app/secretary/tenders/${tenderId}`)
+  await page.goto(`/app/secretary/tenders/${tenderId}?tab=meeting`)
 
   await test.step("явка и кворум: заседание открывается (FR-1102, п. 12)", async () => {
     const form = page.getByTestId("attendance-form")
@@ -127,6 +129,8 @@ test("комиссия и торги: вскрытие → допуск → ув
     await expect(page.getByTestId("open-tender")).toBeVisible()
     await page.getByTestId("open-tender").click()
     await expect(page.getByTestId("open-tender")).toBeHidden()
+    // Цены живут на вкладке заявок
+    await page.getByRole("tab", { name: "Заявки" }).click()
     // Три первоначальных предложения демо-участников
     await expect(
       page.getByText("55 000", { exact: false }).first()
@@ -199,6 +203,8 @@ test("комиссия и торги: вскрытие → допуск → ув
   const auctionUrl =
     await test.step("открытие комнаты торгов (FR-601)", async () => {
       await page.reload()
+      // Лоты торгов — на своей вкладке
+      await page.getByRole("tab", { name: "Торги" }).click()
       await page.getByTestId("open-auction").first().click()
       const link = page.getByRole("link", { name: /комнат/i }).first()
       await link.click()
@@ -244,7 +250,7 @@ test("комиссия и торги: вскрытие → допуск → ув
     await page.getByTestId("finish-auction").click()
     await expect(page.getByTestId("auction-winner")).toBeVisible()
 
-    await page.goto(`/app/secretary/tenders/${tenderId}`)
+    await page.goto(`/app/secretary/tenders/${tenderId}?tab=auction`)
     await page.getByTestId("generate-results-protocol").click()
     await expect(page.getByTestId("results-protocol-pdf")).toBeVisible()
 

@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 import { InvestmentContracts } from "@/components/investment-contracts"
+import { PageHeader } from "@/components/page-header"
 import { RateOptionsFields } from "@/components/rate-fields"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,6 +35,7 @@ export const Route = createFileRoute("/app/organizer/investment")({
       context.queryClient.ensureQueryData(rateOptionsQuery),
     ])
   },
+  head: () => ({ meta: [{ title: `${m.org_nav_investment()} - ToU Rent` }] }),
   component: InvestmentPage,
 })
 
@@ -82,6 +84,7 @@ function InvestmentPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <PageHeader title={m.org_nav_investment()} />
       {available.length > 0 && (
         <form
           className="flex flex-wrap items-end gap-3 rounded-lg border p-4"

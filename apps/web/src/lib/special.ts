@@ -1,8 +1,8 @@
 import { queryOptions } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
-import { getLocale } from "#/paraglide/runtime"
 import { api } from "@/lib/api"
+import { serverLabel } from "@/lib/server-label"
 
 import type { components } from "@tou/api-client"
 
@@ -109,10 +109,7 @@ export function localeLabel(item: {
   label_kk?: string | null
   label_en?: string | null
 }): string {
-  const locale = getLocale()
-  if (locale === "kk") return item.label_kk ?? item.label_ru
-  if (locale === "en") return item.label_en ?? item.label_ru
-  return item.label_ru
+  return serverLabel(item)
 }
 
 /** Подпись состояния заявки особого порядка (п. 88–90). */

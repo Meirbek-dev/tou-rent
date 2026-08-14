@@ -16,7 +16,7 @@ use serde_json::json;
 use tou_db::failure::{self, FailureError};
 use tou_db::results::MeetingError;
 use tou_db::{admission, applications, results, tenders};
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -27,6 +27,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/failed.typ");
 
@@ -81,8 +82,7 @@ pub async fn failure_state(
 ) -> Result<Json<FailureStateDto>, ApiError> {
     // Основание и следствие видят и те, кто решает (секретарь, комиссия),
     // и организатор: повторный тендер объявляет он (FR-802, п. 82)
-    user.require(Action::ApplicationReadAll)
-        .or_else(|_| user.require(Action::TenderManage))?;
+    user.require_any(Compound::TENDER_PROCESS_READ)?;
 
     let found = failure::state(&state.db, id)
         .await?
@@ -191,19 +191,24 @@ pub async fn generate_failed_protocol(
         .await?
         .ok_or(ApiError::NotFound)?;
     if !found.failed {
-        return Err(ApiError::RuleViolation(
-            "протокол оформляется после признания тендера несостоявшимся (FR-802)".into(),
+        return Err(ApiError::rule(
+            RuleViolation::TenderFailureGround,
+            "протокол оформляется после признания тендера несостоявшимся (FR-802)",
         ));
     }
-    let ground = found
-        .ground
-        .ok_or_else(|| ApiError::RuleViolation("основание п. 81 не зафиксировано".to_owned()))?;
+    let ground = found.ground.ok_or_else(|| {
+        ApiError::rule(
+            RuleViolation::TenderFailureGround,
+            "основание п. 81 не зафиксировано",
+        )
+    })?;
 
     let meeting = results::results_meeting(&state.db, user.id(), id)
         .await
         .map_err(|err| match err {
-            MeetingError::NoCommission => ApiError::RuleViolation(
-                "нет действующей комиссии с утвержденным составом (FR-1101)".into(),
+            MeetingError::NoCommission => ApiError::rule(
+                RuleViolation::CommissionComposition,
+                "нет действующей комиссии с утвержденным составом (FR-1101)",
             ),
             MeetingError::Db(db) => db.into(),
         })?;
@@ -303,8 +308,9 @@ pub async fn generate_failed_protocol(
                 generated_at: protocol.generated_at,
             }),
         )),
-        None => Err(ApiError::RuleViolation(
-            "протокол о несостоявшемся уже сформирован (UNIQUE по тендеру)".into(),
+        None => Err(ApiError::rule(
+            RuleViolation::DuplicateRecord,
+            "протокол о несостоявшемся уже сформирован (UNIQUE по тендеру)",
         )),
     }
 }

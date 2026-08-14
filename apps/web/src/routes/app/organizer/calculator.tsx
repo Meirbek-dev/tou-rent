@@ -2,6 +2,7 @@ import { useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useMutation } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
+import { PageHeader } from "@/components/page-header"
 import {
   RateBreakdown,
   RateOptionsFields,
@@ -22,6 +23,7 @@ import type { RateOptions } from "@/lib/organizer"
 export const Route = createFileRoute("/app/organizer/calculator")({
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(rateOptionsQuery),
+  head: () => ({ meta: [{ title: `${m.org_nav_calculator()} - ToU Rent` }] }),
   component: CalculatorPage,
 })
 
@@ -57,6 +59,7 @@ function CalculatorPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <PageHeader title={m.org_nav_calculator()} />
       <form
         className="flex flex-col gap-4 rounded-lg border p-4"
         onSubmit={(event) => {

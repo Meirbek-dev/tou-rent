@@ -7,15 +7,20 @@
 //! опечатка не видна ни компилятору, ни линту, а проявляется отказом БД
 //! в рантайме на том экране, который тестом не покрыт.
 //!
-//! Поэтому здесь не проверяется поведение - только то, что каждый запрос
-//! разбирается и выполняется. Данные не нужны: пустая выборка - такой же
-//! успешный разбор, как и полная.
+//! Поэтому большая часть тестов здесь не проверяет поведение - только то,
+//! что каждый запрос разбирается и выполняется. Данные для этого не нужны:
+//! пустая выборка - такой же успешный разбор, как и полная.
+//!
+//! Отдельно проверяется то, ради чего потолок перестал быть молчаливым
+//! (W-17): признак усечения в ответе и курсор. Здесь без данных уже нельзя -
+//! пустая выборка не усекается, и утверждать по ней нечего.
 //!
 //! Подключение - TESTKIT_DATABASE_URL (A-021).
 
+use tou_db::reports::{self, RegistryRow};
 use tou_db::{
     applications, contracts, evasion, investment, land, ledger, obligations, public_records,
-    publications, reports, special,
+    publications, special,
 };
 use tou_domain::role::Role;
 use uuid::Uuid;
@@ -66,7 +71,9 @@ fn cap_is_declared_once_and_sane() {
 async fn global_registries_run_with_cap() {
     let db = require_db!();
 
-    evasion::registry(&db).await.expect("реестр уклонившихся");
+    evasion::registry(&db, None, tou_db::MAX_ROWS)
+        .await
+        .expect("реестр уклонившихся");
     investment::list(&db).await.expect("инвест-договоры");
     land::list_all(&db).await.expect("земельные участки");
     land::list_published(&db)
@@ -75,7 +82,7 @@ async fn global_registries_run_with_cap() {
     land::list_all_applications(&db)
         .await
         .expect("заявки на участки");
-    public_records::list_public(&db)
+    public_records::list_public(&db, None, tou_db::MAX_ROWS)
         .await
         .expect("публикации портала");
     public_records::pending(&db).await.expect("ждет публикации");
@@ -103,7 +110,36 @@ async fn per_owner_lists_run_with_cap() {
     land::list_own(&db, nobody)
         .await
         .expect("заявки инвестора на участки");
-    ledger::entries(&db, nobody).await.expect("журнал счета");
+    ledger::entries(&db, nobody, None, tou_db::MAX_ROWS)
+        .await
+        .expect("журнал счета");
+}
+
+/// Пустая выборка не усечена: пробная строка не должна поднимать признак
+/// на ровном месте - ложный «показано не все» так же вреден, как молчание.
+#[tokio::test]
+async fn an_empty_selection_is_not_truncated() {
+    let db = require_db!();
+    let nobody = Uuid::now_v7();
+
+    assert!(
+        !contracts::list_for_tenant(&db, nobody)
+            .await
+            .expect("договоры нанимателя")
+            .truncated
+    );
+    assert!(
+        !publications::list_for_participant(&db, nobody)
+            .await
+            .expect("протоколы участника")
+            .truncated
+    );
+    assert!(
+        !ledger::entries(&db, nobody, None, tou_db::MAX_ROWS)
+            .await
+            .expect("журнал счета")
+            .truncated
+    );
 }
 
 /// Рабочие списки и лента торгов.
@@ -158,6 +194,170 @@ async fn report_registries_run_with_cap() {
             .await
             .expect("реестр поступлений");
     }
+}
+
+/// Поступления одного счета: `count` приходных проводок с одинаковым
+/// `occurred_at`.
+///
+/// Одинаковым намеренно: курсор по голому времени такую пачку либо
+/// потеряет, либо покажет дважды, и проверять его надо ровно на ней.
+/// Взносы одной транзакции так и ложатся - секунда у них общая.
+async fn receipts_of_one_account(
+    tx: &mut sqlx::PgConnection,
+    count: i32,
+) -> Result<(), sqlx::Error> {
+    let tag = Uuid::now_v7().simple().to_string();
+
+    let payer = sqlx::query_scalar!(
+        "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
+         VALUES ($1, 'x', 'W17 плательщик', now()) RETURNING id",
+        format!("w17-payer-{tag}@tou.test")
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let object = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', 'W17 помещение', 'г. Павлодар, ул. Тестовая, 17', 30)
+         RETURNING id"
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let contract = sqlx::query_scalar!(
+        "INSERT INTO core.contracts
+           (object_id, tenant_id, monthly_rate, status, lease_period, reg_number, registered_at)
+         VALUES ($1, $2, 1000, 'active',
+                 tstzrange(now(), now() + interval '365 days'), $3, now())
+         RETURNING id",
+        object,
+        payer,
+        format!("Д-W17-{tag}")
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let account = sqlx::query_scalar!(
+        "INSERT INTO core.ledger_accounts (kind, contract_id, owner_user_id)
+         VALUES ('contract_deposit', $1, $2) RETURNING id",
+        contract,
+        payer
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    for _ in 0..count {
+        sqlx::query!(
+            "INSERT INTO core.ledger_entries
+               (account_id, op, credit, rule_ref, recorded_by, paid_at, occurred_at)
+             VALUES ($1, 'receipt_confirmed', 100, 'W17', $2, current_date, core.now())",
+            account,
+            payer
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    Ok(())
+}
+
+/// Реестр, который не поместился, так и говорит - и дает, чем продолжить.
+///
+/// Проверяется то, ради чего потолок перестал быть молчаливым: страница
+/// меньше выборки поднимает `truncated`, курсор ведет к следующим строкам,
+/// а не к тем же самым, и последняя страница признак опускает. Без этого
+/// ответ выглядел бы полным, будучи обрезанным, - а заметила бы разницу
+/// бухгалтерия, у которой в реестре не сошлись бы записи.
+#[tokio::test]
+async fn a_truncated_registry_says_so_and_offers_a_cursor() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    receipts_of_one_account(&mut tx, 3)
+        .await
+        .expect("поступления");
+
+    let period = reports::Period::default();
+
+    let first = reports::receipts_page(&mut tx, period, None, 2)
+        .await
+        .expect("первая страница");
+    assert_eq!(first.len(), 2, "страница отдает ровно запрошенное");
+    assert!(first.truncated, "за страницей есть строки - и это видно");
+
+    let cursor = first.last().map(RegistryRow::cursor).expect("курсор");
+    let second = reports::receipts_page(&mut tx, period, Some(cursor), 2)
+        .await
+        .expect("вторая страница");
+
+    let first_ids: Vec<_> = first.iter().map(|row| row.id).collect();
+    assert!(
+        second.iter().all(|row| !first_ids.contains(&row.id)),
+        "курсор ведет за страницу, а не повторяет ее"
+    );
+    assert!(
+        !second.is_empty(),
+        "третье поступление достается со второй страницы"
+    );
+
+    // Страница шире выборки признак не поднимает: обходить дальше нечего.
+    // Период берется однодневным из будущего - что накопилось на стенде,
+    // на утверждение влиять не должно
+    let today = sqlx::query_scalar!(r#"SELECT core.now()::date AS "today!""#)
+        .fetch_one(&mut *tx)
+        .await
+        .expect("дата сервера");
+    let empty = reports::Period {
+        from: Some(today + time::Duration::days(3650)),
+        to: None,
+    };
+    let tail = reports::receipts_page(&mut tx, empty, None, 2)
+        .await
+        .expect("пустой период");
+    assert!(tail.is_empty() && !tail.truncated, "показано все, что есть");
+
+    tx.rollback().await.expect("откат");
+}
+
+/// Курсор реестра решений идет по обеим ветвям `UNION ALL` сразу.
+///
+/// Условие курсора в этом запросе написано дважды - по разу на ветвь, -
+/// и ошибиться в нем можно молча: реестр продолжал бы листаться, отдавая
+/// решения только одного вида. Проверка идет на пустом периоде из будущего:
+/// он гарантированно ничего не содержит, поэтому утверждение про пустой
+/// хвост не зависит от того, что накопилось на стенде.
+#[tokio::test]
+async fn the_decisions_cursor_walks_both_union_branches() {
+    let db = require_db!();
+    let mut conn = db.acquire().await.expect("соединение");
+
+    let today = sqlx::query_scalar!(r#"SELECT core.now()::date AS "today!""#)
+        .fetch_one(&mut *conn)
+        .await
+        .expect("дата сервера");
+
+    let future = reports::Period {
+        from: Some(today + time::Duration::days(3650)),
+        to: None,
+    };
+
+    let page = reports::decisions_page(&mut conn, future, None, 10)
+        .await
+        .expect("реестр решений");
+    assert!(page.is_empty(), "в будущем решений нет");
+    assert!(!page.truncated, "пустая выборка не усечена");
+
+    // Курсор из прошлого не ломает разбор ни одной из ветвей
+    let cursor = tou_db::RowCursor::new(
+        time::OffsetDateTime::UNIX_EPOCH,
+        Uuid::from_u128(0xffff_ffff_ffff_ffff_ffff_ffff_ffff_ffff),
+    );
+    let page = reports::decisions_page(&mut conn, reports::Period::default(), Some(cursor), 10)
+        .await
+        .expect("реестр решений с курсора");
+    assert!(
+        page.is_empty(),
+        "курсор на начале времен не пускает вперед - выборка идет вниз"
+    );
 }
 
 /// Проходы фонового воркера идут пачками: `LIMIT` внутри `UPDATE`

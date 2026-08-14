@@ -42,7 +42,7 @@ test("полный тендер до договора: конвейер п. 110�
   const tenderId = provisionSummedUpTender()
 
   await loginAsUi(page, accounts.organizer)
-  await page.goto(`/app/organizer/tenders/${tenderId}`)
+  await page.goto(`/app/organizer/tenders/${tenderId}?tab=contracts`)
 
   await test.step("договор составляется из итогов торгов (FR-901, п. 108)", async () => {
     await page.getByTestId("draft-contract").first().click()
@@ -73,9 +73,14 @@ test("полный тендер до договора: конвейер п. 110�
       "сверка документов завершена"
     )
 
-    // А вот подпись наймодателя без отмеченного перечня не проходит
+    // А вот подпись наймодателя без отмеченного перечня не проходит.
+    // Проверяется текст интерфейса, а не имя инварианта: причина отказа
+    // приходит машинным полем `rule`, а строка берется из каталога переводов
+    // (W-09) - «INV-115» пользователю больше не показывается.
     await page.getByTestId("advance-contract").first().click()
-    await expect(page.getByRole("alert").first()).toContainText("INV-115")
+    await expect(page.getByRole("alert").first()).toContainText(
+      "Сверка документов не завершена"
+    )
 
     const items = checklist.locator('input[type="checkbox"]')
     const total = await items.count()
@@ -140,7 +145,7 @@ test("несостоявшийся → повтор: основание п. 81.2
 
   await test.step("секретарь видит наступившее основание (FR-801, п. 81.2)", async () => {
     await loginAsUi(page, accounts.secretary)
-    await page.goto(`/app/secretary/tenders/${tenderId}`)
+    await page.goto(`/app/secretary/tenders/${tenderId}?tab=risk`)
 
     const panel = page.getByTestId("failure-panel")
     await expect(panel).toBeVisible()
@@ -169,7 +174,7 @@ test("несостоявшийся → повтор: основание п. 81.2
     const organizer = await browser.newContext()
     const organizerPage = await organizer.newPage()
     await loginAsUi(organizerPage, accounts.organizer)
-    await organizerPage.goto(`/app/organizer/tenders/${tenderId}`)
+    await organizerPage.goto(`/app/organizer/tenders/${tenderId}?tab=risk`)
 
     const created = organizerPage.waitForResponse(
       (response) =>
@@ -211,7 +216,7 @@ test("победитель уклонился → № 2: удержание вз
   const tenderId = provisionSummedUpTender()
 
   await loginAsUi(page, accounts.organizer)
-  await page.goto(`/app/organizer/tenders/${tenderId}`)
+  await page.goto(`/app/organizer/tenders/${tenderId}?tab=contracts`)
 
   await test.step("договор победителя передан на подписание (п. 110)", async () => {
     await page.getByTestId("draft-contract").first().click()
@@ -261,7 +266,7 @@ test("победитель уклонился → № 2: удержание вз
     const secretary = await browser.newContext()
     const secretaryPage = await secretary.newPage()
     await loginAsUi(secretaryPage, accounts.secretary)
-    await secretaryPage.goto(`/app/secretary/tenders/${tenderId}`)
+    await secretaryPage.goto(`/app/secretary/tenders/${tenderId}?tab=risk`)
 
     const generated = secretaryPage.waitForResponse((response) =>
       response.url().includes("/winner2-protocol")

@@ -32,6 +32,8 @@ use crate::extract::CurrentUser;
 use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
 use crate::storage;
+use crate::upload;
+use tou_domain::rule::RuleViolation;
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ApplicationFileDto {
@@ -114,20 +116,41 @@ impl ApplicationDto {
 }
 
 /// Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020).
+///
+/// Тот же тип принимает сведения заявителя особого порядка (Прил. 3,
+/// `special.rs`), поэтому предметная проверка реквизитов здесь - единственная
+/// на оба маршрута.
 #[derive(Debug, Serialize, Deserialize, garde::Validate, ToSchema)]
 pub struct ApplicantDetailsDto {
     /// Наименование юрлица либо ФИО физлица
     #[garde(length(chars, min = 1, max = 300))]
     pub name: String,
     /// БИН/ИИН (персональные данные - NFR-07)
-    #[garde(length(chars, min = 1, max = 32))]
+    #[garde(custom(valid_id_number))]
     pub id_number: String,
     #[garde(length(chars, min = 1, max = 500))]
     pub address: String,
-    #[garde(length(chars, min = 1, max = 50))]
+    #[garde(custom(valid_phone))]
     pub phone: String,
     #[garde(inner(email, length(max = 254)))]
     pub email: Option<String>,
+}
+
+/// Предметная проверка ИИН/БИН живет в домене: по этому реквизиту сторона
+/// опознается в договоре и в реестре уклонившихся, и та же проверка теми же
+/// правилами стоит в форме (`apps/web/src/lib/validation.ts`). Прежняя
+/// «строка от 1 до 32 символов» ловила только пустое поле.
+///
+/// Имя не совпадает с именем поля намеренно: derive `garde` вводит в область
+/// видимости локальную переменную с именем поля, и функция `id_number`
+/// оказалась бы ею закрыта.
+fn valid_id_number(value: &str, _ctx: &()) -> garde::Result {
+    tou_domain::identity::validate_id_number(value)
+        .map_err(|err| garde::Error::new(err.to_string()))
+}
+
+fn valid_phone(value: &str, _ctx: &()) -> garde::Result {
+    tou_domain::identity::validate_phone(value).map_err(|err| garde::Error::new(err.to_string()))
 }
 
 #[derive(Debug, Deserialize, garde::Validate, ToSchema)]
@@ -200,12 +223,14 @@ pub async fn submit_application(
     )
     .await
     .map_err(|err| match err {
-        SubmitError::NotAccepting => {
-            ApiError::RuleViolation("прием заявок по тендеру не открыт (п. 36)".into())
-        }
-        SubmitError::Duplicate => {
-            ApiError::RuleViolation("заявка на этот лот уже подана (п. 22)".into())
-        }
+        SubmitError::NotAccepting => ApiError::rule(
+            RuleViolation::ApplicationIntakeClosed,
+            "прием заявок по тендеру не открыт (п. 36)",
+        ),
+        SubmitError::Duplicate => ApiError::rule(
+            RuleViolation::ApplicationAlreadySubmitted,
+            "заявка на этот лот уже подана (п. 22)",
+        ),
         SubmitError::Rejected(reason) => ApiError::RuleViolation(reason),
         SubmitError::Db(db) => db.into(),
     })?;
@@ -253,8 +278,9 @@ pub async fn withdraw_application(
     let record = applications::withdraw(&state.db, user.id(), id)
         .await
         .map_err(|err| match err {
-            WithdrawError::NotWithdrawable => ApiError::RuleViolation(
-                "заявка не найдена или уже не в статусе «подана» (FR-404)".into(),
+            WithdrawError::NotWithdrawable => ApiError::rule(
+                RuleViolation::ApplicationNotPending,
+                "заявка не найдена или уже не в статусе «подана» (FR-404)",
             ),
             WithdrawError::Rejected(reason) => ApiError::RuleViolation(reason),
             WithdrawError::Db(db) => db.into(),
@@ -286,44 +312,29 @@ pub async fn upload_file(
 ) -> Result<(StatusCode, Json<ApplicationFileDto>), ApiError> {
     user.require(Action::ApplicationSubmit)?;
 
-    let mut part = None;
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| ApiError::Validation(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("attachment")
-                .chars()
-                .take(255)
-                .collect::<String>();
-            let content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_owned();
-            let bytes = field
-                .bytes()
-                .await
-                .map_err(|e| ApiError::Validation(e.to_string()))?;
-            part = Some((filename, content_type, bytes));
-            break;
-        }
-    }
-    let (filename, content_type, bytes) =
-        part.ok_or_else(|| ApiError::Validation("часть 'file' отсутствует".into()))?;
+    // Право `ApplicationSubmit` есть у любого участника, поэтому одного его
+    // мало: до этой проверки чужой (или несуществующий) id заявки доходил
+    // до `put`, а отказ приходил уже после записи в бакет. Бакет досье -
+    // Object Lock в режиме compliance на пять лет (INV-042), удалять из него
+    // не вправе ни api, ни владелец хранилища, так что каждый такой отказ
+    // занимал место навсегда. Атомарная проверка в `add_file` остается
+    // последним рубежом от гонки с дедлайном, эта - закрывает дешевый способ
+    // засорить WORM.
+    ensure_open_own_application(&state, &user, id).await?;
+
+    let file =
+        upload::take_file(&mut multipart, "file", "attachment", upload::MAX_FILE_BYTES).await?;
+    let size_bytes = i64::try_from(file.bytes.len()).map_err(ApiError::internal)?;
 
     // Ключ не зависит от id строки метаданных: объект кладется до вставки.
     // Компенсации при отказе БД нет - бакет досье под Object Lock, и права
     // на удаление у приложения нет (INV-042); см. ветку `None` ниже.
     let file_key = storage::application_file_key(id, Uuid::now_v7());
     let object_path = ObjectPath::from(file_key.as_str());
-    let size_bytes = i64::try_from(bytes.len()).map_err(ApiError::internal)?;
 
     state
         .storage
-        .put(&object_path, PutPayload::from_bytes(bytes))
+        .put(&object_path, PutPayload::from_bytes(file.bytes))
         .await
         .map_err(ApiError::internal)?;
 
@@ -332,8 +343,8 @@ pub async fn upload_file(
         user.id(),
         id,
         &file_key,
-        &filename,
-        &content_type,
+        &file.filename,
+        file.content_type,
         size_bytes,
     )
     .await?;
@@ -346,11 +357,57 @@ pub async fn upload_file(
             // без нее объект недостижим и мимо приложения. Ключ - в журнал:
             // разобрать бакет может только владелец хранилища (INV-042)
             tracing::warn!(%file_key, "объект загружен, метаданные отклонены");
-            Err(ApiError::RuleViolation(
-                "файл можно приложить только к своей поданной заявке до дедлайна (п. 36–39)".into(),
+            Err(ApiError::rule(
+                RuleViolation::ApplicationDeadlinePassed,
+                "файл можно приложить только к своей поданной заявке до дедлайна (п. 36–39)",
             ))
         }
     }
+}
+
+/// Предварительная проверка перед записью в бакет: заявка есть, она своя
+/// и прием по тендеру еще открыт.
+///
+/// Дублирует условие `applications::add_file` намеренно. Та проверка атомарна
+/// и остается решающей, но выполняется после `put`; эта - до, и потому решает
+/// другую задачу: не пустить в WORM объект, который заведомо будет отвергнут.
+/// Время берется у БД (`core.now()`, ADR-0005) - тем же источником, которым
+/// его меряет триггер INV-037, иначе граница дедлайна у двух проверок разъедется.
+async fn ensure_open_own_application(
+    state: &AppState,
+    user: &CurrentUser,
+    id: Uuid,
+) -> Result<(), ApiError> {
+    let record = applications::get(&state.db, user.id(), id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+
+    // Чужая заявка - 404, а не 403: иначе по коду ответа перебираются
+    // идентификаторы чужих заявок (NFR-07)
+    if record.participant_id != user.id() {
+        return Err(ApiError::NotFound);
+    }
+
+    if record.status != "submitted" {
+        return Err(ApiError::rule(
+            RuleViolation::ApplicationDeadlinePassed,
+            "файл можно приложить только к своей поданной заявке до дедлайна (п. 36–39)",
+        ));
+    }
+
+    let tender = tenders::get(&state.db, record.tender_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if let Some(deadline) = tender.submission_deadline
+        && tou_db::refdata::now(&state.db).await? > deadline
+    {
+        return Err(ApiError::rule(
+            RuleViolation::ApplicationDeadlinePassed,
+            "прием заявок по тендеру закрыт - состав заявки зафиксирован (п. 36–39)",
+        ));
+    }
+
+    Ok(())
 }
 
 /// Скачивание вложения: владелец - всегда; secretary/commission - после
@@ -408,20 +465,13 @@ pub async fn download_file(
                 header::CONTENT_DISPOSITION,
                 format!(
                     "attachment; filename=\"{}\"",
-                    sanitize_filename(&file.filename)
+                    upload::sanitize_filename(&file.filename)
                 ),
             ),
         ],
         bytes.to_vec(),
     )
         .into_response())
-}
-
-/// Заголовок не должен ломаться кавычками/переводами строк в имени файла.
-fn sanitize_filename(name: &str) -> String {
-    name.chars()
-        .map(|c| if c == '"' || c.is_control() { '_' } else { c })
-        .collect()
 }
 
 /// Заявки тендера (secretary/commission): цены до вскрытия скрыты RLS (INV-040).
@@ -512,4 +562,38 @@ async fn with_files(
             ApplicationDto::from_record(r, files)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn details(id_number: &str, phone: &str) -> ApplicantDetailsDto {
+        ApplicantDetailsDto {
+            name: "ТОО «Тест»".to_owned(),
+            id_number: id_number.to_owned(),
+            address: "г. Павлодар, ул. Ломова, 64".to_owned(),
+            phone: phone.to_owned(),
+            email: None,
+        }
+    }
+
+    /// Проверка домена действительно подключена к DTO: без нее сюда проходила
+    /// любая строка от 1 до 32 символов (W-13). Перечни примеров и границы -
+    /// в `tou_domain::identity`, здесь проверяется только проводка.
+    #[test]
+    fn applicant_details_run_the_domain_checks() {
+        assert!(
+            details("670124440127", "+7 701 123 45 67")
+                .validate()
+                .is_ok()
+        );
+        // Опечатка в контрольном разряде
+        assert!(
+            details("670124440128", "+7 701 123 45 67")
+                .validate()
+                .is_err()
+        );
+        assert!(details("670124440127", "не указан").validate().is_err());
+    }
 }

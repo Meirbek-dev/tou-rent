@@ -33,11 +33,38 @@ Docs are local at `node_modules/vite-plus/docs` or online at <https://viteplus.d
 
 1. Возьми верхнюю невыполненную задачу из specs/BACKLOG.md (контуры 1–3 - ТЗ v1 § 9 и § 4, контур 4 - ТЗ v2 § 5).
 2. Ветка `feat/<T-id>-<slug>` от свежего main.
-3. Реализация по DoD (ТЗ § 10). Самопроверка: `vp check` (fmt→lint→typecheck) + `vp test` (Vitest)
-   - `cargo clippy --workspace --all-targets -- -D warnings` + `cargo test --workspace`. Кодоген
-     `vp check` не запускает - после правки контракта нужен `bun run codegen` (гейт G5 это проверит).
+3. Реализация по DoD (ТЗ § 10). Самопроверка - одной командой: `vp run verify`
+   (гейты дерева → `vp check` → fmt и clippy в контейнере). Плюс `vp test` (Vitest).
+   Кодоген `vp check` не запускает - после правки контракта нужен `bun run codegen`
+   (гейт G5 это проверит).
 4. MR в main c описанием: задача, FR/INV-ID, что покрыто тестами, допущения.
 5. Merge при зеленом пайплайне (auto-merge). Ревью людей нет - пайплайн и есть ревью.
+
+### Проверки до контейнера
+
+Rust на Windows-хосте не линкуется (A-003), но это не повод узнавать об ошибке
+из логов поднятого стенда. Cargo запускается в том же контейнере и на том же
+кеше, что и сервис api, поэтому проверка стоит секунды:
+
+| Команда              | Что делает                                                | Когда                |
+| -------------------- | --------------------------------------------------------- | -------------------- |
+| `vp run gates`       | grep-гейты по диффу: G2, G2/SQL, G3, G5, CRLF в миграциях | доли секунды, всегда |
+| `vp run gates --all` | то же по всему дереву - как в CI                          | перед MR             |
+| `vp check`           | формат, линт, типы (oxlint + tsgolint)                    | ~2 с                 |
+| `vp run rust:check`  | `cargo check --workspace --all-targets`                   | ~15 с на теплом кеше |
+| `vp run rust:lint`   | `cargo fmt --check` + `clippy -D warnings` (гейт G2)      | перед MR             |
+| `vp run rust:test`   | `cargo test --workspace` (поднимает БД)                   | перед MR             |
+| `vp run verify`      | гейты + `vp check` + `rust:lint`                          | перед MR             |
+
+`vp run stack:up` сам прогоняет `rust:check` до подъема контейнеров: ошибка
+компиляции видна сразу, а не после сборки внутри api. Поднять стенд без этой
+проверки - `vp run stack:up:only`.
+
+Автоматика: хук pre-push гоняет гейты, `vp check` и `rust:lint` (разово
+обойти - `TOU_SKIP_RUST=1 git push`). Для ИИ-агента то же самое включено
+хуками Claude Code (`.claude/settings.json`): после правки `.ts/.tsx` -
+`vp check`, в конце хода - полная проверка. Гейт, который не смог отработать
+(погашен podman), считается красным, а не пропущенным.
 
 Дев-стенд: `vp run stack:up` - Postgres/Redis/RustFS + api в контейнере (:8080,
 health `/api/v1/healthz`; миграции накатываются перед стартом). После правок Rust -

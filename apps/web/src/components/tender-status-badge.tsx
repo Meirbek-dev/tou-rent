@@ -1,3 +1,16 @@
+import {
+  BanIcon,
+  CircleCheckIcon,
+  CircleXIcon,
+  ClipboardCheckIcon,
+  FilePenIcon,
+  GavelIcon,
+  InboxIcon,
+  ListChecksIcon,
+  MegaphoneIcon,
+  type LucideIcon,
+} from "lucide-react"
+
 import { m } from "#/paraglide/messages"
 import { Badge } from "@/components/ui/badge"
 
@@ -18,20 +31,27 @@ const LABELS: Record<TenderStatus, () => string> = {
   cancelled: m.tender_status_cancelled,
 }
 
-const VARIANTS: Record<
-  TenderStatus,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  draft: "outline",
-  announced: "default",
-  accepting: "default",
-  qualification: "secondary",
-  trading: "default",
-  summed_up: "secondary",
-  contracted: "secondary",
-  failed: "destructive",
-  repeat_announced: "default",
-  cancelled: "destructive",
+type StatusView = {
+  variant: "info" | "success" | "warning" | "neutral" | "destructive"
+  icon: LucideIcon
+}
+
+/**
+ * Цвет и значок статуса. Зеленый - «можно подать заявку», желтый - «идет
+ * процедура», серый - завершенные состояния: цвет нигде не остается
+ * единственным носителем смысла, подпись и значок дублируют его (SC 1.4.1).
+ */
+const VIEWS: Record<TenderStatus, StatusView> = {
+  draft: { variant: "neutral", icon: FilePenIcon },
+  announced: { variant: "info", icon: MegaphoneIcon },
+  repeat_announced: { variant: "info", icon: MegaphoneIcon },
+  accepting: { variant: "success", icon: InboxIcon },
+  qualification: { variant: "warning", icon: ClipboardCheckIcon },
+  trading: { variant: "warning", icon: GavelIcon },
+  summed_up: { variant: "info", icon: ListChecksIcon },
+  contracted: { variant: "neutral", icon: CircleCheckIcon },
+  failed: { variant: "destructive", icon: CircleXIcon },
+  cancelled: { variant: "neutral", icon: BanIcon },
 }
 
 export function tenderStatusLabel(status: TenderStatus): string {
@@ -39,5 +59,12 @@ export function tenderStatusLabel(status: TenderStatus): string {
 }
 
 export function TenderStatusBadge({ status }: { status: TenderStatus }) {
-  return <Badge variant={VARIANTS[status]}>{tenderStatusLabel(status)}</Badge>
+  const { variant, icon: Icon } = VIEWS[status]
+
+  return (
+    <Badge variant={variant}>
+      <Icon aria-hidden="true" />
+      {tenderStatusLabel(status)}
+    </Badge>
+  )
 }

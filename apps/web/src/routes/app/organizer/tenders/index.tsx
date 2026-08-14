@@ -1,6 +1,7 @@
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { useSuspenseQuery } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
+import { PageHeader } from "@/components/page-header"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/format"
@@ -11,6 +12,7 @@ import { cn } from "@/lib/utils"
 export const Route = createFileRoute("/app/organizer/tenders/")({
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(organizerTendersQuery),
+  head: () => ({ meta: [{ title: `${m.org_tenders_title()} - ToU Rent` }] }),
   component: OrganizerTendersPage,
 })
 
@@ -19,14 +21,19 @@ function OrganizerTendersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-heading text-lg font-semibold">
-          {m.org_tenders_title()}
-        </h2>
-        <Link to="/app/organizer/tenders/new" className={cn(buttonVariants())}>
-          {m.tender_create_cta()}
-        </Link>
-      </div>
+      {/* Заголовок страницы, а не раздела: реестр тендеров - самостоятельный
+          экран кабинета, и `h1` принадлежит ему */}
+      <PageHeader
+        title={m.org_tenders_title()}
+        actions={
+          <Link
+            to="/app/organizer/tenders/new"
+            className={cn(buttonVariants())}
+          >
+            {m.tender_create_cta()}
+          </Link>
+        }
+      />
 
       {page.items.length === 0 ? (
         <p className="text-muted-foreground">{m.org_tenders_empty()}</p>

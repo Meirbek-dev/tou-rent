@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.bids (id, auction_id, application_id, amount)\n         SELECT gen_random_uuid(), $1, $2, $3::numeric + $4::numeric * n\n         FROM generate_series(1, $5::bigint) AS n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Numeric",
+        "Numeric",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8e3b6d455310c3a3c70b087f14b8d5afb56c7a806498d4cb698251293e8ed65b"
+}

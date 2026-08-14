@@ -10,6 +10,7 @@ use rust_decimal::Decimal;
 use time::OffsetDateTime;
 use tou_domain::obligation::{ObligationAction, Term};
 use tou_domain::redacted::Redacted;
+use tou_domain::rule::RuleRejection;
 use tou_domain::special::Competition;
 use uuid::Uuid;
 
@@ -213,7 +214,7 @@ pub enum SpecialError {
     /// Отказ правила: FK категории (INV-087), триггер порядка состояний
     /// либо триггер перечня документов категории
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -225,7 +226,7 @@ fn map_rule(err: sqlx::Error) -> SpecialError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return SpecialError::Rejected(db_err.message().to_owned());
+        return SpecialError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     SpecialError::Db(err)
 }

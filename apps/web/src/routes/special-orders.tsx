@@ -1,6 +1,11 @@
+import { FileTextIcon } from "lucide-react"
 import { createFileRoute } from "@tanstack/react-router"
+
 import { m } from "#/paraglide/messages"
-import { SiteHeader } from "@/components/site-header"
+import { EmptyState } from "@/components/empty-state"
+import { PublicShell } from "@/components/public-shell"
+import { RegistryPending } from "@/components/registry-skeleton"
+import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { formatDate, formatDateTime } from "@/lib/format"
 import { publicRecordsQuery } from "@/lib/public-records"
@@ -17,35 +22,49 @@ export const Route = createFileRoute("/special-orders")({
     context.queryClient.ensureQueryData(publicRecordsQuery),
   head: () => ({ meta: [{ title: `${m.public_records_title()} - ToU Rent` }] }),
   component: SpecialOrdersPage,
+  pendingComponent: () => <RegistryPending title={m.public_records_title()} />,
 })
 
 function SpecialOrdersPage() {
   const records = Route.useLoaderData()
 
   return (
-    <>
-      <SiteHeader />
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
-        <h1 className="font-heading text-3xl font-semibold tracking-tight">
-          {m.public_records_title()}
-        </h1>
-        <p className="text-muted-foreground">{m.public_records_hint()}</p>
+    <PublicShell>
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {m.public_records_title()}
+          </h1>
+          <p className="max-w-[68ch] text-muted-foreground">
+            {m.public_records_hint()}
+          </p>
+        </div>
 
         {records.length === 0 ? (
-          <p className="py-8 text-muted-foreground">
-            {m.public_records_empty()}
-          </p>
+          <EmptyState
+            icon={FileTextIcon}
+            title={m.public_records_empty_title()}
+            description={m.public_records_empty()}
+          />
         ) : (
-          <ul className="flex flex-col gap-3">
-            {records.map((record) => (
-              <li key={record.id}>
-                <PublicRecordCard record={record} />
-              </li>
-            ))}
-          </ul>
+          <>
+            <p className="text-sm text-muted-foreground">
+              {m.registry_found()}:{" "}
+              <span className="font-medium text-foreground tabular-nums">
+                {records.length}
+              </span>
+            </p>
+            <ul className="flex flex-col gap-3">
+              {records.map((record) => (
+                <li key={record.id}>
+                  <PublicRecordCard record={record} />
+                </li>
+              ))}
+            </ul>
+          </>
         )}
-      </main>
-    </>
+      </div>
+    </PublicShell>
   )
 }
 
@@ -59,48 +78,53 @@ function PublicRecordCard({ record }: { record: PublicRecord }) {
     : null
 
   return (
-    <article className="flex flex-col gap-2 rounded-lg border p-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="rounded-md border px-2 py-0.5 text-sm">
-          {record.kind_title_ru}
-        </span>
-        <span className="text-sm text-muted-foreground">{record.rule_ref}</span>
-        <span
-          className="text-sm text-muted-foreground"
-          suppressHydrationWarning
-        >
-          {m.public_records_published_at()}:{" "}
-          {formatDateTime(record.published_at)}
-        </span>
-      </div>
-      <h2 className="font-medium">{record.title}</h2>
-
-      {/* Обоснование ставки - сам расчет Прил. 4 (FR-201, п. 97) */}
-      {calculation?.monthly_rate != null && (
-        <p className="text-sm">
-          {m.public_records_rate({ rate: calculation.monthly_rate })}
-        </p>
-      )}
-
-      <div className="flex flex-wrap items-center gap-3">
-        {record.has_file && (
-          <a
-            href={`/api/v1/public-records/${record.id}/pdf`}
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+    <article className="overflow-hidden rounded-xl border bg-card shadow-xs">
+      <div className="flex flex-col gap-3 p-5">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Badge variant="outline">{record.kind_title_ru}</Badge>
+          <span className="text-sm text-muted-foreground tabular-nums">
+            {record.rule_ref}
+          </span>
+          <span
+            className="text-sm text-muted-foreground"
+            suppressHydrationWarning
           >
-            {m.public_records_document()}
-          </a>
+            {m.public_records_published_at()}:{" "}
+            <span className="tabular-nums">
+              {formatDateTime(record.published_at)}
+            </span>
+          </span>
+        </div>
+        <h2 className="text-base font-semibold">{record.title}</h2>
+
+        {/* Обоснование ставки - сам расчет Прил. 4 (FR-201, п. 97) */}
+        {calculation?.monthly_rate != null && (
+          <p className="text-sm">
+            {m.public_records_rate({ rate: calculation.monthly_rate })}
+          </p>
         )}
-        {/* INV-076 (п. 76): публичный доступ длится шесть месяцев */}
-        <span
-          className="text-sm text-muted-foreground"
-          suppressHydrationWarning
-        >
-          {m.public_records_available_until({
-            date: formatDate(record.unpublish_at) ?? record.unpublish_at,
-          })}
-        </span>
+
+        {record.has_file && (
+          <div>
+            <a
+              href={`/api/v1/public-records/${record.id}/pdf`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              {m.public_records_document()}
+            </a>
+          </div>
+        )}
       </div>
+
+      {/* INV-076 (п. 76): публичный доступ длится шесть месяцев */}
+      <p
+        className="border-t bg-muted px-5 py-3 text-sm text-muted-foreground"
+        suppressHydrationWarning
+      >
+        {m.public_records_available_until({
+          date: formatDate(record.unpublish_at) ?? record.unpublish_at,
+        })}
+      </p>
     </article>
   )
 }

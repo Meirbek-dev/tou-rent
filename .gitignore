@@ -46,3 +46,5 @@ apps/e2e/results.xml
 # Без слепка в репозитории чистый checkout не собирается вообще - проверено:
 # «SQLX_OFFLINE=true but there is no cached data for this query».
 # Свежесть слепка стережет `sqlx prepare --check` в job rust-test.
+
+**/__pycache__

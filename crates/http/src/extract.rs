@@ -3,7 +3,7 @@
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use tou_db::users::{self, UserRecord};
-use tou_domain::policy::{Action, is_allowed};
+use tou_domain::policy::{Action, Compound, is_allowed, is_compound_allowed};
 use tou_domain::role::Role;
 use tower_sessions::Session;
 use uuid::Uuid;
@@ -29,6 +29,22 @@ impl CurrentUser {
     /// Политика доступа: хотя бы одна роль пользователя разрешает действие.
     pub fn require(&self, action: Action) -> Result<(), ApiError> {
         if self.roles.iter().any(|role| is_allowed(*role, action)) {
+            Ok(())
+        } else {
+            Err(ApiError::Forbidden)
+        }
+    }
+
+    /// Составное право «любое из» (`Compound`): область, которую по Правилам
+    /// ведут несколько ролей. Набор действий определен в домене и стоит в
+    /// снимке матрицы - собирать дизъюнкцию здесь, из `require(..).is_ok()`,
+    /// нельзя: такую проверку матрица не видит (INV-POL-01).
+    pub fn require_any(&self, compound: Compound) -> Result<(), ApiError> {
+        if self
+            .roles
+            .iter()
+            .any(|role| is_compound_allowed(*role, compound))
+        {
             Ok(())
         } else {
             Err(ApiError::Forbidden)

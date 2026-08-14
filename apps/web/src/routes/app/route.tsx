@@ -1,5 +1,4 @@
 import {
-  Link,
   Outlet,
   createFileRoute,
   redirect,
@@ -7,13 +6,21 @@ import {
 } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
-import { AppLogo } from "@/components/app-logo"
+import { AppBreadcrumb } from "@/components/app-breadcrumb"
+import { AppSidebar } from "@/components/app-sidebar"
+import { CommandPalette } from "@/components/command-palette"
+import { DeadlineChip } from "@/components/deadline-chip"
 import LocaleSwitcher from "@/components/locale-switcher"
 import { NotificationBell } from "@/components/notification-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { Button } from "@/components/ui/button"
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar"
+import { Toaster } from "@/components/ui/toast"
 import { api } from "@/lib/api"
-import { CABINET_PATHS, cabinetLabel, meQuery } from "@/lib/auth"
+import { meQuery } from "@/lib/auth"
 
 // Каркас кабинетов (ТЗ § 8). Кабинеты - client-only (ssr: false):
 // NFR-04 требует работы без JS только от публичного портала, а клиентский
@@ -29,9 +36,6 @@ export const Route = createFileRoute("/app")({
   },
   component: AppLayout,
 })
-
-/** Роли, которым доступен хотя бы один реестр отчетности (арх. § 9). */
-const REPORT_ROLES = ["organizer", "finance", "board", "admin"]
 
 function AppLayout() {
   const { user } = Route.useRouteContext()
@@ -52,51 +56,37 @@ function AppLayout() {
   }
 
   return (
-    <div className="flex min-h-svh flex-col">
-      <header className="border-b">
-        <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:flex-nowrap lg:gap-4">
-          <div className="flex min-w-0 flex-1 items-center gap-1">
-            <Link to="/app">
-              <AppLogo />
-            </Link>
-            <nav className="ml-4 flex min-w-0 items-center gap-1 overflow-x-auto">
-              {user.roles
-                .filter((role) => role in CABINET_PATHS)
-                .map((role) => (
-                  <Link
-                    key={role}
-                    to={CABINET_PATHS[role]}
-                    className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
-                  >
-                    {cabinetLabel(role)}
-                  </Link>
-                ))}
-              {/* Отчетность (арх. § 9): реестры ведут организатор,
-                  финансы, Правление и админ */}
-              {user.roles.some((role) => REPORT_ROLES.includes(role)) && (
-                <Link
-                  to="/app/reports"
-                  className="rounded-md px-3 py-1.5 text-sm hover:bg-muted"
-                >
-                  {m.reports_title()}
-                </Link>
-              )}
-            </nav>
+    <SidebarProvider>
+      <AppSidebar user={user} onSignOut={() => void logout()} />
+      {/* min-w-0: без него широкая таблица кабинета растягивает колонку
+          и уводит всю страницу в горизонтальную прокрутку */}
+      <SidebarInset className="min-w-0">
+        {/* Шапка вставки: где я нахожусь - слева, что требует внимания -
+            справа. Ближайший срок Правил (FR-1702) стоит рядом с
+            уведомлениями намеренно: до сих пор сроки были видны только внизу
+            дашборда, то есть ровно на одном экране из тридцати трех */}
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/95 px-3 supports-backdrop-filter:bg-background/80 supports-backdrop-filter:backdrop-blur sm:px-4">
+          <SidebarTrigger aria-label={m.nav_menu()} />
+          <div className="min-w-0 flex-1">
+            <AppBreadcrumb />
           </div>
-          <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-            <span className="hidden max-w-40 truncate text-sm text-muted-foreground md:inline">
-              {user.full_name}
-            </span>
+          <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+            <CommandPalette roles={user.roles} />
+            <DeadlineChip />
             <NotificationBell />
             <ThemeToggle />
             <LocaleSwitcher />
-            <Button variant="outline" size="sm" onClick={logout}>
-              {m.sign_out()}
-            </Button>
           </div>
+        </header>
+        {/* Ориентир <main> дает сам SidebarInset; внутренний блок - только
+            якорь для skip-ссылки (#main), вторым <main> ему быть нельзя */}
+        <div id="main" className="flex-1">
+          <Outlet />
         </div>
-      </header>
-      <Outlet />
-    </div>
+      </SidebarInset>
+      {/* Один менеджер тостов на все кабинеты; отправляют в него через
+          `lib/toast.ts` */}
+      <Toaster />
+    </SidebarProvider>
   )
 }

@@ -10,6 +10,7 @@ use serde_json::Value;
 use time::OffsetDateTime;
 use tou_domain::obligation::ObligationAction;
 use tou_domain::publication::{PublicRecordKind, PublicationFacts};
+use tou_domain::rule::RuleRejection;
 use uuid::Uuid;
 
 use crate::Db;
@@ -21,7 +22,7 @@ pub enum PublicationError {
     NotFound,
     /// Правило п. 92, 97 (домен) либо отказ БД (FR-1403, INV-076)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -33,7 +34,7 @@ fn map_rule(err: sqlx::Error) -> PublicationError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return PublicationError::Rejected(db_err.message().to_owned());
+        return PublicationError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     PublicationError::Db(err)
 }
@@ -184,15 +185,29 @@ pub async fn publish(
 }
 
 /// Реестр портала (FR-1403): материалы, доступные публично сейчас.
-pub async fn list_public(db: &Db) -> Result<Vec<PublicRecord>, sqlx::Error> {
+///
+/// Публикаций становится больше с каждым решением Правления, поэтому
+/// реестр идет курсором по паре «дата публикации + материал»: за один
+/// день их выкладывают пачкой, и одной даты для ключа мало.
+pub async fn list_public(
+    db: &Db,
+    after: Option<crate::RowCursor>,
+    limit: i64,
+) -> Result<crate::Page<PublicRecord>, sqlx::Error> {
+    let (after_at, after_id) = crate::RowCursor::parts(after);
     let rows = record_query!(
-        " WHERE unpublished_at IS NULL ORDER BY published_at DESC LIMIT $1",
-        crate::MAX_ROWS
+        " WHERE unpublished_at IS NULL
+            AND ($1::timestamptz IS NULL OR (published_at, id) < ($1, $2::uuid))
+          ORDER BY published_at DESC, id DESC LIMIT $3",
+        after_at,
+        after_id,
+        crate::probe_limit(limit)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "public_records::list_public");
-    rows.into_iter().map(PublicRecord::try_from).collect()
+    let page = crate::Page::probe(rows, limit);
+    crate::warn_if_truncated(page.truncated, "public_records::list_public");
+    page.try_map(PublicRecord::try_from)
 }
 
 pub async fn get(db: &Db, id: Uuid) -> Result<Option<PublicRecord>, sqlx::Error> {
@@ -265,7 +280,12 @@ impl TryFrom<PendingRow> for PendingPublication {
 
 /// Что ждет публикации: решения по публикуемым категориям (п. 87, 97),
 /// обоснования ставок договоров особого порядка и акты приемки (п. 92).
-pub async fn pending(db: &Db) -> Result<Vec<PendingPublication>, sqlx::Error> {
+///
+/// Курсора нет намеренно: список разгружается работой подразделения -
+/// опубликованный материал из него выбывает. Тысяча непубликованных
+/// материалов - это не длинный реестр, а несделанная работа, и признак
+/// усечения здесь сообщает именно о ней.
+pub async fn pending(db: &Db) -> Result<crate::Page<PendingPublication>, sqlx::Error> {
     // Столбцы под UNION планировщик считает потенциально NULL; сортировка
     // идет по номеру, потому что переименование меняет имя столбца
     let rows = sqlx::query_as!(
@@ -294,12 +314,13 @@ pub async fn pending(db: &Db) -> Result<Vec<PendingPublication>, sqlx::Error> {
          WHERE NOT EXISTS (SELECT 1 FROM core.public_records p
                            WHERE p.acceptance_id = a.id)
          ORDER BY 4 LIMIT $1"#,
-        crate::MAX_ROWS
+        crate::probe_limit(crate::MAX_ROWS)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "public_records::pending");
-    rows.into_iter().map(PendingPublication::try_from).collect()
+    let page = crate::Page::probe(rows, crate::MAX_ROWS);
+    crate::warn_if_truncated(page.truncated, "public_records::pending");
+    page.try_map(PendingPublication::try_from)
 }
 
 /// Снятие материалов с публичного доступа по истечении шести месяцев

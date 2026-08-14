@@ -8,7 +8,7 @@
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path as AxumPath, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,8 @@ use tou_db::auctions::{
 };
 use tou_domain::auction;
 use tou_domain::money::Money;
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, is_allowed};
+use tou_domain::role::Role;
 use tou_domain::turn::Progress;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -30,6 +31,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct AuctionDto {
@@ -216,9 +218,9 @@ pub async fn schedule_auction(
         .await
         .map_err(|err| match err {
             ScheduleError::LotNotFound => ApiError::NotFound,
-            ScheduleError::NoAdmittedBids => ApiError::RuleViolation(
-                "стартовая ставка не определена: по лоту нет допущенных заявок с ценой (п. 62)"
-                    .into(),
+            ScheduleError::NoAdmittedBids => ApiError::rule(
+                RuleViolation::AuctionStartPriceMissing,
+                "стартовая ставка не определена: по лоту нет допущенных заявок с ценой (п. 62)",
             ),
             ScheduleError::Db(db) => db.into(),
         })?;
@@ -273,10 +275,9 @@ pub async fn auction_room(
     let record = auctions::get(&state.db, id)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let my_application_id =
-        auctions::admitted_application_of(&state.db, user.id(), record.lot_id).await?;
+    let my_application_id = room_access(&state, &user, record.lot_id).await?;
     let bids = auctions::bids_of(&state.db, id, None).await?;
-    let current_max = bids.iter().map(|bid| bid.amount).max();
+    let current_max = current_max(&state, id).await?;
     let participants = auction_turns::participants(&state.db, id).await?;
 
     Ok(Json(AuctionRoomDto {
@@ -553,7 +554,11 @@ pub struct BidsParams {
     path = "/api/v1/auctions/{id}/bids",
     tag = "auctions",
     params(("id" = Uuid, Path, description = "Торги"), BidsParams),
-    responses((status = 200, description = "Лента ставок", body = [BidDto]))
+    responses(
+        (status = 200, description = "Лента ставок", body = [BidDto]),
+        (status = 403, description = "Участник не допущен к лоту этих торгов", body = crate::error::Problem),
+        (status = 404, description = "Торги не найдены", body = crate::error::Problem),
+    )
 )]
 pub async fn auction_bids(
     user: CurrentUser,
@@ -562,6 +567,12 @@ pub async fn auction_bids(
     crate::request::Query(params): crate::request::Query<BidsParams>,
 ) -> Result<Json<Vec<BidDto>>, ApiError> {
     user.require(Action::AuctionWatch)?;
+
+    // Догрузка отдает ту же ленту, что и снимок, - и закрыта тем же правилом
+    let record = auctions::get(&state.db, id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    room_access(&state, &user, record.lot_id).await?;
 
     let bids = auctions::bids_of(&state.db, id, params.after_seq).await?;
     Ok(Json(bids.into_iter().map(BidDto::from).collect()))
@@ -604,10 +615,9 @@ async fn room_snapshot(
     let record = auctions::get(&state.db, id)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let my_application_id =
-        auctions::admitted_application_of(&state.db, user.id(), record.lot_id).await?;
+    let my_application_id = room_access(state, user, record.lot_id).await?;
     let bids = auctions::bids_of(&state.db, id, None).await?;
-    let current_max = bids.iter().map(|bid| bid.amount).max();
+    let current_max = current_max(state, id).await?;
     let participants = auction_turns::participants(&state.db, id).await?;
 
     Ok(AuctionRoomDto {
@@ -625,17 +635,32 @@ async fn room_snapshot(
 
 /// WS-комната (FR-603): после подключения - снимок состояния, дальше поток
 /// событий. Маршрут вне OpenAPI: контракт кодогена описывает только HTTP.
+///
+/// Апгрейд сокета не проходит проверку источника, которую браузер делает за
+/// обычный запрос: CORS на upgrade не распространяется. Поэтому `Origin`
+/// сверяется здесь, а не слоем выше (см. [`AppState::ws_origin_allowed`]).
 pub async fn room_socket(
     user: CurrentUser,
     State(state): State<AppState>,
     AxumPath(id): AxumPath<Uuid>,
+    headers: HeaderMap,
     upgrade: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
     user.require(Action::AuctionWatch)?;
 
+    // Заголовок в не-UTF-8 - это не «заголовка нет»: сверить его не с чем,
+    // и апгрейд отклоняется наравне с чужим origin
+    let origin = headers
+        .get(header::ORIGIN)
+        .map(|value| value.to_str().unwrap_or_default());
+    if !state.ws_origin_allowed(origin) {
+        return Err(ApiError::Forbidden);
+    }
+
     let record = auctions::get(&state.db, id)
         .await?
         .ok_or(ApiError::NotFound)?;
+    room_access(&state, &user, record.lot_id).await?;
     let current_max = current_max(&state, id).await?;
     let snapshot = RoomEvent::State {
         auction: AuctionDto::new(record, current_max),
@@ -679,9 +704,43 @@ fn broadcast_state(state: &AppState, record: AuctionRecord, max: Option<Decimal>
     dto
 }
 
+/// Текущий максимум ленты (INV-063). Считает БД одним запросом: перебор
+/// выборки ставок и стоил дороже с каждой минутой торгов (NFR-02), и врал
+/// после `MAX_ROWS`-й ставки - подробности в [`auctions::max_amount`].
 async fn current_max(state: &AppState, auction_id: Uuid) -> Result<Option<Decimal>, ApiError> {
-    let bids = auctions::bids_of(&state.db, auction_id, None).await?;
-    Ok(bids.into_iter().map(|bid| bid.amount).max())
+    Ok(auctions::max_amount(&state.db, auction_id).await?)
+}
+
+/// Роль, ведущая процесс: любая, кроме участнической, которой политика
+/// открывает комнату (организатор, секретарь, комиссия). Им лента нужна
+/// по всем лотам - они ее и оглашают (п. 65).
+fn leads_process(roles: &[Role]) -> bool {
+    roles
+        .iter()
+        .any(|role| *role != Role::Participant && is_allowed(*role, Action::AuctionWatch))
+}
+
+/// Право видеть ленту комнаты. Участнику ее открывает допущенная заявка на
+/// лот, а не сама роль: `AuctionWatch` есть у любого зарегистрированного
+/// участника, и одного идентификатора торгов хватало, чтобы читать ставки
+/// и имена заявителей чужого лота в реальном времени. Несколько ролей
+/// доступа не отнимают - достаточно одной ведущей процесс.
+fn room_access_granted(roles: &[Role], my_application_id: Option<Uuid>) -> bool {
+    my_application_id.is_some() || leads_process(roles)
+}
+
+/// Проверка доступа к ленте и собственная заявка зрителя одним походом в БД:
+/// снимку комнаты она нужна и так (`my_application_id`).
+async fn room_access(
+    state: &AppState,
+    user: &CurrentUser,
+    lot_id: Uuid,
+) -> Result<Option<Uuid>, ApiError> {
+    let my_application_id = auctions::admitted_application_of(&state.db, user.id(), lot_id).await?;
+    if !room_access_granted(&user.roles, my_application_id) {
+        return Err(ApiError::Forbidden);
+    }
+    Ok(my_application_id)
 }
 
 /// Часы сервера (NFR-03): берутся из БД - единственного источника времени.
@@ -748,5 +807,42 @@ mod tests {
 
     fn sample_auction() -> AuctionDto {
         AuctionDto::new(sample_record(), None)
+    }
+
+    /// Участник без допущенной заявки на этот лот в комнату не входит:
+    /// иначе по одному идентификатору торгов он читал бы ставки и имена
+    /// заявителей чужого лота.
+    #[test]
+    fn participant_without_admitted_application_is_denied() {
+        assert!(!room_access_granted(&[Role::Participant], None));
+        assert!(room_access_granted(&[Role::Participant], Some(Uuid::nil())));
+    }
+
+    /// Роли, ведущие процесс, оглашают ленту (п. 65) - им нужна любая комната.
+    #[test]
+    fn process_roles_watch_any_room() {
+        for role in [Role::Organizer, Role::Secretary, Role::Commission] {
+            assert!(room_access_granted(&[role], None), "{role:?} ведет процесс");
+        }
+    }
+
+    /// Совмещение ролей не отнимает доступ: секретарь, у которого есть и
+    /// участническая роль, остается ведущим процесс.
+    #[test]
+    fn extra_participant_role_does_not_narrow_access() {
+        assert!(room_access_granted(
+            &[Role::Participant, Role::Secretary],
+            None
+        ));
+    }
+
+    /// Роль без права смотреть комнату вовсе (финансы, правление, админ)
+    /// ведущей процесс не считается - иначе проверка открыла бы ленту тем,
+    /// кому политика ее не давала.
+    #[test]
+    fn roles_without_watch_right_do_not_lead_the_process() {
+        for role in [Role::Finance, Role::Board, Role::Admin, Role::Guest] {
+            assert!(!leads_process(&[role]), "{role:?} не ведет торги");
+        }
     }
 }

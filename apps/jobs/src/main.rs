@@ -2,9 +2,10 @@
 //!
 //! Раз в интервал проверяет `core.obligations`: просроченные переводит в
 //! `overdue` и уведомляет носителей роли-исполнителя (эскалация, п. 54, 57,
-//! 73, 75). Перевод и выборка получателей идут одной транзакцией, а само
-//! уведомление однократно (`escalated_at`) - воркер можно запускать чаще,
-//! перезапускать и держать в нескольких экземплярах.
+//! 73, 75). Перевод, выборка получателей и запись уведомлений идут одной
+//! транзакцией слоя данных, а само уведомление однократно (`escalated_at`) -
+//! воркер можно запускать чаще, перезапускать и держать в нескольких
+//! экземплярах.
 //!
 //! Третьим проходом закрывает торги, у которых истек server-authoritative
 //! таймер (INV-066, п. 66, 68): ставку после `ends_at` БД и так не примет,
@@ -13,6 +14,8 @@
 //!
 //! Отдельным, редким расписанием сверяет hash-цепочку аудита (INV-A01):
 //! доказательность системы держится на ней, а разрыв виден только проверкой.
+//! Итог каждой сверки ложится в `audit.chain_checks` - иначе он остался бы
+//! строкой в журнале контейнера, которую некому прочитать (арх. v3 § 8).
 //!
 //! Вторым проходом снимает с публичного доступа протоколы, у которых истек
 //! шестимесячный срок (INV-076, п. 76): сам протокол остается в досье и в
@@ -23,9 +26,6 @@
 use std::time::Duration;
 
 use anyhow::Context;
-use serde_json::json;
-use tou_db::notifications::NewNotification;
-use tou_domain::notification::NotificationKind;
 
 /// Как часто проверять сроки. Сроки Правил измеряются днями, поэтому минута
 /// - с большим запасом; переопределяется для демо и тестов.
@@ -205,24 +205,28 @@ async fn finish_expired_auctions(db: &tou_db::Db) -> anyhow::Result<usize> {
     Ok(finished.len())
 }
 
-/// Один проход: сверка hash-цепочки аудита (INV-A01).
+/// Один проход: сверка hash-цепочки аудита (INV-A01) с записью результата.
 ///
 /// Разрыв - это не рядовая ошибка прохода, а признак того, что историю
-/// переписали в обход append-only. Поэтому он логируется отдельным уровнем
-/// и с явной формулировкой: запись в журнале - то, что увидит дежурный.
+/// переписали в обход append-only. Логом дело не ограничивается: наружу
+/// логи не уходят, а журнал контейнера ротируется, поэтому результат каждой
+/// сверки - и целой цепочки, и разорванной - остается в `audit.chain_checks`,
+/// откуда его читает кабинет админа. Молча пропущенная сверка (воркер стоял,
+/// БД была недоступна) видна там же по возрасту последней записи.
 async fn verify_audit_chain(db: &tou_db::Db) -> anyhow::Result<()> {
-    let status = tou_db::audit::verify_chain(db)
+    let check = tou_db::audit::run_chain_check(db)
         .await
         .context("сверка цепочки аудита")?;
 
-    if status.intact {
+    if check.intact {
         tracing::info!(
-            entries = status.entries,
+            entries = check.entries,
             "jobs: цепочка аудита цела (INV-A01)"
         );
     } else {
         tracing::error!(
-            entries = status.entries,
+            entries = check.entries,
+            broken_at = ?check.broken_at,
             "jobs: ЦЕПОЧКА АУДИТА РАЗОРВАНА (INV-A01) - журнал изменен в обход append-only"
         );
     }
@@ -230,44 +234,24 @@ async fn verify_audit_chain(db: &tou_db::Db) -> anyhow::Result<()> {
 }
 
 /// Один проход: просроченные сроки → уведомления исполнителям (FR-1702).
+///
+/// Отметка о просрочке и уведомления пишутся одной транзакцией слоя данных.
+/// Разложить их обратно на два шага здесь - значит вернуть потерю
+/// уведомлений при первом же сбое между ними: следующий проход такой срок
+/// уже не увидит.
 async fn escalate_overdue(db: &tou_db::Db) -> anyhow::Result<usize> {
-    let overdue = tou_db::obligations::take_overdue(db)
+    let escalated = tou_db::obligations::take_overdue(db)
         .await
-        .context("выборка просроченных обязательств")?;
-    if overdue.is_empty() {
+        .context("эскалация просроченных обязательств")?;
+    if escalated.is_empty() {
         return Ok(0);
     }
 
-    let items: Vec<NewNotification> = overdue
-        .iter()
-        .map(|item| NewNotification {
-            user_id: item.recipient_id,
-            payload: json!({
-                "obligation_id": item.obligation_id,
-                "action": item.action,
-                "rule_ref": item.rule_ref,
-                "tender_id": item.tender_id,
-                "tender_title": item.tender_title,
-                "due_at": item.due_at.unix_timestamp(),
-            }),
-        })
-        .collect();
-
-    // Актор записи - получатель: системного пользователя в модели нет,
-    // а доказательная база (FR-1302) требует непустого актора
-    for item in &items {
-        tou_db::notifications::insert(
-            db,
-            item.user_id,
-            NotificationKind::ObligationOverdue.as_str(),
-            std::slice::from_ref(item),
-        )
-        .await
-        .context("запись уведомления о просрочке")?;
-    }
-
-    tracing::info!(count = items.len(), "jobs: эскалация просроченных сроков");
-    Ok(items.len())
+    tracing::info!(
+        count = escalated.len(),
+        "jobs: эскалация просроченных сроков"
+    );
+    Ok(escalated.len())
 }
 
 /// Один проход: протоколы с истекшим шестимесячным сроком публичного

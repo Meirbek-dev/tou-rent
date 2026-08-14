@@ -1,10 +1,14 @@
+import { SearchXIcon } from "lucide-react"
 import { Link, createFileRoute } from "@tanstack/react-router"
+
 import { m } from "#/paraglide/messages"
+import { EmptyState } from "@/components/empty-state"
 import {
   ObjectStatusBadge,
   objectStatusLabel,
 } from "@/components/object-status-badge"
-import { SiteHeader } from "@/components/site-header"
+import { PublicShell } from "@/components/public-shell"
+import { RegistryPending } from "@/components/registry-skeleton"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -30,6 +34,7 @@ export const Route = createFileRoute("/objects/")({
     context.queryClient.ensureQueryData(objectsPageQuery(deps)),
   head: () => ({ meta: [{ title: `${m.objects_title()} - ToU Rent` }] }),
   component: ObjectsPage,
+  pendingComponent: () => <RegistryPending title={m.objects_title()} />,
 })
 
 const KIND_LABELS: Record<ObjectKind, () => string> = {
@@ -39,33 +44,49 @@ const KIND_LABELS: Record<ObjectKind, () => string> = {
   land_plot: m.object_kind_land_plot,
 }
 
+function Fact({
+  label,
+  value,
+  numeric = false,
+  wide = false,
+}: {
+  label: string
+  value: string
+  numeric?: boolean
+  wide?: boolean
+}) {
+  return (
+    <div className={cn("flex gap-2", wide && "sm:col-span-2")}>
+      <dt className="shrink-0 text-muted-foreground">{label}:</dt>
+      <dd className={cn(numeric && "tabular-nums")}>{value}</dd>
+    </div>
+  )
+}
+
 function ObjectCard({ object }: { object: ObjectDto }) {
   return (
-    <li className="flex flex-col gap-3 rounded-lg border p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="font-medium">{object.name}</h2>
-        <ObjectStatusBadge status={object.status} />
+    <li className="grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card shadow-xs">
+      <div className="flex flex-col gap-3 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold">{object.name}</h2>
+          <ObjectStatusBadge status={object.status} />
+        </div>
+        <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+          <Fact
+            label={m.object_kind_label()}
+            value={KIND_LABELS[object.kind]()}
+          />
+          <Fact
+            label={m.object_area_label()}
+            value={m.object_area_value({ area: trimZeros(object.area_m2) })}
+            numeric
+          />
+          <Fact label={m.object_address_label()} value={object.address} wide />
+          {object.floor_part != null && object.floor_part !== "" && (
+            <Fact label={m.object_floor_label()} value={object.floor_part} />
+          )}
+        </dl>
       </div>
-      <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-        <div className="flex gap-2">
-          <dt className="text-muted-foreground">{m.object_kind_label()}:</dt>
-          <dd>{KIND_LABELS[object.kind]()}</dd>
-        </div>
-        <div className="flex gap-2">
-          <dt className="text-muted-foreground">{m.object_area_label()}:</dt>
-          <dd>{m.object_area_value({ area: trimZeros(object.area_m2) })}</dd>
-        </div>
-        <div className="flex gap-2">
-          <dt className="text-muted-foreground">{m.object_address_label()}:</dt>
-          <dd>{object.address}</dd>
-        </div>
-        {object.floor_part != null && object.floor_part !== "" && (
-          <div className="flex gap-2">
-            <dt className="text-muted-foreground">{m.object_floor_label()}:</dt>
-            <dd>{object.floor_part}</dd>
-          </div>
-        )}
-      </dl>
     </li>
   )
 }
@@ -81,19 +102,20 @@ function ObjectsPage() {
     search.area_max !== undefined
 
   return (
-    <>
-      <SiteHeader />
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-10">
+    <PublicShell>
+      <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">
+          <h1 className="text-3xl font-semibold tracking-tight">
             {m.objects_title()}
           </h1>
-          <p className="text-muted-foreground">{m.objects_subtitle()}</p>
+          <p className="max-w-[68ch] text-muted-foreground">
+            {m.objects_subtitle()}
+          </p>
         </div>
 
         {/* Нативная GET-форма: состояние фильтров - в query-параметрах URL */}
         <form method="get" aria-label={m.objects_filter_legend()}>
-          <fieldset className="flex flex-wrap items-end gap-3 rounded-lg border p-4">
+          <fieldset className="grid grid-cols-1 items-end gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 sm:gap-4 lg:grid-cols-[minmax(0,11rem)_minmax(0,11rem)_minmax(0,16rem)_minmax(0,1fr)_auto]">
             <legend className="sr-only">{m.objects_filter_legend()}</legend>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="objects-status">
@@ -103,7 +125,6 @@ function ObjectsPage() {
                 id="objects-status"
                 name="status"
                 defaultValue={search.status ?? ""}
-                className="min-w-44"
               >
                 <NativeSelectOption value="">
                   {m.objects_filter_all_statuses()}
@@ -124,7 +145,6 @@ function ObjectsPage() {
                 id="objects-kind"
                 name="kind"
                 defaultValue={search.kind ?? ""}
-                className="min-w-44"
               >
                 <NativeSelectOption value="">
                   {m.objects_filter_all_kinds()}
@@ -137,39 +157,39 @@ function ObjectsPage() {
               </NativeSelect>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="objects-area-min">
-                {m.objects_filter_area_min()}
-              </Label>
-              <Input
-                id="objects-area-min"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                name="area_min"
-                defaultValue={search.area_min ?? ""}
-                className="w-32"
-              />
+            {/* Границы площади - одна ячейка: это один фильтр, а не два */}
+            <div className="grid grid-cols-2 gap-2 sm:col-span-2 lg:col-span-1">
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="objects-area-min">
+                  {m.objects_filter_area_min()}
+                </Label>
+                <Input
+                  id="objects-area-min"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  name="area_min"
+                  defaultValue={search.area_min ?? ""}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="objects-area-max">
+                  {m.objects_filter_area_max()}
+                </Label>
+                <Input
+                  id="objects-area-max"
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  name="area_max"
+                  defaultValue={search.area_max ?? ""}
+                />
+              </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="objects-area-max">
-                {m.objects_filter_area_max()}
-              </Label>
-              <Input
-                id="objects-area-max"
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                name="area_max"
-                defaultValue={search.area_max ?? ""}
-                className="w-32"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
               <Label htmlFor="objects-q">
                 {m.objects_filter_query_label()}
               </Label>
@@ -178,24 +198,46 @@ function ObjectsPage() {
                 type="search"
                 name="q"
                 defaultValue={search.q ?? ""}
-                className="min-w-56"
               />
             </div>
 
-            <Button type="submit">{m.tenders_filter_submit()}</Button>
-            {filtered && (
-              <Link
-                to="/objects"
-                className={cn(buttonVariants({ variant: "ghost" }))}
-              >
-                {m.tenders_filter_reset()}
-              </Link>
-            )}
+            <div className="flex items-center gap-2 sm:col-span-2 lg:col-span-1">
+              <Button type="submit">{m.tenders_filter_submit()}</Button>
+              {filtered && (
+                <Link
+                  to="/objects"
+                  className={cn(buttonVariants({ variant: "ghost" }))}
+                >
+                  {m.tenders_filter_reset()}
+                </Link>
+              )}
+            </div>
           </fieldset>
         </form>
 
+        <p className="text-sm text-muted-foreground">
+          {m.registry_found()}:{" "}
+          <span className="font-medium text-foreground tabular-nums">
+            {page.items.length}
+          </span>
+        </p>
+
         {page.items.length === 0 ? (
-          <p className="py-8 text-muted-foreground">{m.objects_empty()}</p>
+          <EmptyState
+            icon={SearchXIcon}
+            title={m.objects_empty_title()}
+            description={m.objects_empty()}
+            {...(filtered && {
+              action: (
+                <Link
+                  to="/objects"
+                  className={cn(buttonVariants({ variant: "outline" }))}
+                >
+                  {m.tenders_filter_reset()}
+                </Link>
+              ),
+            })}
+          />
         ) : (
           <ul className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {page.items.map((object) => (
@@ -206,28 +248,36 @@ function ObjectsPage() {
 
         <nav
           aria-label={m.tenders_next_page()}
-          className="flex items-center gap-3"
+          className="flex flex-wrap items-center gap-3 border-t pt-6"
         >
-          {search.after !== undefined && (
-            <Link
-              to="/objects"
-              search={{ ...search, after: undefined }}
-              className={cn(buttonVariants({ variant: "outline" }))}
-            >
-              {m.tenders_first_page()}
-            </Link>
-          )}
-          {page.next_after != null && (
-            <Link
-              to="/objects"
-              search={{ ...search, after: page.next_after }}
-              className={cn(buttonVariants({ variant: "outline" }))}
-            >
-              {m.tenders_next_page()}
-            </Link>
-          )}
+          <p className="text-sm text-muted-foreground">
+            {m.pagination_on_page()}:{" "}
+            <span className="font-medium text-foreground tabular-nums">
+              {page.items.length}
+            </span>
+          </p>
+          <div className="ml-auto flex items-center gap-3">
+            {search.after !== undefined && (
+              <Link
+                to="/objects"
+                search={{ ...search, after: undefined }}
+                className={cn(buttonVariants({ variant: "outline" }))}
+              >
+                {m.tenders_first_page()}
+              </Link>
+            )}
+            {page.next_after != null && (
+              <Link
+                to="/objects"
+                search={{ ...search, after: page.next_after }}
+                className={cn(buttonVariants({ variant: "outline" }))}
+              >
+                {m.tenders_next_page()}
+              </Link>
+            )}
+          </div>
         </nav>
-      </main>
-    </>
+      </div>
+    </PublicShell>
   )
 }

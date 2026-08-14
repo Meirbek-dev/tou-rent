@@ -22,7 +22,7 @@ use time::OffsetDateTime;
 use tou_db::publications::{self, ProtocolRecord, PublicationError};
 use tou_db::tenders;
 use tou_domain::notification::NotificationKind;
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use tou_domain::publication::{DossierKind, DossierSubject};
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -111,22 +111,40 @@ pub async fn tender_protocols(
     ))
 }
 
+/// Протоколы кабинета участника (ТЗ § 7).
+///
+/// `next_after` всегда `null`: выборку ограничивает участие одного человека,
+/// продолжения у нее нет. Поле остается, чтобы усекаемые реестры отвечали
+/// одинаково и клиенту не приходилось помнить, у какого из них какая форма.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MyProtocolPage {
+    pub items: Vec<ProtocolDto>,
+    pub next_after: Option<String>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
 /// Копии протоколов в кабинете участника (FR-703, п. 56): по всем тендерам,
 /// где участник подавал заявку, независимо от публичного срока.
 #[utoipa::path(
     get,
     path = "/api/v1/protocols/my",
     tag = "publications",
-    responses((status = 200, description = "Протоколы моих тендеров", body = [ProtocolDto]))
+    responses((status = 200, description = "Протоколы моих тендеров", body = MyProtocolPage))
 )]
 pub async fn my_protocols(
     user: CurrentUser,
     State(state): State<AppState>,
-) -> Result<Json<Vec<ProtocolDto>>, ApiError> {
+) -> Result<Json<MyProtocolPage>, ApiError> {
     user.require(Action::ApplicationReadOwn)?;
 
-    let records = publications::list_for_participant(&state.db, user.id()).await?;
-    Ok(Json(records.into_iter().map(protocol_dto).collect()))
+    let page = publications::list_for_participant(&state.db, user.id()).await?;
+    let truncated = page.truncated;
+    Ok(Json(MyProtocolPage {
+        items: page.into_iter().map(protocol_dto).collect(),
+        next_after: None,
+        truncated,
+    }))
 }
 
 /// Публикация протокола (FR-702, п. 75): публичный доступ на шесть месяцев
@@ -282,10 +300,10 @@ fn dossier_dto(item: tou_db::publications::DossierItem) -> DossierItemDto {
     }
 }
 
-/// Досье ведут те же, кто ведет процесс: организатор и секретарь комиссии.
+/// Досье ведут те же, кто ведет процесс: организатор и секретарь комиссии
+/// (`Compound::TENDER_PROCESS_READ`).
 fn require_dossier_access(user: &CurrentUser) -> Result<(), ApiError> {
-    user.require(Action::TenderManage)
-        .or_else(|_| user.require(Action::ApplicationReadAll))
+    user.require_any(Compound::TENDER_PROCESS_READ)
 }
 
 /// Досье тендера (FR-1602, п. 16): состав собирается автоматически.
@@ -333,10 +351,9 @@ pub async fn special_dossier(
 }
 
 /// Досье решения ведут те, кто его готовит: подразделение (п. 89) и
-/// Правление (п. 90).
+/// Правление (п. 90) - `Compound::SPECIAL_DECISION_ACCESS`.
 fn require_special_dossier_access(user: &CurrentUser) -> Result<(), ApiError> {
-    user.require(Action::BoardDecide)
-        .or_else(|_| user.require(Action::TenderManage))
+    user.require_any(Compound::SPECIAL_DECISION_ACCESS)
 }
 
 /// Выгрузка досье тендера архивом (FR-1602): файлы по папкам видов

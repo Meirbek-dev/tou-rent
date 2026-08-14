@@ -17,9 +17,9 @@ import ru from "#/../messages/ru.json" with { type: "json" }
 type Messages = Record<string, string>
 
 const messages: Record<"ru" | "kk" | "en", Messages> = {
-  ru: ru as Messages,
-  kk: kk as Messages,
-  en: en as Messages,
+  ru: ru,
+  kk: kk,
+  en: en,
 }
 
 /** `$schema` - служебное поле файла сообщений, не строка интерфейса. */
@@ -28,20 +28,35 @@ const keys = (locale: Messages): string[] =>
 
 /**
  * Совпадение с ru допустимо там, где перевода не существует: бренд, символ
- * нумерации, заимствованный термин «тендер» (одинаков в ru и kk) и единица
- * измерения «{area} м²».
+ * нумерации, заимствованный термин «тендер» (одинаков в ru и kk), единица
+ * измерения «{area} м²» и обозначения множителей Прил. 4 (Кт, Кк, ... —
+ * предметные символы формулы FR-201, кириллица общая для ru и kk).
  */
 const SAME_AS_RU_ALLOWED = new Set([
   "app_name",
   "lot_seq",
   "tender_card_title",
+  "tender_id_label",
   "object_area_value",
+  "rate_coef_kt",
+  "rate_coef_kk",
+  "rate_coef_ksk",
+  "rate_coef_kr",
+  "rate_coef_kvd",
+  "rate_coef_kopf",
+  "rate_coef_kfu",
+  "rate_coef_ksots",
+  "rate_coef_k",
+  "rate_coef_kn",
+  "rate_coef_kv",
 ])
 
 /** Файлы публичного портала: страницы без авторизации и их компоненты. */
 const PUBLIC_SOURCES = [
   "src/routes/index.tsx",
   "src/routes/how-to.tsx",
+  "src/routes/land-plots.tsx",
+  "src/routes/special-orders.tsx",
   "src/routes/objects/index.tsx",
   "src/components/object-status-badge.tsx",
   "src/routes/tenders/index.tsx",
@@ -49,10 +64,14 @@ const PUBLIC_SOURCES = [
   "src/routes/auth/login.tsx",
   "src/routes/auth/register.tsx",
   "src/components/site-header.tsx",
+  "src/components/site-footer.tsx",
   "src/components/theme-toggle.tsx",
   "src/components/tender-list-item.tsx",
   "src/components/tender-status-badge.tsx",
+  "src/components/deadline-block.tsx",
+  "src/components/registry-skeleton.tsx",
   "src/components/locale-switcher.tsx",
+  "src/lib/how-to-steps.ts",
 ]
 
 /** Ключи, которые реально использует публичный портал. */
@@ -66,17 +85,21 @@ function publicKeys(): string[] {
       if (key !== undefined && key in messages.ru) used.add(key)
     }
   }
-  return [...used].sort()
+  return [...used].toSorted()
 }
 
 /** Параметры сообщения: `{count}`, `{months}` и т.д. */
 const params = (value: string): string[] =>
-  [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? "").sort()
+  [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? "").toSorted()
 
 describe("i18n: полнота переводов (NFR-01, G14)", () => {
   it("файлы локалей лежат рядом с проектом inlang", () => {
     const dir = join(import.meta.dirname, "..", "..", "messages")
-    expect(readdirSync(dir).sort()).toEqual(["en.json", "kk.json", "ru.json"])
+    expect(readdirSync(dir).toSorted()).toEqual([
+      "en.json",
+      "kk.json",
+      "ru.json",
+    ])
   })
 
   for (const locale of ["kk", "en"] as const) {

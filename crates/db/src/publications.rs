@@ -10,6 +10,7 @@
 use time::OffsetDateTime;
 use tou_domain::obligation::ObligationAction;
 use tou_domain::publication::{DossierKind, PublicationFacts};
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -21,14 +22,24 @@ pub enum PublicationError {
     NotFound,
     /// Правило п. 75–76 (домен) либо отказ БД (INV-076)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 impl From<tou_domain::publication::PublicationError> for PublicationError {
     fn from(err: tou_domain::publication::PublicationError) -> Self {
-        PublicationError::Rejected(err.to_string())
+        // Истекший срок публичного доступа - INV-076, остальное - FR-702
+        let rule = match &err {
+            tou_domain::publication::PublicationError::AccessExpired => {
+                RuleViolation::PublicationRetention
+            }
+            tou_domain::publication::PublicationError::NoDocument
+            | tou_domain::publication::PublicationError::AlreadyPublished => {
+                RuleViolation::ProtocolPublication
+            }
+        };
+        PublicationError::Rejected(RuleRejection::new(rule, err.to_string()))
     }
 }
 
@@ -39,7 +50,7 @@ fn map_rule(err: sqlx::Error) -> PublicationError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return PublicationError::Rejected(db_err.message().to_owned());
+        return PublicationError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     PublicationError::Db(err)
 }
@@ -106,21 +117,26 @@ pub async fn list_for_tender(db: &Db, tender_id: Uuid) -> Result<Vec<ProtocolRec
 
 /// Протоколы тендеров, в которых участвовал пользователь (FR-703, п. 56):
 /// копия доступна участнику независимо от публичного срока.
+///
+/// Курсора нет: выборку ограничивает участие одного человека - протоколов
+/// у тендера единицы, а тендеров у участника десятки. Потолок здесь -
+/// защита от невероятного, и признак усечения сообщает именно о нем.
 pub async fn list_for_participant(
     db: &Db,
     participant_id: Uuid,
-) -> Result<Vec<ProtocolRecord>, sqlx::Error> {
+) -> Result<crate::Page<ProtocolRecord>, sqlx::Error> {
     let rows = protocol_query!(
         " WHERE EXISTS (SELECT 1 FROM core.applications a
                         WHERE a.tender_id = p.tender_id AND a.participant_id = $1)
           ORDER BY p.generated_at DESC LIMIT $2",
         participant_id,
-        crate::MAX_ROWS
+        crate::probe_limit(crate::MAX_ROWS)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "publications::list_for_participant");
-    Ok(rows)
+    let page = crate::Page::probe(rows, crate::MAX_ROWS);
+    crate::warn_if_truncated(page.truncated, "publications::list_for_participant");
+    Ok(page)
 }
 
 /// Публикация протокола (FR-702, п. 75). Срок публичного доступа считает БД

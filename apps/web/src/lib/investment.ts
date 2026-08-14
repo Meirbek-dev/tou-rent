@@ -1,8 +1,8 @@
 import { queryOptions } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
-import { getLocale } from "#/paraglide/runtime"
 import { api } from "@/lib/api"
+import { serverLabel } from "@/lib/server-label"
 
 import type { components } from "@tou/api-client"
 
@@ -61,10 +61,7 @@ export function attachmentLabel(
 ): string {
   const attachment = attachments.find((item) => item.code === code)
   if (attachment === undefined) return code
-  const locale = getLocale()
-  if (locale === "kk") return attachment.label_kk ?? attachment.label_ru
-  if (locale === "en") return attachment.label_en ?? attachment.label_ru
-  return attachment.label_ru
+  return serverLabel(attachment)
 }
 
 /** Подпись способа продления (п. 93). */

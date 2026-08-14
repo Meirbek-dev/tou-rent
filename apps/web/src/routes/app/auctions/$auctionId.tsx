@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from "react"
-import { createFileRoute } from "@tanstack/react-router"
+import { Link, createFileRoute } from "@tanstack/react-router"
 import {
   useMutation,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
+import { ConfirmAction } from "@/components/confirm-action"
+import { PageHeader } from "@/components/page-header"
+import { PageShell } from "@/components/page-shell"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,6 +25,9 @@ import {
 } from "@/lib/auctions"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
+import { notifySuccess } from "@/lib/toast"
+import { cn } from "@/lib/utils"
+import { ArrowLeftIcon } from "lucide-react"
 
 import type {
   AuctionDto,
@@ -35,14 +42,43 @@ import type {
 export const Route = createFileRoute("/app/auctions/$auctionId")({
   loader: ({ context, params }) =>
     context.queryClient.ensureQueryData(auctionRoomQuery(params.auctionId)),
+  head: () => ({ meta: [{ title: `${m.auction_room_title()} - ToU Rent` }] }),
   component: AuctionRoomPage,
 })
 
-const STATUS_LABELS: Record<string, () => string> = {
+/**
+ * Состояния комнаты (`core.auction_status`). Союза в контракте нет - `status`
+ * приходит строкой, - поэтому перечень объявлен здесь: он же дает компилятору
+ * повод сломаться, когда состояние добавят, а подписи или тон забудут.
+ */
+const AUCTION_STATUSES = [
+  "scheduled",
+  "running",
+  "finished",
+  "cancelled",
+] as const
+
+type AuctionStatus = (typeof AUCTION_STATUSES)[number]
+
+const STATUS_LABELS: Record<AuctionStatus, () => string> = {
   scheduled: m.auction_status_scheduled,
   running: m.auction_status_running,
   finished: m.auction_status_finished,
   cancelled: m.auction_status_cancelled,
+}
+
+const STATUS_TONES: Record<
+  AuctionStatus,
+  "success" | "neutral" | "info" | "destructive"
+> = {
+  scheduled: "neutral",
+  running: "success",
+  finished: "info",
+  cancelled: "destructive",
+}
+
+function isKnownStatus(status: string): status is AuctionStatus {
+  return (AUCTION_STATUSES as readonly string[]).includes(status)
 }
 
 function AuctionRoomPage() {
@@ -73,27 +109,52 @@ function AuctionRoomPage() {
       queryKey: auctionRoomQuery(auctionId).queryKey,
     })
 
+  // Тендера в снимке комнаты нет (`AuctionDto` несет только лот), поэтому
+  // назад ведем в свою заявку - она у торгующегося всегда есть, - а зрителя
+  // в кабинет. Адрес объявлен `string`: у `Link` строковый адрес допустим,
+  // а шаблонный литерал в союз маршрутов не попадает
+  const backTo: string =
+    room.my_application_id == null
+      ? "/app"
+      : `/app/participant/applications/${room.my_application_id}`
+
   return (
-    <main className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-6 py-8">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h1 className="font-heading text-2xl font-semibold">
-            {m.auction_room_title()}
-          </h1>
-          <p className="text-muted-foreground">
-            {m.auction_lot({
-              seq: auction.lot_seq,
-              purpose: auction.lot_purpose,
-            })}
-          </p>
-        </div>
-        <span
-          data-testid="auction-status"
-          className="rounded-full border px-3 py-1 text-sm"
-        >
-          {STATUS_LABELS[auction.status]?.() ?? auction.status}
-        </span>
-      </header>
+    <PageShell>
+      <PageHeader
+        // Комната открывается ссылкой из заявки или из кабинета и не имеет
+        // своей крошки в шапке каркаса: без обратной ссылки выйти отсюда
+        // можно было только кнопкой браузера
+        breadcrumb={
+          <Link
+            to={backTo}
+            className="inline-flex w-fit items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:underline"
+          >
+            <ArrowLeftIcon aria-hidden="true" className="size-4" />
+            {room.my_application_id == null
+              ? m.back_to_cabinet()
+              : m.auction_back_to_application()}
+          </Link>
+        }
+        title={m.auction_room_title()}
+        description={m.auction_lot({
+          seq: auction.lot_seq,
+          purpose: auction.lot_purpose,
+        })}
+        badge={
+          <Badge
+            data-testid="auction-status"
+            variant={
+              isKnownStatus(auction.status)
+                ? STATUS_TONES[auction.status]
+                : "neutral"
+            }
+          >
+            {isKnownStatus(auction.status)
+              ? STATUS_LABELS[auction.status]()
+              : auction.status}
+          </Badge>
+        }
+      />
 
       {/*
         Обрыв связи виден участнику (R-17): без этого экран показывал
@@ -109,7 +170,7 @@ function AuctionRoomPage() {
         className={
           connection === "online"
             ? "sr-only"
-            : "rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+            : "rounded-lg border border-destructive/25 bg-destructive/10 px-4 py-2 text-sm text-destructive"
         }
       >
         {connection === "online"
@@ -119,7 +180,9 @@ function AuctionRoomPage() {
             : m.auction_connection_offline()}
       </p>
 
-      <section className="grid gap-4 rounded-lg border p-4 sm:grid-cols-4">
+      <Countdown auction={auction} serverTime={room.server_time} />
+
+      <section className="grid gap-4 rounded-lg border p-4 sm:grid-cols-3">
         <Figure label={m.auction_starting_bid()}>
           {formatTenge(auction.starting_bid)}
         </Figure>
@@ -130,9 +193,6 @@ function AuctionRoomPage() {
           {auction.current_max == null
             ? m.auction_no_bids()
             : formatTenge(auction.current_max)}
-        </Figure>
-        <Figure label={m.auction_time_left()} testId="time-left">
-          <Countdown auction={auction} serverTime={room.server_time} />
         </Figure>
       </section>
 
@@ -186,7 +246,9 @@ function AuctionRoomPage() {
                 className="flex flex-wrap items-baseline justify-between gap-2 rounded-md border px-3 py-2 text-sm"
               >
                 <span className="font-medium">{bid.applicant_name}</span>
-                <span data-testid="bid-amount">{formatTenge(bid.amount)}</span>
+                <span data-testid="bid-amount" className="tabular-nums">
+                  {formatTenge(bid.amount)}
+                </span>
                 <span
                   className="text-xs text-muted-foreground"
                   suppressHydrationWarning
@@ -198,7 +260,7 @@ function AuctionRoomPage() {
           </ol>
         )}
       </section>
-    </main>
+    </PageShell>
   )
 }
 
@@ -214,14 +276,23 @@ function Figure({
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
-      <span data-testid={testId} className="text-lg font-semibold">
+      <span data-testid={testId} className="text-lg font-semibold tabular-nums">
         {children}
       </span>
     </div>
   )
 }
 
-/** Обратный отсчет по часам сервера (FR-602): клиент только отображает. */
+/** Меньше минуты до конца - счет идет на ходы, а не на минуты. */
+const URGENT_MS = 60_000
+
+/**
+ * Обратный отсчет по часам сервера (FR-602): клиент только отображает.
+ *
+ * Это единственное число экрана, которое меняется само и по которому
+ * принимают решение прямо сейчас, - поэтому оно крупное и стоит отдельным
+ * блоком. Сноской в ряду из четырех подписей его на ходу не прочитать.
+ */
 function Countdown({
   auction,
   serverTime,
@@ -239,17 +310,47 @@ function Countdown({
   }, [])
 
   const endsAt = auction.ends_at
-  if (endsAt == null) return <>{m.auction_not_started()}</>
+  const running = auction.status === "running" && endsAt != null
   // У завершенных торгов отсчет останавливается: время окончания уже наступило
-  if (auction.status !== "running") return <>-</>
+  const left = running ? Math.max(0, Date.parse(endsAt) - (now - skew)) : null
+  const urgent = left !== null && left <= URGENT_MS
 
-  const left = Math.max(0, Date.parse(endsAt) - (now - skew))
-  const minutes = Math.floor(left / 60_000)
-  const seconds = Math.floor((left % 60_000) / 1_000)
+  const value =
+    left === null
+      ? endsAt == null
+        ? m.auction_not_started()
+        : "-"
+      : `${Math.floor(left / 60_000)}:${String(
+          Math.floor((left % 60_000) / 1_000)
+        ).padStart(2, "0")}`
+
   return (
-    <span suppressHydrationWarning>
-      {minutes}:{String(seconds).padStart(2, "0")}
-    </span>
+    <section
+      aria-labelledby="auction-countdown"
+      className={cn(
+        "flex flex-col items-center gap-1 rounded-xl border px-6 py-6",
+        urgent
+          ? "border-amber-500/40 bg-amber-500/10"
+          : "border-border bg-muted/50"
+      )}
+    >
+      <h2
+        id="auction-countdown"
+        className="text-xs font-medium tracking-wide text-muted-foreground uppercase"
+      >
+        {m.auction_time_left()}
+      </h2>
+      <span
+        data-testid="time-left"
+        suppressHydrationWarning
+        className={cn(
+          "text-4xl leading-none font-semibold tabular-nums sm:text-6xl",
+          urgent && "text-amber-700 dark:text-amber-400"
+        )}
+      >
+        {value}
+      </span>
+    </section>
   )
 }
 
@@ -313,7 +414,10 @@ function Circle({
 }) {
   const absent = useMutation({
     mutationFn: (applicationId: string) => markAbsent(auctionId, applicationId),
-    onSuccess: onDone,
+    onSuccess: async () => {
+      notifySuccess(m.auction_absent_marked())
+      await onDone()
+    },
   })
 
   return (
@@ -327,7 +431,7 @@ function Circle({
             key={participant.application_id}
             className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-3 py-2 text-sm"
           >
-            <span className="text-muted-foreground">
+            <span className="text-muted-foreground tabular-nums">
               {participant.turn_order}
             </span>
             <span className="font-medium">{participant.applicant_name}</span>
@@ -343,16 +447,28 @@ function Circle({
             {isChair &&
               participant.status === "active" &&
               room.auction.status !== "finished" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="ml-auto"
-                  data-testid="mark-absent"
-                  disabled={absent.isPending}
-                  onClick={() => absent.mutate(participant.application_id)}
-                >
-                  {m.auction_mark_absent()}
-                </Button>
+                // Неявка необратима: оглашается первоначальное предложение,
+                // и вернуть участника в круг уже нечем (п. 70)
+                <ConfirmAction
+                  title={m.auction_absent_confirm_title()}
+                  description={m.auction_absent_confirm_description({
+                    name: participant.applicant_name,
+                    amount: formatTenge(participant.initial_price),
+                  })}
+                  confirmLabel={m.auction_mark_absent()}
+                  onConfirm={() => absent.mutate(participant.application_id)}
+                  trigger={
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto"
+                      data-testid="mark-absent"
+                      disabled={absent.isPending}
+                    >
+                      {m.auction_mark_absent()}
+                    </Button>
+                  }
+                />
               )}
           </li>
         ))}
@@ -405,13 +521,17 @@ function BidForm({
     onSuccess: async () => {
       bidId.current = crypto.randomUUID()
       setAmount("")
+      notifySuccess(m.auction_bid_placed())
       await onPlaced()
     },
   })
 
   const pass = useMutation({
     mutationFn: () => passTurn(auctionId),
-    onSuccess: onPlaced,
+    onSuccess: async () => {
+      notifySuccess(m.auction_passed())
+      await onPlaced()
+    },
   })
 
   return (
@@ -483,15 +603,24 @@ function ChairPanel({
 
   const start = useMutation({
     mutationFn: () => startAuction(auctionId),
-    onSuccess: onDone,
+    onSuccess: async () => {
+      notifySuccess(m.auction_started())
+      await onDone()
+    },
   })
   const extend = useMutation({
     mutationFn: () => extendAuction(auctionId),
-    onSuccess: onDone,
+    onSuccess: async () => {
+      notifySuccess(m.auction_extended())
+      await onDone()
+    },
   })
   const finish = useMutation({
     mutationFn: () => finishAuction(auctionId, early),
-    onSuccess: onDone,
+    onSuccess: async () => {
+      notifySuccess(m.auction_finished())
+      await onDone()
+    },
   })
 
   const error = start.error ?? extend.error ?? finish.error
@@ -521,14 +650,27 @@ function ChairPanel({
         >
           {m.auction_extend()}
         </Button>
-        <Button
-          variant="outline"
-          data-testid="finish-auction"
-          onClick={() => finish.mutate()}
-          disabled={auction.status !== "running" || finish.isPending}
-        >
-          {m.auction_finish()}
-        </Button>
+        {/* Завершение подводит итог: победитель и второе место фиксируются,
+            ставок больше не принимают - отыграть это нечем (FR-606) */}
+        <ConfirmAction
+          title={m.auction_finish_confirm_title()}
+          description={
+            early
+              ? m.auction_finish_confirm_early()
+              : m.auction_finish_confirm_description()
+          }
+          confirmLabel={m.auction_finish()}
+          onConfirm={() => finish.mutate()}
+          trigger={
+            <Button
+              variant="outline"
+              data-testid="finish-auction"
+              disabled={auction.status !== "running" || finish.isPending}
+            >
+              {m.auction_finish()}
+            </Button>
+          }
+        />
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"

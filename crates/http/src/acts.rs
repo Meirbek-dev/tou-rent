@@ -27,6 +27,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
+use crate::upload;
 
 const TEMPLATE: &str = include_str!("templates/act.typ");
 
@@ -134,7 +135,7 @@ pub async fn create_act(
     Path(id): Path<Uuid>,
     Json(body): Json<CreateActRequest>,
 ) -> Result<(StatusCode, Json<ActDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ActManage)?;
 
     let kind: ActKind = body
         .kind
@@ -264,25 +265,27 @@ pub async fn upload_act_scan(
     Path(id): Path<Uuid>,
     mut multipart: Multipart,
 ) -> Result<Json<ActDto>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ActManage)?;
 
-    let mut stored: Option<String> = None;
-    while let Some(field) = multipart.next_field().await.map_err(ApiError::internal)? {
-        let filename = field.file_name().unwrap_or("act.pdf").to_owned();
-        let bytes = field.bytes().await.map_err(ApiError::internal)?;
-        if bytes.is_empty() {
-            continue;
-        }
-        let key = format!("acts/{id}/signed-{filename}");
-        state
-            .storage
-            .put(&ObjectPath::from(key.as_str()), PutPayload::from(bytes))
-            .await
-            .map_err(ApiError::internal)?;
-        stored = Some(key);
-    }
+    // `attach_scan` - это UPDATE без проверки существования: по несуществующему
+    // id он молча обновлял ноль строк, а объект к этому моменту уже лежал
+    // в бакете под Object Lock (INV-042) навсегда. Поэтому акт ищется до `put`
+    acts::get(&state.db, id).await?.ok_or(ApiError::NotFound)?;
 
-    let key = stored.ok_or_else(|| ApiError::Validation("файл не приложен".to_owned()))?;
+    // Прежний разбор клал в бакет каждую часть формы, а ключ в БД записывал
+    // от последней - остальные становились несносимыми сиротами
+    let file = upload::take_file(&mut multipart, "file", "act.pdf", upload::MAX_FILE_BYTES).await?;
+
+    let key = format!("acts/{id}/signed-{}", file.filename);
+    state
+        .storage
+        .put(
+            &ObjectPath::from(key.as_str()),
+            PutPayload::from_bytes(file.bytes),
+        )
+        .await
+        .map_err(ApiError::internal)?;
+
     acts::attach_scan(&state.db, user.id(), id, &key)
         .await
         .map_err(act_error)?;

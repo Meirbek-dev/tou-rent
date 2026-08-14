@@ -22,6 +22,7 @@ pub mod error;
 pub mod evasion;
 pub mod extract;
 pub mod failure;
+pub mod idempotency;
 pub mod investment;
 pub mod land;
 pub mod ledger;
@@ -44,6 +45,7 @@ pub mod state;
 pub mod storage;
 pub mod tenders;
 pub mod timeout;
+pub mod upload;
 
 use std::sync::LazyLock;
 
@@ -60,6 +62,18 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 pub use state::AppState;
+
+/// Размер страницы реестра по умолчанию (ТЗ § 7).
+const PAGE_LIMIT: i64 = 50;
+
+/// Размер страницы, о котором просит клиент, - в допустимых пределах.
+///
+/// Верхняя граница - сотня, как у уже курсорных маршрутов: страница крупнее
+/// экрана бессмысленна, а `limit=1000000` в чужих руках - это тот же обход
+/// потолка [`tou_db::MAX_ROWS`], только через контракт.
+fn page_limit(requested: Option<i64>) -> i64 {
+    requested.unwrap_or(PAGE_LIMIT).clamp(1, 100)
+}
 
 /// Базовые схемы контракта; пути и схемы операций собирает [`api_router`] -
 /// маршрут без записи в OpenAPI (и наоборот) невозможен по построению.
@@ -88,6 +102,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(auth::login))
         .routes(routes!(auth::logout))
         .routes(routes!(auth::me))
+        .routes(routes!(auth::change_password))
         .routes(routes!(oidc::auth_providers))
         .routes(routes!(oidc::oidc_login))
         .routes(routes!(oidc::oidc_callback))
@@ -95,6 +110,9 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::list_users))
         .routes(routes!(admin::grant_role))
         .routes(routes!(admin::revoke_role))
+        .routes(routes!(admin::reset_password))
+        .routes(routes!(admin::set_user_active))
+        .routes(routes!(admin::audit_chain))
         .routes(routes!(objects::list_objects, objects::create_object))
         .routes(routes!(
             objects::get_object,
@@ -295,7 +313,20 @@ pub fn router(state: AppState) -> Router {
         .route("/api/v1/auctions/{id}/ws", get(auctions::room_socket))
         .fallback(|| async { error::ApiError::NotFound })
         .method_not_allowed_fallback(|| async { error::ApiError::MethodNotAllowed })
+        // Идемпотентность мутаций (ТЗ § 7): внутри CSRF - запрос, не прошедший
+        // проверку токена, не должен занимать ключ в журнале
+        .layer(middleware::from_fn_with_state(
+            state.idempotency.clone(),
+            idempotency::enforce,
+        ))
         .layer(middleware::from_fn(csrf::enforce))
+        // Ограничение дорогих маршрутов (NFR-07): снаружи CSRF - обращение,
+        // отбитое проверкой токена, считается так же, как обычное, а вот
+        // успеть выполнить печать или выгрузку до счетчика нельзя
+        .layer(middleware::from_fn_with_state(
+            state.rate_limit.clone(),
+            ratelimit::enforce,
+        ))
         // Потолок времени обработки (NFR-02): снаружи CSRF, чтобы зависнуть
         // не мог и он, но внутри метрик - отказ по таймауту должен быть виден
         .layer(middleware::from_fn(timeout::enforce))
@@ -352,7 +383,7 @@ mod tests {
     fn schema_type_names_are_unique_across_modules() {
         use std::collections::BTreeMap;
 
-        let sources: [(&str, &str); 40] = [
+        let sources: [(&str, &str); 42] = [
             ("acts", include_str!("acts.rs")),
             ("admin", include_str!("admin.rs")),
             ("admission", include_str!("admission.rs")),
@@ -374,6 +405,7 @@ mod tests {
             ("evasion", include_str!("evasion.rs")),
             ("extract", include_str!("extract.rs")),
             ("failure", include_str!("failure.rs")),
+            ("idempotency", include_str!("idempotency.rs")),
             ("investment", include_str!("investment.rs")),
             ("land", include_str!("land.rs")),
             ("ledger", include_str!("ledger.rs")),
@@ -396,6 +428,7 @@ mod tests {
             ("storage", include_str!("storage.rs")),
             ("tenders", include_str!("tenders.rs")),
             ("timeout", include_str!("timeout.rs")),
+            ("upload", include_str!("upload.rs")),
         ];
 
         // Новый модуль обязан попасть в перечень: иначе проверка тихо

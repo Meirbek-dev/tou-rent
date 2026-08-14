@@ -22,6 +22,16 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Семантические статусы доменных бейджей (tender/application/object):
+        // те же токены, что и в панелях, но в стоковом визуальном языке
+        // бейджа - подложка-заливка на 10-15 %, как у destructive выше
+        success:
+          "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 [a]:hover:bg-emerald-500/20",
+        warning:
+          "bg-amber-500/15 text-amber-700 dark:text-amber-400 [a]:hover:bg-amber-500/25",
+        info: "bg-primary/10 text-primary [a]:hover:bg-primary/20",
+        neutral:
+          "bg-muted text-muted-foreground dark:bg-muted/50 [a]:hover:bg-muted/80",
       },
     },
     defaultVariants: {

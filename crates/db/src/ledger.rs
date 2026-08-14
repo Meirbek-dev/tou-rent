@@ -10,6 +10,7 @@ use rust_decimal::Decimal;
 use time::OffsetDateTime;
 use tou_domain::ledger::{AccountKind, LedgerOp, RefundReason};
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -20,7 +21,7 @@ pub enum LedgerError {
     NotFound,
     /// Отказ правила: сумма, срок п. 23, баланс INV-DB-05, статус заявки
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -32,7 +33,7 @@ fn map_rule(err: sqlx::Error) -> LedgerError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return LedgerError::Rejected(db_err.message().to_owned());
+        return LedgerError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     LedgerError::Db(err)
 }
@@ -108,8 +109,19 @@ pub async fn accounts(db: &Db, kind: Option<AccountKind>) -> Result<Vec<AccountR
     .await
 }
 
-/// Выписка по счету (FR-1001): все проводки в хронологическом порядке.
-pub async fn entries(db: &Db, account_id: Uuid) -> Result<Vec<EntryRow>, sqlx::Error> {
+/// Выписка по счету (FR-1001): проводки в хронологическом порядке, страницей.
+///
+/// Журнал счета растет и не сокращается: проводка - факт, ее не удаляют.
+/// Поэтому выписка идет курсором вперед по паре «момент проводки + строка»:
+/// у проводок одной транзакции `occurred_at` совпадает, и курсора по одному
+/// времени не хватило бы.
+pub async fn entries(
+    db: &Db,
+    account_id: Uuid,
+    after: Option<crate::RowCursor>,
+    limit: i64,
+) -> Result<crate::Page<EntryRow>, sqlx::Error> {
+    let (after_at, after_id) = crate::RowCursor::parts(after);
     let rows = sqlx::query_as!(
         EntryRow,
         r#"SELECT e.id, e.op::text AS "op!", e.debit, e.credit, e.rule_ref,
@@ -117,14 +129,19 @@ pub async fn entries(db: &Db, account_id: Uuid) -> Result<Vec<EntryRow>, sqlx::E
                   u.full_name AS "recorded_by_name?", e.occurred_at
            FROM core.ledger_entries e
            LEFT JOIN core.users u ON u.id = e.recorded_by
-           WHERE e.account_id = $1 ORDER BY e.occurred_at, e.id LIMIT $2"#,
+           WHERE e.account_id = $1
+             AND ($2::timestamptz IS NULL OR (e.occurred_at, e.id) > ($2, $3::uuid))
+           ORDER BY e.occurred_at, e.id LIMIT $4"#,
         account_id,
-        crate::MAX_ROWS
+        after_at,
+        after_id,
+        crate::probe_limit(limit)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "ledger::entries");
-    Ok(rows)
+    let page = crate::Page::probe(rows, limit);
+    crate::warn_if_truncated(page.truncated, "ledger::entries");
+    Ok(page)
 }
 
 /// Счет взноса по заявке (кабинет участника: «мой взнос»).
@@ -174,24 +191,28 @@ pub async fn confirm_fee(
         let in_time = row.in_time;
 
         if status == "withdrawn" {
-            return Err(LedgerError::Rejected(
-                "заявка отозвана - взнос по ней не подтверждается (п. 43–45)".to_owned(),
-            ));
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::GuaranteeDeposit,
+                "заявка отозвана - взнос по ней не подтверждается (п. 43–45)",
+            )));
         }
         // Неполный взнос - основание отклонения заявки (п. 52.2), а не «почти оплата»
         if amount != guarantee_fee {
-            return Err(LedgerError::Rejected(format!(
-                "сумма {amount} не равна гарантийному взносу лота {guarantee_fee} - \
-                 неполное внесение является основанием отклонения (п. 25, 52.2)"
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::GuaranteeDeposit,
+                format!(
+                    "сумма {amount} не равна гарантийному взносу лота {guarantee_fee} - \
+                     неполное внесение является основанием отклонения (п. 25, 52.2)"
+                ),
             )));
         }
         // Деньги должны прийти не позже чем за два рабочих дня до первого этапа
         if opening_at.is_some() && in_time == Some(false) {
-            return Err(LedgerError::Rejected(
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::GuaranteeDeposit,
                 "поступление позже установленного срока: взнос вносится не позднее чем \
-                 за два рабочих дня до первого этапа (п. 23)"
-                    .to_owned(),
-            ));
+                 за два рабочих дня до первого этапа (п. 23)",
+            )));
         }
 
         let account_id = sqlx::query_scalar!(
@@ -216,9 +237,10 @@ pub async fn confirm_fee(
         .fetch_one(&mut *tx)
         .await?;
         if already > Decimal::ZERO {
-            return Err(LedgerError::Rejected(
-                "поступление взноса по этой заявке уже подтверждено".to_owned(),
-            ));
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::GuaranteeDeposit,
+                "поступление взноса по этой заявке уже подтверждено",
+            )));
         }
 
         sqlx::query!(
@@ -277,9 +299,10 @@ pub async fn refund_fee(
         let account = account.ok_or(LedgerError::NotFound)?;
 
         if account.balance <= Decimal::ZERO {
-            return Err(LedgerError::Rejected(
-                "на счете нет остатка: возвращать нечего".to_owned(),
-            ));
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::LedgerBalanceNegative,
+                "на счете нет остатка: возвращать нечего",
+            )));
         }
 
         let rule_ref = sqlx::query_scalar!(
@@ -335,14 +358,16 @@ pub async fn record(
     note: Option<&str>,
 ) -> Result<AccountRow, LedgerError> {
     if matches!(op, LedgerOp::ReceiptConfirmed | LedgerOp::Refund) {
-        return Err(LedgerError::Rejected(
-            "поступление и возврат оформляются своими операциями (FR-405, FR-1002)".to_owned(),
-        ));
+        return Err(LedgerError::Rejected(RuleRejection::new(
+            RuleViolation::LedgerEntry,
+            "поступление и возврат оформляются своими операциями (FR-405, FR-1002)",
+        )));
     }
     if amount <= Decimal::ZERO {
-        return Err(LedgerError::Rejected(
-            "сумма проводки должна быть положительной".to_owned(),
-        ));
+        return Err(LedgerError::Rejected(RuleRejection::new(
+            RuleViolation::LedgerEntry,
+            "сумма проводки должна быть положительной",
+        )));
     }
 
     crate::with_actor(db, actor, async |tx| {
@@ -484,9 +509,10 @@ pub async fn pay_deposit_on(
         let (monthly_rate, tenant_id) = (contract.monthly_rate, contract.tenant_id);
 
         if !contract.registered {
-            return Err(LedgerError::Rejected(
-                "депозит вносится по заключенному договору (п. 126, 132)".to_owned(),
-            ));
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::ContractDeposit,
+                "депозит вносится по заключенному договору (п. 126, 132)",
+            )));
         }
 
         let account_id = open_deposit_account_on(&mut *tx, contract_id, tenant_id).await?;
@@ -494,8 +520,11 @@ pub async fn pay_deposit_on(
         let due = monthly_rate - balance;
 
         if amount != due {
-            return Err(LedgerError::Rejected(format!(
-                "депозит равен месячной плате (п. 132): к внесению {due}, получено {amount}"
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::ContractDeposit,
+                format!(
+                    "депозит равен месячной плате (п. 132): к внесению {due}, получено {amount}"
+                ),
             )));
         }
 
@@ -557,9 +586,10 @@ pub async fn refund_deposit_on(
         .map_err(map_rule)?;
 
         if !returned {
-            return Err(LedgerError::Rejected(
-                "депозит возвращается после возврата объекта по акту (п. 136)".to_owned(),
-            ));
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::ContractDeposit,
+                "депозит возвращается после возврата объекта по акту (п. 136)",
+            )));
         }
 
         let account_id = sqlx::query_scalar!(
@@ -574,9 +604,10 @@ pub async fn refund_deposit_on(
 
         let balance = balance_of(&mut *tx, account_id).await.map_err(map_rule)?;
         if balance <= Decimal::ZERO {
-            return Err(LedgerError::Rejected(
-                "на депозитном счете нет остатка к возврату".to_owned(),
-            ));
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::LedgerBalanceNegative,
+                "на депозитном счете нет остатка к возврату",
+            )));
         }
 
         sqlx::query!(

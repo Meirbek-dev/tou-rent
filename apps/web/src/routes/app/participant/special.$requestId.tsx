@@ -22,6 +22,7 @@ import {
   specialStatusLabel,
 } from "@/lib/special"
 import { cn } from "@/lib/utils"
+import { UPLOAD_ACCEPT, uploadError } from "@/lib/validation"
 
 import type { SpecialRequest } from "@/lib/special"
 
@@ -37,6 +38,9 @@ export const Route = createFileRoute("/app/participant/special/$requestId")({
       throw notFound()
     }
   },
+  head: () => ({
+    meta: [{ title: `${m.special_requests_title()} - ToU Rent` }],
+  }),
   component: SpecialRequestPage,
 })
 
@@ -53,6 +57,10 @@ function SpecialRequestCard({ request }: { request: SpecialRequest }) {
   const queryClient = useQueryClient()
   const fileInput = useRef<HTMLInputElement>(null)
   const [documentCode, setDocumentCode] = useState("")
+  // Ограничения досье (INV-042, `upload.rs`): белый список форматов и потолок
+  // 10 МБ. Форма проверяет их до отправки - отказ после выгрузки файла
+  // целиком заявитель ждал впустую
+  const [fileError, setFileError] = useState<string | undefined>(undefined)
   const { data: categories } = useSuspenseQuery(specialCategoriesQuery)
   const category = categories.find((item) => item.code === request.category)
 
@@ -99,6 +107,7 @@ function SpecialRequestCard({ request }: { request: SpecialRequest }) {
     },
     onSuccess: async () => {
       if (fileInput.current) fileInput.current.value = ""
+      setFileError(undefined)
       await refresh()
     },
   })
@@ -251,6 +260,9 @@ function SpecialRequestCard({ request }: { request: SpecialRequest }) {
             className="mt-4 flex flex-wrap items-end gap-3"
             onSubmit={(event) => {
               event.preventDefault()
+              const problem = uploadError(fileInput.current?.files?.[0])
+              setFileError(problem)
+              if (problem !== undefined) return
               upload.mutate()
             }}
           >
@@ -275,11 +287,29 @@ function SpecialRequestCard({ request }: { request: SpecialRequest }) {
             </div>
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="special-file">{m.file_upload_label()}</Label>
-              <Input id="special-file" type="file" required ref={fileInput} />
+              <Input
+                id="special-file"
+                type="file"
+                required
+                accept={UPLOAD_ACCEPT}
+                aria-invalid={fileError !== undefined}
+                ref={fileInput}
+                onChange={() => {
+                  const file = fileInput.current?.files?.[0]
+                  setFileError(
+                    file === undefined ? undefined : uploadError(file)
+                  )
+                }}
+              />
             </div>
             <Button type="submit" disabled={upload.isPending}>
               {m.file_upload_submit()}
             </Button>
+            {fileError !== undefined && (
+              <p role="alert" className="w-full text-sm text-destructive">
+                {fileError}
+              </p>
+            )}
             {upload.isError && (
               <p role="alert" className="w-full text-sm text-destructive">
                 {problemMessage(upload.error)}

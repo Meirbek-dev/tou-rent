@@ -8,6 +8,7 @@
 pub use sqlx;
 
 use sqlx::Executor as _;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 pub mod acts;
@@ -36,6 +37,7 @@ pub mod publications;
 pub mod refdata;
 pub mod reports;
 pub mod results;
+mod rule;
 pub mod seed;
 pub mod special;
 pub mod tenders;
@@ -58,9 +60,92 @@ pub type Db = sqlx::PgPool;
 ///
 /// Тысяча - заведомо больше любого разумного экрана и заведомо меньше того,
 /// что способно уронить процесс. Достижение потолка не проходит молча:
-/// [`warn_if_capped`] пишет предупреждение, и это сигнал, что выборке пора
-/// курсор, а не что данные потерялись.
+/// выборка возвращает [`Page`] с поднятым `truncated`, и этот признак
+/// уезжает клиенту вместе с данными.
 pub const MAX_ROWS: i64 = 1_000;
+
+/// Страница выборки: строки и признак того, что показана не вся выборка.
+///
+/// Одного потолка [`MAX_ROWS`] мало: ответ обрезан, а выглядит полным.
+/// Предупреждения в лог тоже недостаточно - наблюдаемости у бэкенда нет
+/// (арх. § 8), и первым нехватку записей заметит не разработчик, а тот,
+/// кто по этому реестру считает. Поэтому факт усечения перестал быть
+/// событием лога и стал частью ответа.
+///
+/// Узнается он «пробной» строкой: запрос берет на одну больше, чем отдает
+/// ([`probe_limit`]). Лишняя строка никуда не показывается - она только
+/// доказывает, что за отданными есть еще.
+pub struct Page<T> {
+    rows: Vec<T>,
+    /// Показана не вся выборка: за последней отданной строкой в БД есть еще
+    pub truncated: bool,
+}
+
+impl<T> Page<T> {
+    /// Разбор пробной выборки: запрошено `limit + 1` строк, отдается `limit`.
+    pub(crate) fn probe(mut rows: Vec<T>, limit: i64) -> Self {
+        let limit = limit.max(0) as usize;
+        let truncated = rows.len() > limit;
+        rows.truncate(limit);
+        Self { rows, truncated }
+    }
+
+    /// Перекладка строк в доменные значения; признак усечения переносится.
+    pub(crate) fn try_map<U, E>(self, f: impl FnMut(T) -> Result<U, E>) -> Result<Page<U>, E> {
+        Ok(Page {
+            rows: self.rows.into_iter().map(f).collect::<Result<_, E>>()?,
+            truncated: self.truncated,
+        })
+    }
+}
+
+/// Строки страницы читаются как срез: `len`, `iter`, `last` и остальное
+/// достается без обертки-посредника, а признак усечения не теряется по
+/// дороге, как терялся бы у голого `Vec`.
+impl<T> std::ops::Deref for Page<T> {
+    type Target = [T];
+
+    fn deref(&self) -> &Self::Target {
+        &self.rows
+    }
+}
+
+impl<T> IntoIterator for Page<T> {
+    type Item = T;
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.rows.into_iter()
+    }
+}
+
+/// Сколько строк просить у БД, чтобы отличить полную выборку от обрезанной.
+pub(crate) fn probe_limit(limit: i64) -> i64 {
+    limit.saturating_add(1)
+}
+
+/// Курсор выборки, упорядоченной по времени: момент события и строка.
+///
+/// Одного момента мало: у двух строк он совпадает чаще, чем кажется -
+/// проводки одной транзакции ложатся с одинаковым `occurred_at`. Курсор
+/// по голому времени такую пару либо потеряет, либо покажет дважды,
+/// поэтому в ключ идет пара «момент + идентификатор», уникальная всегда.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RowCursor {
+    pub at: OffsetDateTime,
+    pub id: Uuid,
+}
+
+impl RowCursor {
+    pub fn new(at: OffsetDateTime, id: Uuid) -> Self {
+        Self { at, id }
+    }
+
+    /// Части курсора для sqlx: макрос не умеет разбирать структуру сам.
+    pub(crate) fn parts(cursor: Option<Self>) -> (Option<OffsetDateTime>, Option<Uuid>) {
+        (cursor.map(|c| c.at), cursor.map(|c| c.id))
+    }
+}
 
 /// Размер пачки для проходов фонового воркера (FR-1702, INV-076).
 ///
@@ -74,12 +159,18 @@ pub const BATCH_ROWS: i64 = 200;
 /// Предупреждение, когда выборка уперлась в [`MAX_ROWS`].
 ///
 /// Тихое усечение хуже отсутствия потолка: ответ выглядит полным, а он
-/// обрезан. Поэтому в лог уходит и место, и размер.
+/// обрезан. Поэтому в лог уходит и место, и размер. Лог здесь - не
+/// единственный получатель факта: выборки, отдающие [`Page`], говорят
+/// об усечении самому клиенту.
 pub(crate) fn warn_if_capped(rows: usize, query: &'static str) {
-    if rows as i64 >= MAX_ROWS {
+    warn_if_truncated(rows as i64 >= MAX_ROWS, query);
+}
+
+/// То же предупреждение для выборок, узнающих об усечении пробной строкой.
+pub(crate) fn warn_if_truncated(truncated: bool, query: &'static str) {
+    if truncated {
         tracing::warn!(
             query,
-            rows,
             limit = MAX_ROWS,
             "выборка уперлась в потолок строк - показана только часть, нужна страничная выдача"
         );

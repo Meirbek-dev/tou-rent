@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.id AS obligation_id, o.action, o.rule_ref, o.tender_id,\n                  t.title AS \"tender_title?\", o.due_at, rg.user_id AS recipient_id\n           FROM core.obligations o\n           JOIN core.role_grants rg ON rg.role = o.assignee_role\n           JOIN core.users u ON u.id = rg.user_id AND u.is_active\n           LEFT JOIN core.tenders t ON t.id = o.tender_id\n           WHERE o.id = ANY($1)\n           ORDER BY o.due_at, rg.user_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "obligation_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "action",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "rule_ref",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "tender_title?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "due_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "recipient_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ba7694542bc31b8fc32108656a3007089ca4be39bfeb1c3ed7945a07e808a641"
+}

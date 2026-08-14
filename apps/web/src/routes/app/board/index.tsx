@@ -6,8 +6,12 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query"
+import { ScrollTextIcon } from "lucide-react"
 import { m } from "#/paraglide/messages"
-import { MyDeadlines } from "@/components/my-deadlines"
+import { EmptyState } from "@/components/empty-state"
+import { PageHeader } from "@/components/page-header"
+import { Panel } from "@/components/panel"
+import { StatCard } from "@/components/stat-card"
 import { DossierPanel } from "@/components/dossier-panel"
 import { InvestmentContracts } from "@/components/investment-contracts"
 import { LandBoardPanel } from "@/components/land-panels"
@@ -16,9 +20,11 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
+import { useNowMs } from "@/hooks/use-now"
 import { api } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
+import { formatRelative } from "@/lib/relative-time"
 import {
   investmentAttachmentsQuery,
   investmentContractsQuery,
@@ -43,25 +49,45 @@ export const Route = createFileRoute("/app/board/")({
       context.queryClient.ensureQueryData(investmentAttachmentsQuery),
     ])
   },
+  head: () => ({ meta: [{ title: `${m.cabinet_board()} - ToU Rent` }] }),
   component: BoardHome,
 })
 
 function BoardHome() {
   const { data: requests } = useSuspenseQuery(pendingSpecialRequestsQuery)
 
+  // Ждущие решения - те, у которых есть заключение подразделения (INV-090):
+  // остальные показываются, но хода за Правлением пока нет
+  const awaiting = requests.filter(
+    (request) => request.status === "under_review"
+  )
+
   return (
     <div className="flex flex-col gap-6">
-      <MyDeadlines />
+      {/* Имя кабинета - заголовок страницы: из макета он ушел вместе
+          с прежней шапкой (каркас называет кабинет группой боковой
+          навигации) */}
+      <PageHeader
+        title={m.cabinet_board()}
+        description={m.board_dash_subtitle()}
+      />
 
-      <section aria-labelledby="board-requests">
-        <h2
-          id="board-requests"
-          className="mb-3 font-heading text-lg font-semibold"
-        >
-          {m.board_requests_title()}
-        </h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label={m.board_stat_awaiting()}
+          value={awaiting.length}
+          urgency={awaiting.length > 0 ? "soon" : "normal"}
+        />
+        <StatCard label={m.board_stat_pending()} value={requests.length} />
+      </div>
+
+      <Panel title={m.board_requests_title()} titleAs="h2">
         {requests.length === 0 ? (
-          <p className="text-muted-foreground">{m.board_requests_empty()}</p>
+          <EmptyState
+            icon={ScrollTextIcon}
+            title={m.board_requests_empty()}
+            description={m.board_requests_empty_hint()}
+          />
         ) : (
           <ul className="flex flex-col gap-4">
             {requests.map((request) => (
@@ -71,7 +97,7 @@ function BoardHome() {
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
 
       {/* FR-1204 (п. 93): продление инвестиционного договора - за Правлением */}
       <InvestmentContracts roles={["board"]} />
@@ -84,6 +110,7 @@ function BoardHome() {
 
 function RequestCard({ request }: { request: SpecialRequest }) {
   const queryClient = useQueryClient()
+  const nowMs = useNowMs()
   const [decision, setDecision] = useState("grant")
   const [rationale, setRationale] = useState("")
   // INV-086 (п. 86, 97): конкуренция закрывает часть решений - перечень
@@ -144,12 +171,21 @@ function RequestCard({ request }: { request: SpecialRequest }) {
             {request.category_label} ({request.category_rule_ref})
           </span>
           <span
-            className="text-sm text-muted-foreground"
+            className="text-sm text-muted-foreground tabular-nums"
             suppressHydrationWarning
           >
             {m.application_submitted_at()}:{" "}
             {formatDateTime(request.submitted_at)}
           </span>
+          {/* Сколько заявка уже лежит: подсчет от «сейчас» появляется только
+              после монтирования, иначе разметка сервера разошлась бы с
+              браузерной (NFR-03). Никаких сроков сверх этого payload не
+              несет - и выдумывать их здесь нельзя */}
+          {nowMs !== null && (
+            <span className="text-sm text-muted-foreground">
+              {formatRelative(request.submitted_at, nowMs)}
+            </span>
+          )}
         </div>
         <p className="font-medium">
           {m.special_card_title({ id: request.id.slice(0, 8) })}

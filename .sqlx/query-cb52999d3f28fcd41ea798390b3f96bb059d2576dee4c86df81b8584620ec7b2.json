@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.contracts\n           (object_id, tenant_id, monthly_rate, status, lease_period, reg_number, registered_at)\n         VALUES ($1, $2, 1000, 'active',\n                 tstzrange(now(), now() + interval '365 days'), $3, now())\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cb52999d3f28fcd41ea798390b3f96bb059d2576dee4c86df81b8584620ec7b2"
+}

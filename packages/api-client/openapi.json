@@ -101,6 +101,38 @@
         }
       }
     },
+    "/api/v1/admin/audit/chain": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Состояние hash-цепочки аудита (INV-A01, FR-1601).",
+        "description": "Отвечает не «цела ли цепочка прямо сейчас», а «что показала последняя\nсверка и когда она была»: пересчет журнала по запросу из браузера дал бы\nпроизвольному нажатию кнопки полный проход по всему аудиту. Сверку ведет\nфоновый воркер по расписанию, здесь - чтение его следа. Пустой ответ\n(`checked_at = null`) значит, что сверок не было вовсе, - для дежурного\nэто такой же сигнал, как и разрыв.",
+        "operationId": "audit_chain",
+        "responses": {
+          "200": {
+            "description": "Состояние цепочки аудита",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditChainDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
@@ -149,6 +181,137 @@
           },
           "403": {
             "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/active": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Деактивация и возврат учетной записи (W-07).",
+        "description": "Снятие ролей уволившемуся не отключает саму запись: она входит, видит\nпубличную часть и остается субъектом своих прошлых заявок. Отключение\nзакрывает оба пути сразу - и вход, и уже открытую сессию (`CurrentUser`\nсверяет `is_active` на каждом запросе).\n\nУдаления записи здесь нет и не будет: к ней привязаны поданные заявки,\nдоговоры и депозит, и «удалить пользователя» означало бы разорвать\nдоказательную базу.",
+        "operationId": "set_user_active",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "Пользователь",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetActiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Состояние изменено"
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Отключение самого себя",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/users/{user_id}/password-reset": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Сброс пароля админом (W-07, FR-1503).",
+        "description": "Канала доставки у контура 1 нет (почта - T41), поэтому «ссылка на\nвосстановление» здесь была бы выдумкой. Честный вариант без канала один:\nсистему генерирует одноразовый пароль сама, показывает его админу ровно\nв ответе на нажатие кнопки и больше нигде - ни в логе, ни в БД, ни в\nаудите (там от него остается только отпечаток, см. миграцию\n`20260811000000_user_account_audit.sql`). Дальше пароль передает человек\nчеловеку тем каналом, которым он и так подтверждает личность заявителя,\nа владелец учетной записи меняет его через `/api/v1/auth/password`.\n\nПароль не придумывает админ: придуманный человеком он и слаб, и известен\nпридумавшему заранее - тогда «сброс» ничем не отличается от «узнать\nчужой пароль». Сгенерированный известен админу ровно так же, но только\nдо первой смены, и владелец видит по журналу, что запись трогали.",
+        "operationId": "reset_password",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "description": "Пользователь",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Одноразовый пароль выдан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PasswordResetDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Пользователь не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "У записи нет локального пароля",
             "content": {
               "application/json": {
                 "schema": {
@@ -974,6 +1137,26 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "Участник не допущен к лоту этих торгов",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Торги не найдены",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       },
@@ -1390,7 +1573,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Выход: сессия уничтожается в Redis.",
+        "summary": "Выход: сессия уничтожается в Redis, CSRF-токен гасится в браузере.",
         "operationId": "logout",
         "responses": {
           "204": {
@@ -1528,6 +1711,61 @@
           },
           "404": {
             "description": "Провайдер не настроен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Смена собственного пароля из сессии (W-07).",
+        "description": "До нее вернуть себе доступ было нечем: маршрута восстановления нет, а\nсменить скомпрометированный пароль изнутри было негде.",
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Пароль изменен"
+          },
+          "401": {
+            "description": "Текущий пароль неверен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Данные не прошли проверку",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Слишком много попыток",
             "content": {
               "application/json": {
                 "schema": {
@@ -1708,10 +1946,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ContractDto"
-                  }
+                  "$ref": "#/components/schemas/MyContractPage"
                 }
               }
             }
@@ -2597,16 +2832,39 @@
         ],
         "summary": "Реестр уклонистов (FR-505, п. 52.4, 120): их заявки в будущих тендерах\nотклоняются автоматически - реестр показывает, кого это касается.",
         "operationId": "evader_registry",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор следующей страницы - значение `next_after` предыдущей",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Реестр уклонистов",
+            "description": "Страница реестра уклонистов",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/EvaderDto"
-                  }
+                  "$ref": "#/components/schemas/EvaderPage"
                 }
               }
             }
@@ -3510,18 +3768,39 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор следующей страницы - значение `next_after` предыдущей",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Проводки счета",
+            "description": "Страница проводок счета",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/LedgerEntryDto"
-                  }
+                  "$ref": "#/components/schemas/LedgerEntryPage"
                 }
               }
             }
@@ -4151,10 +4430,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ObligationDto"
-                  }
+                  "$ref": "#/components/schemas/ObligationPage"
                 }
               }
             }
@@ -4175,10 +4451,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProtocolDto"
-                  }
+                  "$ref": "#/components/schemas/MyProtocolPage"
                 }
               }
             }
@@ -4285,16 +4558,39 @@
         ],
         "summary": "Реестр публикаций особого порядка (FR-1403, п. 90, 92, 97): портал\nпоказывает материалы, доступные сейчас - снятые по истечении шести\nмесяцев остаются только в досье (INV-076).",
         "operationId": "list_public_records",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор следующей страницы - значение `next_after` предыдущей",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
-            "description": "Публикации особого порядка",
+            "description": "Страница публикаций особого порядка",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PublicRecordDto"
-                  }
+                  "$ref": "#/components/schemas/PublicRecordPage"
                 }
               }
             }
@@ -4374,10 +4670,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/PendingPublicationDto"
-                  }
+                  "$ref": "#/components/schemas/PendingPublicationPage"
                 }
               }
             }
@@ -5057,11 +5350,35 @@
                 "null"
               ]
             }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор следующей страницы - значение `next_after` предыдущей",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Реестр",
+            "description": "Страница реестра",
             "content": {
               "application/json": {
                 "schema": {
@@ -5081,7 +5398,7 @@
             }
           },
           "422": {
-            "description": "Неизвестный реестр или дата",
+            "description": "Неизвестный реестр, дата или курсор",
             "content": {
               "application/json": {
                 "schema": {
@@ -8040,7 +8357,7 @@
       },
       "ApplicantDetailsDto": {
         "type": "object",
-        "description": "Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020).",
+        "description": "Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020).\n\nТот же тип принимает сведения заявителя особого порядка (Прил. 3,\n`special.rs`), поэтому предметная проверка реквизитов здесь - единственная\nна оба маршрута.",
         "required": [
           "name",
           "id_number",
@@ -8451,6 +8768,50 @@
           }
         }
       },
+      "AuditChainDto": {
+        "type": "object",
+        "properties": {
+          "broken_at": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "`audit.log.id` первой разошедшейся записи; заполнен только при разрыве"
+          },
+          "checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Момент последней сверки; `null` - сверок еще не было ни одной"
+          },
+          "entries": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Записей в журнале на момент последней сверки"
+          },
+          "intact": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Итог последней сверки; `null` - сверок еще не было"
+          },
+          "last_intact_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Момент последней сверки, на которой цепочка сходилась"
+          }
+        }
+      },
       "AuthProvidersDto": {
         "type": "object",
         "properties": {
@@ -8687,6 +9048,23 @@
           },
           "required": {
             "type": "boolean"
+          }
+        }
+      },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "description": "Текущий пароль - обязателен: без него угнанная сессия становится\nугнанной учетной записью"
+          },
+          "new_password": {
+            "type": "string",
+            "description": "Те же границы, что и при регистрации"
           }
         }
       },
@@ -9479,6 +9857,7 @@
           "rule_violation",
           "provider_unavailable",
           "too_many_requests",
+          "idempotency_in_flight",
           "timeout",
           "internal"
         ]
@@ -9522,6 +9901,33 @@
           "user_id": {
             "type": "string",
             "format": "uuid"
+          }
+        }
+      },
+      "EvaderPage": {
+        "type": "object",
+        "description": "Страница реестра уклонистов (ТЗ § 7).",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EvaderDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор продолжения; `null` - реестр показан до конца"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
           }
         }
       },
@@ -10548,6 +10954,33 @@
           }
         }
       },
+      "LedgerEntryPage": {
+        "type": "object",
+        "description": "Страница выписки по счету (ТЗ § 7).",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LedgerEntryDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор продолжения; `null` - журнал показан до конца"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выписка"
+          }
+        }
+      },
       "LoginRequest": {
         "type": "object",
         "required": [
@@ -10800,6 +11233,58 @@
           "year": {
             "type": "integer",
             "format": "int32"
+          }
+        }
+      },
+      "MyContractPage": {
+        "type": "object",
+        "description": "Договоры кабинета нанимателя (ТЗ § 7).\n\n`next_after` всегда `null`: договоров у нанимателя единицы, продолжения\nу выборки нет. Поле остается ради единообразия усекаемых реестров.",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContractDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
+          }
+        }
+      },
+      "MyProtocolPage": {
+        "type": "object",
+        "description": "Протоколы кабинета участника (ТЗ § 7).\n\n`next_after` всегда `null`: выборку ограничивает участие одного человека,\nпродолжения у нее нет. Поле остается, чтобы усекаемые реестры отвечали\nодинаково и клиенту не приходилось помнить, у какого из них какая форма.",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProtocolDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
           }
         }
       },
@@ -11146,6 +11631,32 @@
           }
         }
       },
+      "ObligationPage": {
+        "type": "object",
+        "description": "Дашборд сроков (ТЗ § 7).\n\n`next_after` всегда `null`: рабочий список разгружается работой, а не\nлистанием. Поднятый `truncated` здесь значит, что сроков накопилось\nбольше, чем дашборд показывает, - это про завал, а не про страницу.",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ObligationDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
+          }
+        }
+      },
       "OidcProviderDto": {
         "type": "object",
         "required": [
@@ -11159,6 +11670,19 @@
           "login_url": {
             "type": "string",
             "description": "Ссылка начала входа - обычная навигация, работает без JS (NFR-04)"
+          }
+        }
+      },
+      "PasswordResetDto": {
+        "type": "object",
+        "description": "Одноразовый пароль в ответе на сброс - единственный раз, когда он вообще\nсуществует в открытом виде.",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "Показывается админу один раз и нигде не сохраняется"
           }
         }
       },
@@ -11203,6 +11727,32 @@
           }
         }
       },
+      "PendingPublicationPage": {
+        "type": "object",
+        "description": "Рабочий список ожидающих публикации (ТЗ § 7).\n\n`next_after` здесь всегда `null`: продолжения у списка нет - он не\nреестр, а очередь работы, и `truncated` означает не «есть вторая\nстраница», а «работы накопилось больше, чем система показывает».",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PendingPublicationDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
+          }
+        }
+      },
       "PlaceBidRequest": {
         "type": "object",
         "required": [
@@ -11238,6 +11788,17 @@
             "type": [
               "string",
               "null"
+            ]
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Rule",
+                "description": "Причина отказа по правилу - только у `rule_violation`"
+              }
             ]
           },
           "status": {
@@ -11382,6 +11943,33 @@
               "null"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "PublicRecordPage": {
+        "type": "object",
+        "description": "Страница реестра портала (ТЗ § 7).",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PublicRecordDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор продолжения; `null` - реестр показан до конца"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
           }
         }
       },
@@ -11798,7 +12386,8 @@
           "registry",
           "title_ru",
           "columns",
-          "rows"
+          "rows",
+          "truncated"
         ],
         "properties": {
           "columns": {
@@ -11806,6 +12395,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Курсор продолжения; `null` - реестр показан до конца"
           },
           "registry": {
             "type": "string",
@@ -11823,6 +12419,10 @@
           },
           "title_ru": {
             "type": "string"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка: за строками ответа есть еще"
           }
         }
       },
@@ -11883,6 +12483,83 @@
             "type": "string",
             "format": "uuid",
             "description": "Черновик повторного тендера (п. 82)"
+          }
+        }
+      },
+      "Rule": {
+        "type": "string",
+        "description": "Причина отказа по правилу предметной области (закрытый перечень)",
+        "enum": [
+          "tender_status_transition",
+          "tender_publication_terms",
+          "tender_documentation_change",
+          "tender_cancellation",
+          "tender_failure_ground",
+          "application_intake_closed",
+          "application_deadline_passed",
+          "application_already_submitted",
+          "application_not_pending",
+          "sealed_price_key_missing",
+          "commission_composition",
+          "commission_meeting",
+          "commission_vote",
+          "admission_notice",
+          "auction_not_running",
+          "auction_start_price_missing",
+          "bid_below_minimum",
+          "auction_timer",
+          "auction_turn_order",
+          "auction_announcement",
+          "auction_result_mismatch",
+          "result_protocol",
+          "protocol_publication",
+          "publication_retention",
+          "public_record_link",
+          "dossier_immutable",
+          "contract_conclusion",
+          "contract_stage_order",
+          "contract_terms_immutable",
+          "winner_evasion",
+          "act_order",
+          "contract_registration",
+          "contract_amendment",
+          "document_check_incomplete",
+          "contract_deposit",
+          "guarantee_deposit",
+          "deposit_refund_reason",
+          "ledger_entry",
+          "ledger_balance_negative",
+          "special_order_application",
+          "special_order_transition",
+          "special_order_competition",
+          "board_decision",
+          "board_decision_without_opinion",
+          "investment_contract",
+          "investment_documents_missing",
+          "benefit_scheme",
+          "benefit_approval_missing",
+          "spinoff_teaching_quota",
+          "special_publication",
+          "land_application",
+          "land_contract_terms_missing",
+          "object_in_use",
+          "status_not_allowed",
+          "append_only_table",
+          "overlapping_period",
+          "duplicate_record",
+          "related_record_missing",
+          "other_rule"
+        ]
+      },
+      "SetActiveRequest": {
+        "type": "object",
+        "required": [
+          "is_active"
+        ],
+        "properties": {
+          "is_active": {
+            "type": "boolean",
+            "description": "`false` - учетная запись отключается, `true` - возвращается"
           }
         }
       },
@@ -12587,6 +13264,7 @@
           "full_name",
           "locale",
           "roles",
+          "is_active",
           "external_session"
         ],
         "properties": {
@@ -12603,6 +13281,10 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "is_active": {
+            "type": "boolean",
+            "description": "Учетная запись действует. Деактивированная не входит и не работает по\nуже открытой сессии (W-07); в кабинете админа это состояние видно\nи переключается"
           },
           "locale": {
             "type": "string"

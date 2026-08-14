@@ -6,6 +6,7 @@
 //! и отдельно отклоняются триггером (FR-901).
 
 use time::{Date, OffsetDateTime};
+use tou_domain::rule::RuleRejection;
 use uuid::Uuid;
 
 use crate::Db;
@@ -16,7 +17,7 @@ pub enum AmendmentError {
     NotFound,
     /// Правило п. 125 (домен) либо отказ БД (FR-901, FR-906)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -28,7 +29,7 @@ fn map_rule(err: sqlx::Error) -> AmendmentError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return AmendmentError::Rejected(db_err.message().to_owned());
+        return AmendmentError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     AmendmentError::Db(err)
 }

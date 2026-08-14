@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT checked_at AS \"checked_at!\", intact AS \"intact!\",\n                  entries AS \"entries!\", broken_at\n           FROM audit.run_chain_check()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "checked_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "intact!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "entries!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "broken_at",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "4ab5a2269ee9934f0847403fc8bbc7ea12136738e47243e8db1bf8041d2afe67"
+}

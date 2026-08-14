@@ -1,17 +1,23 @@
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { useSuspenseQuery } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
-import { MyDeadlines } from "@/components/my-deadlines"
+import { PageHeader } from "@/components/page-header"
+import { Panel } from "@/components/panel"
 import { ApplicationStatusBadge } from "@/components/application-status-badge"
+import { EmptyState } from "@/components/empty-state"
 import { LandInvestorPanel } from "@/components/land-panels"
 import { MyProtocols } from "@/components/my-protocols"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { buttonVariants } from "@/components/ui/button"
+import { DeadlineBlock } from "@/components/deadline-block"
 import { tendersPageQuery } from "@/lib/api"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { myApplicationsQuery } from "@/lib/participant"
 import { mySpecialRequestsQuery, specialStatusLabel } from "@/lib/special"
 import { cn } from "@/lib/utils"
+import { ClipboardListIcon, InboxIcon } from "lucide-react"
+
+import type { ApplicationStatus } from "@/lib/participant"
 
 // Кабинет участника: мои заявки + тендеры с открытым приемом (FR-401).
 export const Route = createFileRoute("/app/participant/")({
@@ -22,8 +28,32 @@ export const Route = createFileRoute("/app/participant/")({
       context.queryClient.ensureQueryData(mySpecialRequestsQuery),
     ])
   },
+  head: () => ({ meta: [{ title: `${m.cabinet_participant()} - ToU Rent` }] }),
   component: ParticipantHome,
 })
+
+/**
+ * Чего заявка ждет дальше. Подпись есть только у тех состояний, в которых
+ * ход за кем-то другим: «отклонена» и «отозвана» договаривать нечего - об
+ * этом уже сказал значок статуса.
+ */
+const NEXT_STEP: Partial<Record<ApplicationStatus, () => string>> = {
+  submitted: m.app_next_submitted,
+  fee_confirmed: m.app_next_fee_confirmed,
+  admitted: m.app_next_admitted,
+}
+
+/**
+ * Порядок заявок: сперва те, по которым процедура идет, потом закрытые.
+ * История - внизу, потому что читают ее реже, чем следят за ходом дела.
+ */
+const STATUS_ORDER: Record<ApplicationStatus, number> = {
+  admitted: 0,
+  fee_confirmed: 1,
+  submitted: 2,
+  rejected: 3,
+  withdrawn: 4,
+}
 
 function ParticipantHome() {
   const { data: applications } = useSuspenseQuery(myApplicationsQuery)
@@ -31,185 +61,175 @@ function ParticipantHome() {
   const { data: specialRequests } = useSuspenseQuery(mySpecialRequestsQuery)
   const accepting = tendersPage.items.filter((t) => t.status === "accepting")
 
+  const ordered = applications.toSorted(
+    (left, right) =>
+      STATUS_ORDER[left.status] - STATUS_ORDER[right.status] ||
+      right.submitted_at.localeCompare(left.submitted_at)
+  )
+
   return (
-    <div className="flex flex-col gap-8">
-      <MyDeadlines />
-
-      <MyProtocols />
-
-      {/* FR-1801 (п. 104–105): заявка инвестора на земельный участок */}
-      <LandInvestorPanel />
-
-      {/* Свои договоры (FR-902, FR-1003): у нанимателя есть свои шаги
-          конвейера и свой депозит - раньше их отмечал за него организатор */}
-      <section aria-labelledby="my-contracts-link">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2
-            id="my-contracts-link"
-            className="font-heading text-lg font-semibold"
-          >
-            {m.my_contracts_title()}
-          </h2>
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title={m.cabinet_participant()}
+        description={m.participant_dash_subtitle()}
+        actions={
           <Link
             to="/app/participant/contracts"
             className={cn(buttonVariants({ variant: "outline" }))}
           >
             {m.my_contracts_title()}
           </Link>
-        </div>
-      </section>
+        }
+      />
 
-      <section aria-labelledby="my-applications">
-        <h2
-          id="my-applications"
-          className="mb-3 font-heading text-lg font-semibold"
-        >
-          {m.my_applications_title()}
-        </h2>
-        {applications.length === 0 ? (
-          <p className="text-muted-foreground">{m.my_applications_empty()}</p>
+      {/* Свои заявки - первым: это и есть рабочая очередь участника */}
+      <Panel title={m.my_applications_title()} titleAs="h2">
+        {ordered.length === 0 ? (
+          <EmptyState
+            icon={ClipboardListIcon}
+            title={m.my_applications_empty()}
+            description={m.my_applications_empty_hint()}
+          />
         ) : (
-          <ul className="flex flex-col gap-3">
-            {applications.map((application) => (
+          <ul className="flex flex-col gap-2">
+            {ordered.map((application) => (
               <li
                 key={application.id}
-                className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border p-3"
               >
-                <div className="flex flex-wrap items-center gap-3">
-                  <ApplicationStatusBadge status={application.status} />
+                <ApplicationStatusBadge status={application.status} />
+                <Link
+                  to="/app/participant/applications/$applicationId"
+                  params={{ applicationId: application.id }}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {m.application_card_title({
+                    id: application.id.slice(0, 8),
+                  })}
+                </Link>
+                {NEXT_STEP[application.status] !== undefined && (
+                  <span className="text-sm text-muted-foreground">
+                    {NEXT_STEP[application.status]?.()}
+                  </span>
+                )}
+                <span className="ml-auto flex flex-wrap items-baseline gap-x-3">
                   {application.price_amount != null && (
                     <span
-                      className="text-sm text-muted-foreground"
+                      className="text-sm tabular-nums"
                       suppressHydrationWarning
                     >
-                      {m.application_price()}:{" "}
                       {formatTenge(application.price_amount)}
                     </span>
                   )}
-                </div>
-                <p className="mt-2 font-medium">
-                  <Link
-                    to="/app/participant/applications/$applicationId"
-                    params={{ applicationId: application.id }}
-                    className="underline-offset-4 hover:underline"
+                  <span
+                    className="text-xs text-muted-foreground tabular-nums"
+                    suppressHydrationWarning
                   >
-                    {m.application_card_title({
-                      id: application.id.slice(0, 8),
-                    })}
-                  </Link>
-                </p>
-                <p
-                  className="mt-1 text-sm text-muted-foreground"
-                  suppressHydrationWarning
-                >
-                  {m.application_submitted_at()}:{" "}
-                  {formatDateTime(application.submitted_at)}
-                </p>
+                    {formatDateTime(application.submitted_at)}
+                  </span>
+                </span>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
+
+      <MyProtocols />
+
+      {/* FR-1801 (п. 104–105): заявка инвестора на земельный участок */}
+      <LandInvestorPanel />
 
       {/* FR-1201 (п. 87–88): особый порядок - заявка вне тендера */}
-      <section aria-labelledby="special-requests">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2
-            id="special-requests"
-            className="font-heading text-lg font-semibold"
-          >
-            {m.special_requests_title()}
-          </h2>
+      <Panel
+        title={m.special_requests_title()}
+        titleAs="h2"
+        actions={
           <Link
             to="/app/participant/special/new"
-            className={cn(buttonVariants({ variant: "outline" }))}
+            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
             {m.special_new_cta()}
           </Link>
-        </div>
+        }
+      >
         {specialRequests.length === 0 ? (
-          <p className="text-muted-foreground">{m.special_requests_empty()}</p>
+          <p className="text-sm text-muted-foreground">
+            {m.special_requests_empty()}
+          </p>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-2">
             {specialRequests.map((request) => (
               <li
                 key={request.id}
-                className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
+                className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border p-3"
               >
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="rounded-md border px-2 py-0.5 text-sm">
-                    {specialStatusLabel(request.status)}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {request.category_label} ({request.category_rule_ref})
-                  </span>
-                </div>
-                <p className="mt-2 font-medium">
-                  <Link
-                    to="/app/participant/special/$requestId"
-                    params={{ requestId: request.id }}
-                    className="underline-offset-4 hover:underline"
-                  >
-                    {m.special_card_title({ id: request.id.slice(0, 8) })}
-                  </Link>
-                </p>
-                <p
-                  className="mt-1 text-sm text-muted-foreground"
+                <span className="rounded-md border px-2 py-0.5 text-sm">
+                  {specialStatusLabel(request.status)}
+                </span>
+                <Link
+                  to="/app/participant/special/$requestId"
+                  params={{ requestId: request.id }}
+                  className="font-medium underline-offset-4 hover:underline"
+                >
+                  {m.special_card_title({ id: request.id.slice(0, 8) })}
+                </Link>
+                <span className="text-sm text-muted-foreground">
+                  {request.category_label} ({request.category_rule_ref})
+                </span>
+                <span
+                  className="ml-auto text-xs text-muted-foreground tabular-nums"
                   suppressHydrationWarning
                 >
-                  {m.application_submitted_at()}:{" "}
                   {formatDateTime(request.submitted_at)}
-                </p>
+                </span>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
 
-      <section aria-labelledby="open-tenders">
-        <h2
-          id="open-tenders"
-          className="mb-3 font-heading text-lg font-semibold"
-        >
-          {m.open_tenders_title()}
-        </h2>
+      {/* Открытый прием - последним: это витрина, а не работа по своим делам */}
+      <Panel title={m.open_tenders_title()} titleAs="h2">
         {accepting.length === 0 ? (
-          <p className="text-muted-foreground">{m.open_tenders_empty()}</p>
+          <EmptyState
+            icon={InboxIcon}
+            title={m.open_tenders_empty()}
+            description={m.open_tenders_empty_hint()}
+            action={
+              <Link
+                to="/tenders"
+                className={cn(buttonVariants({ variant: "outline" }))}
+              >
+                {m.nav_tenders()}
+              </Link>
+            }
+          />
         ) : (
           <ul className="flex flex-col gap-3">
             {accepting.map((tender) => (
-              <li key={tender.id} className="rounded-lg border p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <TenderStatusBadge status={tender.status} />
-                      {tender.submission_deadline != null && (
-                        <span
-                          className="text-sm text-muted-foreground"
-                          suppressHydrationWarning
-                        >
-                          {m.tender_deadline()}:{" "}
-                          {formatDateTime(tender.submission_deadline)}
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-2 font-heading text-lg font-semibold">
-                      {tender.title}
-                    </p>
-                  </div>
-                  <Link
-                    to="/app/participant/apply/$tenderId"
-                    params={{ tenderId: tender.id }}
-                    className={cn(buttonVariants())}
-                  >
-                    {m.apply_cta()}
-                  </Link>
+              <li
+                key={tender.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+              >
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <TenderStatusBadge status={tender.status} />
+                  <p className="font-heading text-lg font-semibold">
+                    {tender.title}
+                  </p>
                 </div>
+                <DeadlineBlock value={tender.submission_deadline} />
+                <Link
+                  to="/app/participant/apply/$tenderId"
+                  params={{ tenderId: tender.id }}
+                  className={cn(buttonVariants())}
+                >
+                  {m.apply_cta()}
+                </Link>
               </li>
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
     </div>
   )
 }

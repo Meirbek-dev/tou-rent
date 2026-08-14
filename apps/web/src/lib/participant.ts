@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query"
 
-import { getLocale } from "#/paraglide/runtime"
 import { api } from "@/lib/api"
+import { serverLabel } from "@/lib/server-label"
 
 import type { components } from "@tou/api-client"
 
@@ -102,10 +102,7 @@ export function reasonLabel(
   if (code == null) return null
   const reason = reasons.find((r) => r.code === code)
   if (reason === undefined) return code
-  const locale = getLocale()
-  if (locale === "kk") return reason.label_kk ?? reason.label_ru
-  if (locale === "en") return reason.label_en ?? reason.label_ru
-  return reason.label_ru
+  return serverLabel(reason)
 }
 
 /** Журнал регистрации (Прил. 12, FR-402). */

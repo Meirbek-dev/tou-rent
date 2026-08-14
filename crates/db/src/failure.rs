@@ -8,6 +8,7 @@
 use time::OffsetDateTime;
 use tou_domain::failure::{Consequence, Facts, FailureGround};
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -18,7 +19,7 @@ pub enum FailureError {
     NotFound,
     /// Основание п. 81 не наступило либо переход запрещен (INV-021)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -30,7 +31,7 @@ fn map_rule(err: sqlx::Error) -> FailureError {
             Some("P0001") | Some("23514") | Some("23503")
         )
     {
-        return FailureError::Rejected(db_err.message().to_owned());
+        return FailureError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     FailureError::Db(err)
 }
@@ -149,10 +150,13 @@ pub async fn declare_failed(
 ) -> Result<FailureGround, FailureError> {
     let state = state(db, tender_id).await?.ok_or(FailureError::NotFound)?;
     let ground = state.ground.ok_or_else(|| {
-        FailureError::Rejected(format!(
-            "основание п. 81 не наступило: заявок {}, допущено {} - тендер несостоявшимся \
-             не признается (FR-801)",
-            state.facts.applications, state.facts.admitted
+        FailureError::Rejected(RuleRejection::new(
+            RuleViolation::TenderFailureGround,
+            format!(
+                "основание п. 81 не наступило: заявок {}, допущено {} - тендер несостоявшимся \
+                 не признается (FR-801)",
+                state.facts.applications, state.facts.admitted
+            ),
         ))
     })?;
     let consequence = state.consequence.unwrap_or(Consequence::Repeat);
@@ -176,11 +180,11 @@ pub async fn declare_failed(
         .map_err(map_rule)?;
 
         if updated.is_none() {
-            return Err(FailureError::Rejected(
+            return Err(FailureError::Rejected(RuleRejection::new(
+                RuleViolation::TenderStatusTransition,
                 "тендер уже признан несостоявшимся либо переход из текущего статуса запрещен \
-                 (INV-021)"
-                    .to_owned(),
-            ));
+                 (INV-021)",
+            )));
         }
 
         // Протокол о несостоявшемся - за три рабочих дня (FR-1702, п. 82)
@@ -229,15 +233,16 @@ pub struct FailedTenderRow {
 pub async fn repeat_tender(db: &Db, actor: Uuid, tender_id: Uuid) -> Result<Uuid, FailureError> {
     let state = state(db, tender_id).await?.ok_or(FailureError::NotFound)?;
     if !state.failed {
-        return Err(FailureError::Rejected(
-            "повторный тендер объявляется только после признания несостоявшимся (п. 82)".to_owned(),
-        ));
+        return Err(FailureError::Rejected(RuleRejection::new(
+            RuleViolation::TenderFailureGround,
+            "повторный тендер объявляется только после признания несостоявшимся (п. 82)",
+        )));
     }
     if matches!(state.consequence, Some(Consequence::BoardReferral)) {
-        return Err(FailureError::Rejected(
-            "тендер не состоялся дважды - вопрос передается Правлению, а не на повтор (п. 83)"
-                .to_owned(),
-        ));
+        return Err(FailureError::Rejected(RuleRejection::new(
+            RuleViolation::TenderFailureGround,
+            "тендер не состоялся дважды - вопрос передается Правлению, а не на повтор (п. 83)",
+        )));
     }
 
     crate::with_actor(db, actor, async |tx| {

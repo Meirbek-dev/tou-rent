@@ -71,6 +71,14 @@ x-api-image: &api-image
     OIDC_POST_LOGOUT_URL: ${OIDC_POST_LOGOUT_URL:-}
     OIDC_TRUSTED_AUDIENCES: ${OIDC_TRUSTED_AUDIENCES:-}
     OIDC_LABEL: ${OIDC_LABEL:-}
+    # Кто может открывать сокет комнаты торгов. Апгрейд протокола браузер
+    # выпускает мимо CORS, поэтому источник сверяет само приложение: иначе
+    # сокет к api открывает любая страница, у посетителя которой есть сессия,
+    # и читает ставки и имена участников в реальном времени (NFR-09).
+    # В проде сокет идет на свой origin через Caddy, отсюда домен стенда.
+    # Стенд за чужим фронтом отдает голый HTTP (SITE_SCHEME) - там значение
+    # задается в .env целиком, схема по умолчанию не подойдет
+    WS_ALLOWED_ORIGINS: ${WS_ALLOWED_ORIGINS:-https://${TOU_DOMAIN}}
 
 services:
   caddy:
@@ -80,13 +88,24 @@ services:
     # Единственное сохраненное право: занять 80 и 443. Все остальное снято
     cap_add: [NET_BIND_SERVICE]
     mem_limit: 256m
+    # Внутри контейнера Caddy всегда на 80/443 - меняется только то, какие
+    # порты хоста на них смотрят. Нужно там, где 80 и 443 уже заняты чужим
+    # сервисом: стенд встает за существующий обратный прокси.
+    #
+    # Цена: ACME проверяет владение доменом, стучась на 80 и 443 самого домена.
+    # Если снаружи туда приходит не этот Caddy, сертификат он не выпустит -
+    # TLS в таком стенде терминирует фронт, который занял порты (см. README)
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "${HTTPS_PORT:-443}:443/udp"
     environment:
       TOU_DOMAIN: ${TOU_DOMAIN:?TOU_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL:?ACME_EMAIL}
+      # Пусто - штатный режим: Caddy сам включает HTTPS для TOU_DOMAIN.
+      # За чужим фронтом - `http://`, см. Caddyfile
+      SITE_SCHEME: ${SITE_SCHEME:-}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-127.0.0.1/32}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro,z
       - caddy_data:/data

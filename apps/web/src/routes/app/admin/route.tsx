@@ -1,5 +1,5 @@
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router"
-import { m } from "#/paraglide/messages"
+import { PageShell } from "@/components/page-shell"
 
 // Кабинет департамента цифрового развития (М15, T53): пользователи и роли
 // (FR-1503, FR-1902), справочники расчета и календарь (FR-1901, FR-1701).
@@ -16,11 +16,8 @@ export const Route = createFileRoute("/app/admin")({
 
 function AdminLayout() {
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-6 py-8">
-      <h1 className="font-heading text-2xl font-semibold">
-        {m.cabinet_admin()}
-      </h1>
+    <PageShell>
       <Outlet />
-    </div>
+    </PageShell>
   )
 }

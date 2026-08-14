@@ -17,7 +17,10 @@ vp run dev        # dev-сервер на :3000 (turbo → vp dev)
 Скрипты этого пакета (`vp run <script>` внутри `apps/web`):
 
 - `dev` - vite dev через `vp dev` c Sentry-инструментацией (`instrument.server.mjs`)
-- `build` - `vp build`, выход в `.output/` (самодостаточный SSR-сервер)
+- `build` - `vp build`, выход в `.output/` (самодостаточный SSR-сервер).
+  Следом `bun build` собирает `instrument.server.mjs` в `.output/server`
+  одним файлом вместе с `@sentry/*` и `telemetry.mjs`: рантайм-образ везёт
+  только `.output` без `node_modules`, и копия исходника там не резолвится
 - `start` - запуск собранного сервера. Рантайм именно bun, а не node: сервер
   nitro/srvx собирается под тот рантайм, в котором шла сборка, и в node падает
   с «Bun is not defined». `--preload` поднимает Sentry до приложения - иначе

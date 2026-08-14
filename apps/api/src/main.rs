@@ -154,7 +154,12 @@ async fn serve() -> anyhow::Result<()> {
     let state = tou_http::AppState::new(db, storage)
         .with_auction_minutes(auction_minutes()?)
         .with_secure_cookies(secure_cookies)
-        .with_rate_limit(redis.clone())
+        // Счетчик попыток и журнал идемпотентности - в том же Redis, что
+        // и сессии (NFR-12): при двух экземплярах api оба обязаны быть общими
+        .with_redis(redis.clone())
+        // Источники апгрейда WS-комнаты торгов (FR-603): окружение разбирает
+        // композиция, как и остальную конфигурацию стенда
+        .with_ws_origins(tou_http::state::allowed_ws_origins_from_env())
         .with_oidc(oidc);
 
     // Реалтайм между экземплярами (NFR-12): публикация уходит в Redis

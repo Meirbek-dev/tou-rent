@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.obligations\n         SET status = 'overdue', escalated_at = core.now()\n         WHERE id = ANY($1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8698e8053553a6e3c58c92a24a5b63be86daf37829ccedb5c210f6008d1042be"
+}

@@ -8,12 +8,14 @@ use axum::extract::State;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tou_db::RowCursor;
 use tou_db::ledger::{self, LedgerError};
 use tou_domain::ledger::{AccountKind, RefundReason};
 use tou_domain::policy::Action;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+use crate::dto::cursor;
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path, Query};
@@ -123,24 +125,53 @@ pub struct LedgerEntryDto {
     pub occurred_at: OffsetDateTime,
 }
 
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct EntriesPageParams {
+    /// Курсор следующей страницы - значение `next_after` предыдущей
+    pub after: Option<String>,
+    pub limit: Option<i64>,
+}
+
+/// Страница выписки по счету (ТЗ § 7).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct LedgerEntryPage {
+    pub items: Vec<LedgerEntryDto>,
+    /// Курсор продолжения; `null` - журнал показан до конца
+    pub next_after: Option<String>,
+    /// Показана не вся выписка
+    pub truncated: bool,
+}
+
 /// Выписка по счету (FR-1001): проводки двойной записи по порядку.
 #[utoipa::path(
     get,
     path = "/api/v1/ledger/accounts/{id}/entries",
     tag = "ledger",
-    params(("id" = Uuid, Path, description = "Счет книги")),
-    responses((status = 200, description = "Проводки счета", body = [LedgerEntryDto]))
+    params(("id" = Uuid, Path, description = "Счет книги"), EntriesPageParams),
+    responses((status = 200, description = "Страница проводок счета", body = LedgerEntryPage))
 )]
 pub async fn account_entries(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<Vec<LedgerEntryDto>>, ApiError> {
+    Query(params): Query<EntriesPageParams>,
+) -> Result<Json<LedgerEntryPage>, ApiError> {
     user.require(Action::LedgerRead)?;
 
-    let rows = ledger::entries(&state.db, id).await?;
-    Ok(Json(
-        rows.into_iter()
+    let after = params.after.as_deref().map(cursor::parse).transpose()?;
+    let limit = crate::page_limit(params.limit);
+
+    let page = ledger::entries(&state.db, id, after, limit).await?;
+    let truncated = page.truncated;
+    let next_after = cursor::next(
+        truncated,
+        page.last()
+            .map(|row| RowCursor::new(row.occurred_at, row.id)),
+    );
+
+    Ok(Json(LedgerEntryPage {
+        items: page
+            .into_iter()
             .map(|row| LedgerEntryDto {
                 id: row.id,
                 op: row.op,
@@ -154,7 +185,9 @@ pub async fn account_entries(
                 occurred_at: row.occurred_at,
             })
             .collect(),
-    ))
+        next_after,
+        truncated,
+    }))
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -261,9 +294,12 @@ pub struct RefundReasonDto {
     responses((status = 200, description = "Основания п. 26", body = [RefundReasonDto]))
 )]
 pub async fn refund_reasons(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<RefundReasonDto>>, ApiError> {
+    // Закрытый перечень из Правил: по нему участник понимает судьбу взноса
+    user.require(Action::RefdataRead)?;
+
     let rows = ledger::refund_reasons(&state.db).await?;
     Ok(Json(
         rows.into_iter()

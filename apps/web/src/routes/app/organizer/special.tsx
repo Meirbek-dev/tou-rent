@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 import { DossierPanel } from "@/components/dossier-panel"
+import { PageHeader } from "@/components/page-header"
 import { PublicationsPanel } from "@/components/publications-panel"
 import { SpecialProgress } from "@/components/special-progress"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ import type { SpecialRequest } from "@/lib/special"
 export const Route = createFileRoute("/app/organizer/special")({
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(pendingSpecialRequestsQuery),
+  head: () => ({ meta: [{ title: `${m.org_nav_special()} - ToU Rent` }] }),
   component: SpecialReviewPage,
 })
 
@@ -33,6 +35,7 @@ function SpecialReviewPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <PageHeader title={m.org_nav_special()} />
       <section aria-labelledby="special-review">
         <h2
           id="special-review"

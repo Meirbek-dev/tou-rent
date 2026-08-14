@@ -2,12 +2,15 @@ import { useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
-import { MyDeadlines } from "@/components/my-deadlines"
+import { ConfirmAction } from "@/components/confirm-action"
+import { PageHeader } from "@/components/page-header"
+import { Panel } from "@/components/panel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
   TableBody,
@@ -20,16 +23,22 @@ import {
   GRANTABLE_ROLES,
   addCoefficientVersion,
   addHoliday,
+  auditChainQuery,
   coefficientsQuery,
   grantRole,
   mrpQuery,
   removeHoliday,
+  resetPassword,
   revokeRole,
   setMrp,
+  setUserActive,
   usersQuery,
 } from "@/lib/admin"
-import { problemMessage } from "@/lib/auth"
+import { meQuery, problemMessage } from "@/lib/auth"
+import { formatDateTime } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
+import { notifyError, notifySuccess } from "@/lib/toast"
+import { tabSearch } from "@/lib/tabs"
 
 import type { GrantableRole, UserDto } from "@/lib/admin"
 
@@ -40,27 +49,144 @@ import type { GrantableRole, UserDto } from "@/lib/admin"
 // FR-202 держится не запретом на правку, а тем, что в лоте лежит снимок
 // расчета, а коэффициенты версионируются по дате вступления в силу: админ
 // добавляет версию, а не переписывает историю.
+/** Разделы кабинета: люди отдельно, справочники расчета - отдельно. */
+const TABS = ["users", "mrp", "coefficients", "holidays"] as const
+
 export const Route = createFileRoute("/app/admin/")({
+  validateSearch: tabSearch(TABS),
+  head: () => ({ meta: [{ title: `${m.cabinet_admin()} - ToU Rent` }] }),
   component: AdminHome,
 })
 
 function AdminHome() {
+  const tab = Route.useSearch().tab ?? "users"
+  const navigate = Route.useNavigate()
+
   return (
-    <div className="flex flex-col gap-10">
-      <MyDeadlines />
-      <UsersPanel />
-      <MrpPanel />
-      <CoefficientsPanel />
-      <HolidaysPanel />
+    <div className="flex flex-col gap-6">
+      {/* Имя кабинета - заголовок страницы: из макета он ушел вместе
+          с прежней шапкой (каркас называет кабинет группой боковой
+          навигации) */}
+      <PageHeader title={m.cabinet_admin()} />
+      {/* Состояние цепочки аудита - выше вкладок и вне их: разрыв ставит
+          под вопрос доказательную базу всей системы, и увидеть его нужно
+          независимо от того, какой справочник сейчас открыт */}
+      <AuditChainPanel />
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          void navigate({
+            search: { tab: value as (typeof TABS)[number] },
+            replace: true,
+          })
+        }}
+        className="gap-6"
+      >
+        <TabsList className="max-w-full overflow-x-auto">
+          <TabsTrigger value="users">{m.admin_users_title()}</TabsTrigger>
+          <TabsTrigger value="mrp">{m.admin_mrp_title()}</TabsTrigger>
+          <TabsTrigger value="coefficients">
+            {m.admin_coefficients_title()}
+          </TabsTrigger>
+          <TabsTrigger value="holidays">{m.admin_holidays_title()}</TabsTrigger>
+        </TabsList>
+        {/* Одна панель на выбранную вкладку: справочники ниже сами ходят
+            в сеть, и держать разметку всех четырех ради вкладки, которую
+            сейчас не смотрят, незачем */}
+        <TabsContent value={tab}>
+          {tab === "users" && <UsersPanel />}
+          {tab === "mrp" && <MrpPanel />}
+          {tab === "coefficients" && <CoefficientsPanel />}
+          {tab === "holidays" && <HolidaysPanel />}
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
 
-/** FR-1902: список пользователей, назначение и отзыв роли (в аудит - триггером). */
+/**
+ * INV-A01: состояние hash-цепочки аудита - дата и итог последней сверки.
+ *
+ * Сверку ведет фоновый воркер, и до сих пор ее итог существовал только
+ * строкой в журнале контейнера, которая уходила из ротации. Плашка стоит
+ * выше справочников намеренно: разрыв цепочки означает, что доказательная
+ * база системы под вопросом, и увидеть это нужно раньше, чем МРП.
+ *
+ * Отсутствие сверок - такое же состояние, как разрыв, и показывается так же
+ * заметно: «никто не проверял» и «проверено, цела» путать нельзя.
+ */
+function AuditChainPanel() {
+  const { data: chain } = useQuery(auditChainQuery)
+
+  if (chain === undefined) return null
+
+  const checked = formatDateTime(chain.checked_at)
+  const alarming = checked === null || chain.intact === false
+
+  return (
+    <Panel title={m.admin_audit_chain_title()} titleAs="h2">
+      <div
+        data-testid="admin-audit-chain"
+        role={alarming ? "alert" : undefined}
+        className={
+          alarming
+            ? "flex flex-col gap-1.5 rounded-lg border border-destructive p-3 text-sm"
+            : "flex flex-col gap-1.5 rounded-lg border p-3 text-sm"
+        }
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={chain.intact === true ? "secondary" : "destructive"}>
+            {checked === null
+              ? m.admin_audit_chain_never()
+              : chain.intact === true
+                ? m.admin_audit_chain_intact()
+                : m.admin_audit_chain_broken()}
+          </Badge>
+          {checked !== null && (
+            <span className="text-muted-foreground" suppressHydrationWarning>
+              {m.admin_audit_chain_checked_at({ date: checked })}
+            </span>
+          )}
+          {chain.entries != null && (
+            <span className="text-muted-foreground">
+              {m.admin_audit_chain_entries({ count: chain.entries })}
+            </span>
+          )}
+        </div>
+        {chain.broken_at != null && (
+          <span className="font-medium text-destructive">
+            {m.admin_audit_chain_broken_at({ id: chain.broken_at })}
+          </span>
+        )}
+        {chain.intact === false && (
+          <span className="text-muted-foreground" suppressHydrationWarning>
+            {m.admin_audit_chain_last_ok({
+              date: formatDateTime(chain.last_intact_at) ?? "-",
+            })}
+          </span>
+        )}
+        <p className="text-muted-foreground">{m.admin_audit_chain_hint()}</p>
+      </div>
+    </Panel>
+  )
+}
+
+/**
+ * FR-1902, W-07: список пользователей, роли и жизненный цикл записи.
+ *
+ * Роли, сброс пароля и отключение стоят в одной таблице не для компактности:
+ * уволившемуся снимают роли и отключают запись одним движением, и разнеси эти
+ * действия по разным экранам - второе забудут. Все три пишутся в аудит.
+ */
 function UsersPanel() {
   const queryClient = useQueryClient()
   const { data: page } = useQuery(usersQuery)
+  const { data: me } = useQuery(meQuery)
   const [role, setRole] = useState<Record<string, GrantableRole>>({})
+  // Выданный одноразовый пароль живет только в состоянии страницы: ни в
+  // кеш запросов, ни в хранилище браузера он не кладется - перезагрузка
+  // его теряет, и это правильно
+  const [issued, setIssued] = useState<{ user: string; password: string }>()
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin"] })
 
@@ -69,10 +195,35 @@ function UsersPanel() {
       grantRole(userId, next),
     onSuccess: refresh,
   })
+  // Снятие роли и отключение записи молчали: экран перерисовывался, и было
+  // непонятно, прошло ли действие. Обе мутации пишутся в аудит - тем более
+  // они обязаны отчитаться
   const revoke = useMutation({
     mutationFn: ({ userId, next }: { userId: string; next: string }) =>
       revokeRole(userId, next),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      notifySuccess(m.admin_role_revoked_toast())
+      await refresh()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
+  })
+  const toggle = useMutation({
+    mutationFn: ({ userId, next }: { userId: string; next: boolean }) =>
+      setUserActive(userId, next),
+    onSuccess: async (_data, variables) => {
+      notifySuccess(
+        variables.next
+          ? m.admin_user_activated_toast()
+          : m.admin_user_deactivated_toast()
+      )
+      await refresh()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
+  })
+  const reset = useMutation({
+    mutationFn: (user: UserDto) => resetPassword(user.id),
+    onSuccess: (password, user) =>
+      setIssued({ user: user.full_name, password }),
   })
 
   const chosen = (user: UserDto): GrantableRole =>
@@ -84,6 +235,26 @@ function UsersPanel() {
         {m.admin_users_title()}
       </h2>
       <p className="text-sm text-muted-foreground">{m.admin_users_hint()}</p>
+      <p className="text-sm text-muted-foreground">
+        {m.admin_users_lifecycle_hint()}
+      </p>
+      {issued !== undefined && (
+        <div
+          role="status"
+          data-testid="admin-issued-password"
+          className="flex flex-col gap-1.5 rounded-lg border p-3 text-sm"
+        >
+          <span>
+            {m.admin_reset_password_result({
+              user: issued.user,
+              password: issued.password,
+            })}
+          </span>
+          <span className="text-muted-foreground">
+            {m.admin_reset_password_warning()}
+          </span>
+        </div>
+      )}
       {page === undefined || page.items.length === 0 ? (
         <p className="text-sm text-muted-foreground">{m.admin_users_empty()}</p>
       ) : (
@@ -94,6 +265,7 @@ function UsersPanel() {
                 <TableHead scope="col">{m.admin_user()}</TableHead>
                 <TableHead scope="col">{m.admin_roles()}</TableHead>
                 <TableHead scope="col">{m.admin_grant_role()}</TableHead>
+                <TableHead scope="col">{m.admin_user_state()}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -120,19 +292,32 @@ function UsersPanel() {
                             className="gap-1"
                           >
                             {roleLabel(granted)}
-                            <button
-                              type="button"
-                              aria-label={`${m.admin_revoke_role()}: ${roleLabel(granted)}`}
-                              className="text-muted-foreground hover:text-destructive"
-                              onClick={() =>
+                            {/* Снятие роли отнимает доступ к кабинету и
+                                пишется в аудит - крестик срабатывал
+                                с первого промаха мышью */}
+                            <ConfirmAction
+                              title={m.admin_revoke_confirm_title()}
+                              description={m.admin_revoke_confirm_description({
+                                role: roleLabel(granted),
+                                user: user.full_name,
+                              })}
+                              confirmLabel={m.admin_revoke_role()}
+                              onConfirm={() =>
                                 revoke.mutate({
                                   userId: user.id,
                                   next: granted,
                                 })
                               }
-                            >
-                              ×
-                            </button>
+                              trigger={
+                                <button
+                                  type="button"
+                                  aria-label={`${m.admin_revoke_role()}: ${roleLabel(granted)}`}
+                                  className="text-muted-foreground hover:text-destructive"
+                                >
+                                  ×
+                                </button>
+                              }
+                            />
                           </Badge>
                         ))
                       )}
@@ -166,6 +351,66 @@ function UsersPanel() {
                         }
                       >
                         {m.admin_grant_role()}
+                      </Button>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge
+                        variant={user.is_active ? "secondary" : "destructive"}
+                      >
+                        {user.is_active
+                          ? m.admin_user_active()
+                          : m.admin_user_disabled()}
+                      </Badge>
+                      {/*
+                        Отключить себя нельзя: вернуть запись было бы некому,
+                        а других админов может не быть. Сервер это тоже
+                        отвергает - кнопка лишь не предлагает тупика.
+                      */}
+                      {user.is_active ? (
+                        // Отключение отнимает вход целиком - подтверждается
+                        <ConfirmAction
+                          title={m.admin_deactivate_confirm_title()}
+                          description={m.admin_deactivate_confirm_description({
+                            user: user.full_name,
+                          })}
+                          confirmLabel={m.admin_deactivate()}
+                          disabled={toggle.isPending || user.id === me?.id}
+                          onConfirm={() =>
+                            toggle.mutate({ userId: user.id, next: false })
+                          }
+                          trigger={
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              data-testid={`toggle-active-${user.id}`}
+                            >
+                              {m.admin_deactivate()}
+                            </Button>
+                          }
+                        />
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          data-testid={`toggle-active-${user.id}`}
+                          disabled={toggle.isPending}
+                          onClick={() =>
+                            toggle.mutate({ userId: user.id, next: true })
+                          }
+                        >
+                          {m.admin_activate()}
+                        </Button>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid={`reset-password-${user.id}`}
+                        disabled={reset.isPending}
+                        onClick={() => reset.mutate(user)}
+                      >
+                        {m.admin_reset_password()}
                       </Button>
                     </div>
                   </TableCell>

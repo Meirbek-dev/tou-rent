@@ -1,5 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
+import { m } from "#/paraglide/messages"
 import { LandOrganizerPanel } from "@/components/land-panels"
+import { PageHeader } from "@/components/page-header"
 import {
   landApplicationsQuery,
   landPlotsQuery,
@@ -16,5 +18,17 @@ export const Route = createFileRoute("/app/organizer/land")({
       context.queryClient.ensureQueryData(landApplicationsQuery),
     ])
   },
-  component: LandOrganizerPanel,
+  head: () => ({ meta: [{ title: `${m.org_nav_land()} - ToU Rent` }] }),
+  component: LandPage,
 })
+
+// Раздел кабинета - страница, а не голая панель: у нее должен быть свой `h1`
+// (прежний жил в макете кабинета и назывался «Кабинет организатора»).
+function LandPage() {
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader title={m.org_nav_land()} />
+      <LandOrganizerPanel />
+    </div>
+  )
+}

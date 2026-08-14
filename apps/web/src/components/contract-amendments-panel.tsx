@@ -1,16 +1,24 @@
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+
 import { m } from "#/paraglide/messages"
+import { FormAlert } from "@/components/form-alert"
+import { Panel } from "@/components/panel"
+import { QueryBoundary } from "@/components/query-boundary"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Skeleton } from "@/components/ui/skeleton"
 import { problemMessage } from "@/lib/auth"
 import {
   amendableFieldsQuery,
   contractAmendmentsQuery,
   createAmendment,
 } from "@/lib/contract-amendments"
+import { formatDate } from "@/lib/format"
+import { serverLabel } from "@/lib/server-label"
+import { notifySuccess } from "@/lib/toast"
 
 /**
  * Допсоглашения к договору (FR-906, п. 125): отдельная сущность с
@@ -25,12 +33,84 @@ export function ContractAmendmentsPanel({
   contractId: string
   canAmend?: boolean
 }) {
+  const amendments = useQuery(contractAmendmentsQuery(contractId))
+
+  return (
+    <QueryBoundary
+      query={amendments}
+      skeleton={<Skeleton className="h-24 w-full rounded-xl" />}
+    >
+      {(rows) => {
+        // Ни заключенных допсоглашений, ни права их заключать - показывать
+        // нечего. Данные уже пришли: это ответ, а не загрузка
+        if (rows.length === 0 && !canAmend) return null
+
+        return (
+          <Panel
+            titleAs="h3"
+            title={m.amendments_title()}
+            description={m.amendments_hint()}
+            contentClassName="flex flex-col gap-4"
+          >
+            {rows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {m.amendment_empty()}
+              </p>
+            ) : (
+              <ul
+                className="flex flex-col gap-2 text-sm"
+                data-testid="amendments"
+              >
+                {rows.map((amendment) => (
+                  <li key={amendment.id} className="flex flex-col gap-1">
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <span className="font-medium">
+                        {m.amendment_number({ seq: amendment.seq })}
+                      </span>
+                      <span suppressHydrationWarning>
+                        {formatDate(amendment.effective_on)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {amendment.ground}
+                      </span>
+                      {amendment.has_pdf && (
+                        <a
+                          href={`/api/v1/amendments/${amendment.id}/pdf`}
+                          className="underline-offset-4 hover:underline"
+                        >
+                          {m.amendment_pdf()}
+                        </a>
+                      )}
+                    </div>
+                    <ul className="text-muted-foreground">
+                      {amendment.changes.map((change) => (
+                        <li key={change.field_code}>
+                          {change.field_label}: {change.old_value} →{" "}
+                          {change.new_value}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {canAmend && <AmendmentForm contractId={contractId} />}
+          </Panel>
+        )
+      }}
+    </QueryBoundary>
+  )
+}
+
+/**
+ * Форма допсоглашения: перечень изменяемых полей закрыт (п. 125), и пока
+ * он не загружен, формы нет вовсе - иначе обязательный выбор поля стоял бы
+ * пустым, а отправить его все равно было бы можно.
+ */
+function AmendmentForm({ contractId }: { contractId: string }) {
   const queryClient = useQueryClient()
-  const { data: amendments } = useQuery(contractAmendmentsQuery(contractId))
-  const { data: fields } = useQuery({
-    ...amendableFieldsQuery,
-    enabled: canAmend,
-  })
+  const fields = useQuery(amendableFieldsQuery)
 
   const [ground, setGround] = useState("")
   const [effectiveOn, setEffectiveOn] = useState("")
@@ -51,6 +131,7 @@ export function ContractAmendmentsPanel({
       setGround("")
       setOldValue("")
       setNewValue("")
+      notifySuccess(m.amendment_created_toast())
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: contractAmendmentsQuery(contractId).queryKey,
@@ -61,96 +142,41 @@ export function ContractAmendmentsPanel({
     },
   })
 
-  if (amendments === undefined) return null
-  if (amendments.length === 0 && !canAmend) return null
-
   return (
-    <div className="flex flex-col gap-2 border-t pt-3">
-      <h4 className="font-medium">{m.amendments_title()}</h4>
-
-      {amendments.length > 0 && (
-        <ul className="flex flex-col gap-2 text-sm" data-testid="amendments">
-          {amendments.map((amendment) => (
-            <li key={amendment.id} className="flex flex-col gap-1">
-              <div className="flex flex-wrap items-center gap-x-3">
-                <span className="font-medium">
-                  {m.amendment_number({ seq: amendment.seq })}
-                </span>
-                <span suppressHydrationWarning>{amendment.effective_on}</span>
-                <span className="text-muted-foreground">
-                  {amendment.ground}
-                </span>
-                {amendment.has_pdf && (
-                  <a
-                    href={`/api/v1/amendments/${amendment.id}/pdf`}
-                    className="underline-offset-4 hover:underline"
-                  >
-                    {m.amendment_pdf()}
-                  </a>
-                )}
-              </div>
-              <ul className="text-muted-foreground">
-                {amendment.changes.map((change) => (
-                  <li key={change.field_code}>
-                    {change.field_label}: {change.old_value} →{" "}
-                    {change.new_value}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {canAmend && (
+    <QueryBoundary
+      query={fields}
+      skeleton={<Skeleton className="h-40 w-full rounded-xl" />}
+    >
+      {(items) => (
         <form
-          className="flex flex-wrap items-end gap-2"
+          className="grid grid-cols-1 gap-3 border-t pt-4 sm:grid-cols-2"
           onSubmit={(event) => {
             event.preventDefault()
             create.mutate()
           }}
         >
-          <div className="flex min-w-56 flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor={`amend-field-${contractId}`}>
               {m.amendment_field_label()}
             </Label>
             <NativeSelect
+              className="w-full"
               id={`amend-field-${contractId}`}
+              required
               value={fieldCode}
               onChange={(event) => setFieldCode(event.target.value)}
             >
               <NativeSelectOption value="">
                 {m.amendment_field_none()}
               </NativeSelectOption>
-              {(fields ?? []).map((field) => (
+              {items.map((field) => (
                 <NativeSelectOption key={field.code} value={field.code}>
-                  {field.label_ru}
+                  {serverLabel(field)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
           </div>
-          <div className="flex w-44 flex-col gap-1.5">
-            <Label htmlFor={`amend-old-${contractId}`}>
-              {m.amendment_old_value()}
-            </Label>
-            <Input
-              id={`amend-old-${contractId}`}
-              value={oldValue}
-              onChange={(event) => setOldValue(event.target.value)}
-            />
-          </div>
-          <div className="flex w-44 flex-col gap-1.5">
-            <Label htmlFor={`amend-new-${contractId}`}>
-              {m.amendment_new_value()}
-            </Label>
-            <Input
-              id={`amend-new-${contractId}`}
-              required
-              value={newValue}
-              onChange={(event) => setNewValue(event.target.value)}
-            />
-          </div>
-          <div className="flex w-44 flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
             <Label htmlFor={`amend-date-${contractId}`}>
               {m.amendment_effective_on()}
             </Label>
@@ -162,7 +188,28 @@ export function ContractAmendmentsPanel({
               onChange={(event) => setEffectiveOn(event.target.value)}
             />
           </div>
-          <div className="flex w-full flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`amend-old-${contractId}`}>
+              {m.amendment_old_value()}
+            </Label>
+            <Input
+              id={`amend-old-${contractId}`}
+              value={oldValue}
+              onChange={(event) => setOldValue(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`amend-new-${contractId}`}>
+              {m.amendment_new_value()}
+            </Label>
+            <Input
+              id={`amend-new-${contractId}`}
+              required
+              value={newValue}
+              onChange={(event) => setNewValue(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
             <Label htmlFor={`amend-ground-${contractId}`}>
               {m.amendment_ground_label()}
             </Label>
@@ -174,24 +221,23 @@ export function ContractAmendmentsPanel({
             />
           </div>
           {create.isError && (
-            <p role="alert" className="w-full text-sm text-destructive">
+            <FormAlert className="sm:col-span-2">
               {problemMessage(create.error)}
-            </p>
+            </FormAlert>
           )}
-          <Button
-            type="submit"
-            variant="outline"
-            size="sm"
-            data-testid="create-amendment"
-            disabled={create.isPending || fieldCode === ""}
-          >
-            {m.amendment_submit()}
-          </Button>
-          <p className="w-full text-sm text-muted-foreground">
-            {m.amendments_hint()}
-          </p>
+          <div className="sm:col-span-2">
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              data-testid="create-amendment"
+              disabled={create.isPending || fieldCode === ""}
+            >
+              {m.amendment_submit()}
+            </Button>
+          </div>
         </form>
       )}
-    </div>
+    </QueryBoundary>
   )
 }

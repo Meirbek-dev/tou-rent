@@ -5,7 +5,10 @@
 //! что и в домене (`domain::calendar`, паритет проверяет гейт G12): даже
 //! если приложение и БД разойдутся во времени, календарь у них один.
 
+use std::collections::BTreeMap;
+
 use time::OffsetDateTime;
+use tou_domain::notification::NotificationKind;
 use tou_domain::obligation::{ObligationAction, Term};
 use tou_domain::role::Role;
 use uuid::Uuid;
@@ -241,7 +244,14 @@ pub async fn complete_tender(
 
 /// «Мои сроки» (FR-1702): открытые обязательства ролей пользователя,
 /// ближайшие сверху. Исполненные не показываются - их место в аудите.
-pub async fn for_roles(db: &Db, roles: &[Role]) -> Result<Vec<ObligationRecord>, sqlx::Error> {
+///
+/// Курсора нет: рабочий список разгружается работой - исполненный срок из
+/// него выбывает. Тысяча открытых сроков означает не длинный список,
+/// а завал, и признак усечения говорит именно об этом.
+pub async fn for_roles(
+    db: &Db,
+    roles: &[Role],
+) -> Result<crate::Page<ObligationRecord>, sqlx::Error> {
     let names: Vec<String> = roles.iter().map(|r| r.as_str().to_owned()).collect();
 
     let rows = obligation_query!(
@@ -249,12 +259,13 @@ pub async fn for_roles(db: &Db, roles: &[Role]) -> Result<Vec<ObligationRecord>,
             AND o.status IN ('pending', 'overdue')
           ORDER BY o.due_at LIMIT $2",
         &names,
-        crate::MAX_ROWS
+        crate::probe_limit(crate::MAX_ROWS)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "obligations::for_roles");
-    rows.into_iter().map(ObligationRecord::try_from).collect()
+    let page = crate::Page::probe(rows, crate::MAX_ROWS);
+    crate::warn_if_truncated(page.truncated, "obligations::for_roles");
+    page.try_map(ObligationRecord::try_from)
 }
 
 /// Просроченное обязательство и получатель эскалации.
@@ -268,51 +279,114 @@ pub struct Escalation {
     pub recipient_id: Uuid,
 }
 
-/// Просроченные сроки: перевод в `overdue` и список получателей эскалации
-/// (все носители роли-исполнителя). Уведомление о каждом сроке - однократное
-/// (`escalated_at`), поэтому воркер можно запускать как угодно часто.
+/// Просроченные сроки: перевод в `overdue` и уведомление всех носителей
+/// роли-исполнителя - одной транзакцией (FR-1702, FR-1302).
+///
+/// Одна транзакция здесь и есть содержание функции. Раньше отметка
+/// `escalated_at` коммитилась отдельно, а уведомления писались уже после
+/// коммита, по одному вызову на получателя. Падение процесса, обрыв
+/// соединения или ошибка на середине цикла оставляли часть получателей без
+/// уведомления навсегда: выборка следующего прохода фильтрует по
+/// `escalated_at IS NULL` и такой срок больше не видит, а следа о потере
+/// не оставалось. Теперь либо эскалирована вся пачка вместе с уведомлениями,
+/// либо не эскалировано ничего и то же самое подберет следующий проход.
+///
+/// Уведомление о каждом сроке по-прежнему однократно (`escalated_at`),
+/// поэтому воркер можно запускать как угодно часто и в нескольких
+/// экземплярах (NFR-12).
 pub async fn take_overdue(db: &Db) -> Result<Vec<Escalation>, sqlx::Error> {
     let mut tx = db.begin().await?;
 
-    // Актор события - система: обязательство просрочилось само, без человека
-    //
-    // Пачкой, а не всем накопившимся сразу: LIMIT в UPDATE не ставится,
-    // поэтому строки отбираются подзапросом. FOR UPDATE SKIP LOCKED -
-    // чтобы два экземпляра воркера (NFR-12) разбирали разные пачки,
-    // а не ждали друг друга.
-    // `!` - столбцы приходят из CTE, а не из таблицы: происхождение
-    // планировщик не сообщает и считает их потенциально NULL.
-    // `tender_title` наоборот - `?`: он из LEFT JOIN, а `core.tenders.title`
-    // NOT NULL, и sqlx вывел бы non-null по самому столбцу
-    let rows = sqlx::query_as!(
-        Escalation,
-        r#"WITH overdue AS (
-             UPDATE core.obligations o
-             SET status = 'overdue', escalated_at = core.now()
-             WHERE o.id IN (
-               SELECT id FROM core.obligations
-               WHERE status = 'pending' AND due_at < core.now() AND escalated_at IS NULL
-               ORDER BY due_at
-               LIMIT $1
-               FOR UPDATE SKIP LOCKED
-             )
-             RETURNING o.id, o.action, o.rule_ref, o.assignee_role, o.tender_id, o.due_at
-           )
-           SELECT overdue.id AS "obligation_id!", overdue.action AS "action!",
-                  overdue.rule_ref AS "rule_ref!", overdue.tender_id,
-                  t.title AS "tender_title?", overdue.due_at AS "due_at!",
-                  rg.user_id AS "recipient_id!"
-           FROM overdue
-           JOIN core.role_grants rg ON rg.role = overdue.assignee_role
-           JOIN core.users u ON u.id = rg.user_id AND u.is_active
-           LEFT JOIN core.tenders t ON t.id = overdue.tender_id"#,
+    // Пачкой, а не всем накопившимся сразу (`BATCH_ROWS`).
+    // FOR UPDATE SKIP LOCKED - чтобы два экземпляра воркера разбирали
+    // разные пачки, а не ждали друг друга.
+    let claimed: Vec<Uuid> = sqlx::query_scalar!(
+        "SELECT id FROM core.obligations
+         WHERE status = 'pending' AND due_at < core.now() AND escalated_at IS NULL
+         ORDER BY due_at
+         LIMIT $1
+         FOR UPDATE SKIP LOCKED",
         crate::BATCH_ROWS
     )
     .fetch_all(&mut *tx)
     .await?;
 
+    if claimed.is_empty() {
+        tx.rollback().await?;
+        return Ok(Vec::new());
+    }
+
+    // `tender_title` - `?`: он из LEFT JOIN, а `core.tenders.title` NOT NULL,
+    // и sqlx вывел бы non-null по самому столбцу
+    let rows = sqlx::query_as!(
+        Escalation,
+        r#"SELECT o.id AS obligation_id, o.action, o.rule_ref, o.tender_id,
+                  t.title AS "tender_title?", o.due_at, rg.user_id AS recipient_id
+           FROM core.obligations o
+           JOIN core.role_grants rg ON rg.role = o.assignee_role
+           JOIN core.users u ON u.id = rg.user_id AND u.is_active
+           LEFT JOIN core.tenders t ON t.id = o.tender_id
+           WHERE o.id = ANY($1)
+           ORDER BY o.due_at, rg.user_id"#,
+        &claimed
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+
+    // Отметка ставится всей пачке, а не только тем срокам, у которых нашелся
+    // получатель: у роли-исполнителя может не быть ни одного носителя, и без
+    // отметки такой срок эскалировался бы вхолостую каждый проход подряд.
+    // Актор события - система: обязательство просрочилось само, без человека
+    sqlx::query!(
+        "UPDATE core.obligations
+         SET status = 'overdue', escalated_at = core.now()
+         WHERE id = ANY($1)",
+        &claimed
+    )
+    .execute(&mut *tx)
+    .await?;
+
+    // Актор записи - получатель: системного пользователя в модели нет,
+    // а доказательная база (FR-1302) требует непустого актора. Актор
+    // транзакции один на момент вставки (GUC `app.user_id`), поэтому
+    // уведомления идут пачкой на получателя, а не по одному на срок
+    let mut by_recipient: BTreeMap<Uuid, Vec<serde_json::Value>> = BTreeMap::new();
+    for item in &rows {
+        by_recipient
+            .entry(item.recipient_id)
+            .or_default()
+            .push(overdue_payload(item));
+    }
+
+    let kind = NotificationKind::ObligationOverdue.as_str();
+    for (recipient, payloads) in &by_recipient {
+        crate::set_actor(&mut tx, *recipient).await?;
+        sqlx::query!(
+            "INSERT INTO core.notifications (user_id, kind, payload)
+             SELECT $1::uuid, $2::text, payload FROM unnest($3::jsonb[]) AS payload",
+            recipient,
+            kind,
+            payloads
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
     tx.commit().await?;
     Ok(rows)
+}
+
+/// Тело уведомления о просрочке (FR-1302): все, чем срок опознается
+/// в кабинете исполнителя, - действие, пункт Правил и предмет.
+fn overdue_payload(item: &Escalation) -> serde_json::Value {
+    serde_json::json!({
+        "obligation_id": item.obligation_id,
+        "action": item.action,
+        "rule_ref": item.rule_ref,
+        "tender_id": item.tender_id,
+        "tender_title": item.tender_title,
+        "due_at": item.due_at.unix_timestamp(),
+    })
 }
 
 /// Праздники производственного календаря (FR-1701): читает домен для

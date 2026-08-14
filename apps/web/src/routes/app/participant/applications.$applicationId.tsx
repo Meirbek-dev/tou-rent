@@ -1,4 +1,4 @@
-import { useRef } from "react"
+import { useRef, useState } from "react"
 import { Link, createFileRoute, notFound } from "@tanstack/react-router"
 import {
   useMutation,
@@ -9,10 +9,16 @@ import {
 import { m } from "#/paraglide/messages"
 import { AmendmentsBanner } from "@/components/amendments-banner"
 import { ApplicationStatusBadge } from "@/components/application-status-badge"
-import { Button } from "@/components/ui/button"
+import { ConfirmAction } from "@/components/confirm-action"
+import { PageHeader } from "@/components/page-header"
+import { Panel } from "@/components/panel"
+import { QueryBoundary } from "@/components/query-boundary"
+import { Badge } from "@/components/ui/badge"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { api } from "@/lib/api"
+import { Skeleton } from "@/components/ui/skeleton"
+import { api, tenderQuery } from "@/lib/api"
 import { lotAuctionQuery } from "@/lib/auctions"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
@@ -21,10 +27,12 @@ import {
   reasonLabel,
   rejectionReasonsQuery,
 } from "@/lib/participant"
+import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
-import { buttonVariants } from "@/components/ui/button"
+import { UPLOAD_ACCEPT, uploadError } from "@/lib/validation"
 
 import type { ApplicationDto } from "@/lib/participant"
+import type { ReactNode } from "react"
 
 // Карточка своей заявки: файлы (FR-401) и отзыв до дедлайна (FR-404).
 export const Route = createFileRoute(
@@ -32,11 +40,23 @@ export const Route = createFileRoute(
 )({
   loader: async ({ context, params }) => {
     const list = await context.queryClient.ensureQueryData(myApplicationsQuery)
-    if (!list.some((a) => a.id === params.applicationId)) throw notFound()
-    await context.queryClient.ensureQueryData(rejectionReasonsQuery)
+    const application = list.find((a) => a.id === params.applicationId)
+    if (application === undefined) throw notFound()
+    await Promise.all([
+      context.queryClient.ensureQueryData(rejectionReasonsQuery),
+      // Предмет заявки - лот тендера: без него заголовком страницы остается
+      // короткий идентификатор, по которому заявку не узнать
+      context.queryClient.ensureQueryData(tenderQuery(application.tender_id)),
+    ])
   },
+  head: () => ({
+    meta: [{ title: `${m.application_card_short()} - ToU Rent` }],
+  }),
   component: ApplicationPage,
 })
+
+/** Комната лота открыта или уже идет: в обоих случаях участнику туда пора. */
+const LIVE_AUCTION_STATUSES = new Set(["scheduled", "running"])
 
 function ApplicationPage() {
   const { applicationId } = Route.useParams()
@@ -50,7 +70,13 @@ function ApplicationPage() {
 function ApplicationCard({ application }: { application: ApplicationDto }) {
   const queryClient = useQueryClient()
   const fileInput = useRef<HTMLInputElement>(null)
+  // Досье под Object Lock на пять лет (INV-042), поэтому api отвергает файл
+  // не того формата или крупнее 10 МБ. Раньше форма об этом не знала, и
+  // участник узнавал об отказе, отправив файл целиком
+  const [fileError, setFileError] = useState<string | undefined>(undefined)
   const { data: reasons } = useSuspenseQuery(rejectionReasonsQuery)
+  const { data: tender } = useSuspenseQuery(tenderQuery(application.tender_id))
+  const lot = tender?.lots.find((item) => item.id === application.lot_id)
 
   const refresh = () =>
     queryClient.invalidateQueries({ queryKey: myApplicationsQuery.queryKey })
@@ -66,7 +92,10 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
       }
       return data
     },
-    onSuccess: refresh,
+    onSuccess: async () => {
+      notifySuccess(m.application_detail_withdrawn_toast())
+      await refresh()
+    },
   })
 
   const upload = useMutation({
@@ -92,8 +121,11 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
     },
     onSuccess: async () => {
       if (fileInput.current) fileInput.current.value = ""
+      setFileError(undefined)
+      notifySuccess(m.application_detail_file_uploaded())
       await refresh()
     },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
   })
 
   const isSubmitted = application.status === "submitted"
@@ -109,6 +141,73 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
         </Link>
       </nav>
 
+      <PageHeader
+        title={
+          tender?.title ??
+          m.application_card_title({ id: application.id.slice(0, 8) })
+        }
+        description={m.application_card_title({
+          id: application.id.slice(0, 8),
+        })}
+        badge={<ApplicationStatusBadge status={application.status} />}
+        facts={
+          <>
+            {lot !== undefined && (
+              <Fact label={m.lot_seq()}>
+                <span className="tabular-nums">{lot.seq}</span> · {lot.purpose}
+              </Fact>
+            )}
+            <Fact label={m.application_submitted_at()}>
+              <span className="tabular-nums" suppressHydrationWarning>
+                {formatDateTime(application.submitted_at)}
+              </span>
+            </Fact>
+            <Fact label={m.application_price()}>
+              <span className="tabular-nums" suppressHydrationWarning>
+                {application.price_amount != null
+                  ? formatTenge(application.price_amount)
+                  : m.application_price_sealed()}
+              </span>
+            </Fact>
+            {application.withdrawn_at != null && (
+              <Fact label={m.application_withdrawn_at()}>
+                <span className="tabular-nums" suppressHydrationWarning>
+                  {formatDateTime(application.withdrawn_at)}
+                </span>
+              </Fact>
+            )}
+            {application.rejection_reason != null && (
+              <Fact label={m.rejection_reason_label()}>
+                {reasonLabel(reasons, application.rejection_reason)}
+              </Fact>
+            )}
+          </>
+        }
+        actions={
+          isSubmitted ? (
+            // Отзыв заявки назад не отыгрывается (FR-404, п. 44)
+            <ConfirmAction
+              title={m.application_detail_withdraw_confirm_title()}
+              description={m.application_detail_withdraw_confirm_description()}
+              confirmLabel={m.application_withdraw()}
+              onConfirm={() => withdraw.mutate()}
+              disabled={withdraw.isPending}
+              trigger={
+                <Button variant="destructive">
+                  {m.application_withdraw()}
+                </Button>
+              }
+            />
+          ) : undefined
+        }
+      />
+
+      {withdraw.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {problemMessage(withdraw.error)}
+        </p>
+      )}
+
       {/* FR-304, FR-1004: условия изменились - можно отказаться (п. 26.5) */}
       <AmendmentsBanner
         tenderId={application.tender_id}
@@ -117,83 +216,18 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
         }
       />
 
-      <header className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <ApplicationStatusBadge status={application.status} />
-          <span className="text-sm text-muted-foreground">
-            {m.application_card_title({ id: application.id.slice(0, 8) })}
-          </span>
-        </div>
-        <dl className="grid grid-cols-1 gap-3 rounded-lg border p-4 sm:grid-cols-3">
-          <div className="flex flex-col gap-0.5">
-            <dt className="text-sm text-muted-foreground">
-              {m.application_price()}
-            </dt>
-            <dd className="font-medium" suppressHydrationWarning>
-              {application.price_amount != null
-                ? formatTenge(application.price_amount)
-                : m.application_price_sealed()}
-            </dd>
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <dt className="text-sm text-muted-foreground">
-              {m.application_submitted_at()}
-            </dt>
-            <dd className="font-medium" suppressHydrationWarning>
-              {formatDateTime(application.submitted_at)}
-            </dd>
-          </div>
-          {application.withdrawn_at != null && (
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-sm text-muted-foreground">
-                {m.application_withdrawn_at()}
-              </dt>
-              <dd className="font-medium" suppressHydrationWarning>
-                {formatDateTime(application.withdrawn_at)}
-              </dd>
-            </div>
-          )}
-          {application.rejection_reason != null && (
-            <div className="flex flex-col gap-0.5">
-              <dt className="text-sm text-muted-foreground">
-                {m.rejection_reason_label()}
-              </dt>
-              <dd className="font-medium">
-                {reasonLabel(reasons, application.rejection_reason)}
-              </dd>
-            </div>
-          )}
-        </dl>
-        {isSubmitted && (
-          <div>
-            <Button
-              variant="destructive"
-              onClick={() => withdraw.mutate()}
-              disabled={withdraw.isPending}
-            >
-              {m.application_withdraw()}
-            </Button>
-          </div>
-        )}
-        {withdraw.isError && (
-          <p role="alert" className="text-sm text-destructive">
-            {problemMessage(withdraw.error)}
-          </p>
-        )}
-        {application.status === "admitted" && (
-          <AuctionRoomLink lotId={application.lot_id} />
-        )}
-      </header>
+      {application.status === "admitted" && (
+        <AuctionRoomCta lotId={application.lot_id} />
+      )}
 
-      <section aria-labelledby="application-files">
-        <h2
-          id="application-files"
-          className="mb-3 font-heading text-lg font-semibold"
-        >
-          {m.application_files_title()}
-        </h2>
+      <Panel
+        title={m.application_files_title()}
+        contentClassName="flex flex-col gap-4"
+      >
         {application.files.length === 0 ? (
-          <p className="text-muted-foreground">{m.application_files_empty()}</p>
+          <p className="text-sm text-muted-foreground">
+            {m.application_files_empty()}
+          </p>
         ) : (
           <ul className="flex flex-col gap-2">
             {application.files.map((file) => (
@@ -207,7 +241,7 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
                 >
                   {file.filename}
                 </a>
-                <span className="ml-2 text-sm text-muted-foreground">
+                <span className="ml-2 text-sm text-muted-foreground tabular-nums">
                   {Math.ceil(file.size_bytes / 1024)} KiB
                 </span>
               </li>
@@ -217,9 +251,12 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
 
         {isSubmitted && (
           <form
-            className="mt-4 flex flex-wrap items-end gap-3"
+            className="flex flex-wrap items-end gap-3"
             onSubmit={(event) => {
               event.preventDefault()
+              const problem = uploadError(fileInput.current?.files?.[0])
+              setFileError(problem)
+              if (problem !== undefined) return
               upload.mutate()
             }}
           >
@@ -229,12 +266,25 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
                 id="application-file"
                 type="file"
                 required
+                accept={UPLOAD_ACCEPT}
+                aria-invalid={fileError !== undefined}
                 ref={fileInput}
+                onChange={() => {
+                  const file = fileInput.current?.files?.[0]
+                  setFileError(
+                    file === undefined ? undefined : uploadError(file)
+                  )
+                }}
               />
             </div>
             <Button type="submit" disabled={upload.isPending}>
               {m.file_upload_submit()}
             </Button>
+            {fileError !== undefined && (
+              <p role="alert" className="w-full text-sm text-destructive">
+                {fileError}
+              </p>
+            )}
             {upload.isError && (
               <p role="alert" className="w-full text-sm text-destructive">
                 {problemMessage(upload.error)}
@@ -242,25 +292,67 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
             )}
           </form>
         )}
-      </section>
+      </Panel>
     </div>
   )
 }
 
-/** Вход в комнату торгов допущенного участника (FR-601): появляется, когда
- * секретарь открыл комнату по лоту. */
-function AuctionRoomLink({ lotId }: { lotId: string }) {
-  const { data: auction } = useQuery(lotAuctionQuery(lotId))
-  if (!auction) return null
+function Fact({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className="text-muted-foreground">{label}:</span>
+      <span className="font-medium">{children}</span>
+    </span>
+  )
+}
+
+/**
+ * Вход в комнату торгов допущенного участника (FR-601).
+ *
+ * Раньше это была строчка-ссылка в конце шапки, и день торгов участник
+ * пропускал, не заметив ее. Комната открыта или уже идет - это главное,
+ * что есть на экране заявки, поэтому здесь она заявлена полосой с кнопкой.
+ */
+function AuctionRoomCta({ lotId }: { lotId: string }) {
+  const auction = useQuery(lotAuctionQuery(lotId))
 
   return (
-    <Link
-      to="/app/auctions/$auctionId"
-      params={{ auctionId: auction.id }}
-      data-testid="auction-room-link"
-      className={cn(buttonVariants({ variant: "outline" }), "self-start")}
+    <QueryBoundary
+      query={auction}
+      skeleton={<Skeleton className="h-20 w-full rounded-xl" />}
     >
-      {m.auction_go_to_room()} →
-    </Link>
+      {(data) =>
+        data != null && LIVE_AUCTION_STATUSES.has(data.status) ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3">
+            <div className="flex flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="font-heading text-base font-semibold text-primary">
+                  {m.application_detail_auction_title()}
+                </p>
+                <Badge variant="info">
+                  {data.status === "running"
+                    ? m.auction_status_running()
+                    : m.auction_status_scheduled()}
+                </Badge>
+              </div>
+              <p className="text-sm text-primary/90">
+                {m.auction_lot({
+                  seq: data.lot_seq,
+                  purpose: data.lot_purpose,
+                })}
+              </p>
+            </div>
+            <Link
+              to="/app/auctions/$auctionId"
+              params={{ auctionId: data.id }}
+              data-testid="auction-room-link"
+              className={cn(buttonVariants())}
+            >
+              {m.auction_go_to_room()} →
+            </Link>
+          </div>
+        ) : null
+      }
+    </QueryBoundary>
   )
 }

@@ -1,8 +1,12 @@
+import { FileQuestionIcon, SearchXIcon } from "lucide-react"
 import { Link, createFileRoute, notFound } from "@tanstack/react-router"
+
 import { m } from "#/paraglide/messages"
 import { AmendmentsBanner } from "@/components/amendments-banner"
+import { DeadlineBlock } from "@/components/deadline-block"
+import { EmptyState } from "@/components/empty-state"
 import { ProtocolsPanel } from "@/components/protocols-panel"
-import { SiteHeader } from "@/components/site-header"
+import { PublicShell } from "@/components/public-shell"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import {
@@ -13,9 +17,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { tenderAmendmentsQuery } from "@/lib/amendments"
 import { tenderQuery } from "@/lib/api"
 import { formatDateTime, formatTenge } from "@/lib/format"
+import { tenderProtocolsQuery } from "@/lib/publications"
 import { cn } from "@/lib/utils"
+
+import type { LotDto } from "@/lib/api"
 
 // FR-1401: карточка тендера - лоты, сроки, документация; SSR, работает без JS.
 export const Route = createFileRoute("/tenders/$tenderId")({
@@ -24,6 +32,20 @@ export const Route = createFileRoute("/tenders/$tenderId")({
       tenderQuery(params.tenderId)
     )
     if (tender === null) throw notFound()
+
+    // NFR-04: изменения документации (продление срока, право отказаться -
+    // FR-304, п. 27) и протоколы (FR-1402) - юридически значимая часть
+    // карточки. Без предзагрузки их забирал только браузер, и без JS они
+    // пропадали со страницы целиком. Оба маршрута открыты гостю.
+    await Promise.all([
+      context.queryClient.ensureQueryData(
+        tenderAmendmentsQuery(params.tenderId)
+      ),
+      context.queryClient.ensureQueryData(
+        tenderProtocolsQuery(params.tenderId)
+      ),
+    ])
+
     return tender
   },
   head: ({ loaderData }) => ({
@@ -35,15 +57,83 @@ export const Route = createFileRoute("/tenders/$tenderId")({
   notFoundComponent: TenderNotFound,
 })
 
-function DateRow({ label, value }: { label: string; value?: string | null }) {
+function DateRow({
+  label,
+  value,
+}: {
+  label: string
+  value?: string | null | undefined
+}) {
   return (
     <div className="flex flex-col gap-0.5">
       <dt className="text-sm text-muted-foreground">{label}</dt>
       {/* Intl-вывод может отличаться между SSR и браузерами с урезанным ICU */}
-      <dd className="font-medium" suppressHydrationWarning>
+      <dd className="font-medium tabular-nums" suppressHydrationWarning>
         {formatDateTime(value) ?? m.tender_date_tbd()}
       </dd>
     </div>
+  )
+}
+
+/** Ячейка карточки лота на узком экране: тот же лот, что и в строке таблицы. */
+function LotFact({
+  label,
+  value,
+  numeric = false,
+  intl = false,
+}: {
+  label: string
+  value: string
+  numeric?: boolean
+  intl?: boolean
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(numeric && "tabular-nums")}
+        suppressHydrationWarning={intl}
+      >
+        {value}
+      </dd>
+    </div>
+  )
+}
+
+function LotCard({ lot }: { lot: LotDto }) {
+  return (
+    <li className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs">
+      <div className="flex items-baseline gap-2">
+        <span className="text-sm text-muted-foreground tabular-nums">
+          {m.lot_seq()}
+          {lot.seq}
+        </span>
+        <h3 className="text-base font-semibold">{lot.purpose}</h3>
+      </div>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        <LotFact
+          label={m.lot_lease_months()}
+          value={m.lot_months({ months: lot.lease_months })}
+          numeric
+        />
+        <LotFact
+          label={m.lot_base_rate()}
+          value={formatTenge(lot.base_rate_monthly)}
+          numeric
+          intl
+        />
+        <LotFact
+          label={m.lot_guarantee_fee()}
+          value={formatTenge(lot.guarantee_fee)}
+          numeric
+          intl
+        />
+        <LotFact
+          label={m.lot_viewing_terms()}
+          value={lot.viewing_terms ?? "-"}
+        />
+      </dl>
+    </li>
   )
 }
 
@@ -51,9 +141,8 @@ function TenderPage() {
   const tender = Route.useLoaderData()
 
   return (
-    <>
-      <SiteHeader />
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-6 py-10">
+    <PublicShell>
+      <div className="flex flex-col gap-8">
         <nav aria-label={m.back_to_tenders()}>
           <Link
             to="/tenders"
@@ -63,28 +152,35 @@ function TenderPage() {
           </Link>
         </nav>
 
-        <header className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <TenderStatusBadge status={tender.status} />
-            <span className="text-sm text-muted-foreground">
-              {m.tender_card_title({ id: tender.id.slice(0, 8) })}
-            </span>
+        <header className="grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card shadow-xs md:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="flex flex-col gap-3 p-5 md:p-6">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <TenderStatusBadge status={tender.status} />
+              <span className="text-sm text-muted-foreground">
+                {m.tender_id_label()}{" "}
+                <span className="tabular-nums">{tender.id.slice(0, 8)}</span>
+              </span>
+            </div>
+            <h1 className="text-3xl font-semibold tracking-tight text-balance">
+              {tender.title}
+            </h1>
           </div>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight text-balance">
-            {tender.title}
-          </h1>
+          <div className="border-t px-5 pt-4 pb-5 md:col-start-2 md:border-t-0 md:border-l md:px-6 md:py-6 md:text-right">
+            <DeadlineBlock
+              value={tender.submission_deadline}
+              size="lg"
+              className="md:min-w-[11rem] md:items-end"
+            />
+          </div>
         </header>
 
         <AmendmentsBanner tenderId={tender.id} />
 
         <section aria-labelledby="tender-dates">
-          <h2
-            id="tender-dates"
-            className="mb-3 font-heading text-xl font-semibold"
-          >
+          <h2 id="tender-dates" className="mb-3 text-xl font-semibold">
             {m.tender_dates_title()}
           </h2>
-          <dl className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <dl className="grid grid-cols-1 gap-4 rounded-xl border bg-card p-5 shadow-xs sm:grid-cols-2 lg:grid-cols-4">
             <DateRow
               label={m.tender_announced_at()}
               value={tender.announced_at}
@@ -101,13 +197,14 @@ function TenderPage() {
         <ProtocolsPanel tenderId={tender.id} />
 
         <section aria-labelledby="tender-lots">
-          <h2
-            id="tender-lots"
-            className="mb-3 font-heading text-xl font-semibold"
-          >
+          <h2 id="tender-lots" className="mb-3 text-xl font-semibold">
             {m.tender_lots_title()}
           </h2>
-          <div className="rounded-lg border">
+
+          {/* Одни и те же лоты в двух видах. Переключает CSS, а не JS:
+              без скриптов узкий экран обязан получить читаемый список
+              (NFR-04), а широкий - настоящую таблицу с заголовками */}
+          <div className="hidden overflow-hidden rounded-xl border bg-card shadow-xs md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -126,11 +223,11 @@ function TenderPage() {
               <TableBody>
                 {tender.lots.map((lot) => (
                   <TableRow key={lot.id}>
-                    <TableCell>{lot.seq}</TableCell>
+                    <TableCell className="tabular-nums">{lot.seq}</TableCell>
                     <TableCell className="max-w-md whitespace-normal">
                       {lot.purpose}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="tabular-nums">
                       {m.lot_months({ months: lot.lease_months })}
                     </TableCell>
                     <TableCell
@@ -153,13 +250,15 @@ function TenderPage() {
               </TableBody>
             </Table>
           </div>
+          <ul className="flex flex-col gap-3 md:hidden">
+            {tender.lots.map((lot) => (
+              <LotCard key={lot.id} lot={lot} />
+            ))}
+          </ul>
         </section>
 
         <section aria-labelledby="tender-docs">
-          <h2
-            id="tender-docs"
-            className="mb-3 font-heading text-xl font-semibold"
-          >
+          <h2 id="tender-docs" className="mb-3 text-xl font-semibold">
             {m.tender_docs_title()}
           </h2>
           <p>
@@ -172,30 +271,44 @@ function TenderPage() {
               {m.tender_announcement_pdf()}
             </a>
           </p>
-          {/* Тендерную документацию (файлы) подключает Т8 (RustFS) */}
-          <p className="mt-3 text-muted-foreground">{m.tender_docs_empty()}</p>
+          {/* Файлов документации в контракте пока нет - их подключает Т8
+              (RustFS). Пока перечень пуст, на его месте стоит пустое
+              состояние, а не абзац-обещание посреди наполненной страницы */}
+          <EmptyState
+            icon={FileQuestionIcon}
+            title={m.tender_docs_empty_title()}
+            description={m.tender_docs_empty()}
+            className="mt-3 py-10"
+          />
         </section>
-      </main>
-    </>
+      </div>
+    </PublicShell>
   )
 }
 
 function TenderNotFound() {
   return (
-    <>
-      <SiteHeader />
-      <main className="mx-auto flex w-full max-w-6xl flex-col items-start gap-4 px-6 py-16">
-        <h1 className="font-heading text-2xl font-semibold">
-          {m.tender_not_found_title()}
-        </h1>
-        <p className="text-muted-foreground">{m.tender_not_found_text()}</p>
-        <Link
-          to="/tenders"
-          className={cn(buttonVariants({ variant: "outline" }))}
-        >
-          {m.back_to_tenders()}
-        </Link>
-      </main>
-    </>
+    <PublicShell>
+      <EmptyState
+        icon={SearchXIcon}
+        title={m.tender_not_found_title()}
+        titleAs="h1"
+        description={m.tender_not_found_text()}
+        className="my-10"
+        action={
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to="/tenders"
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              {m.back_to_tenders()}
+            </Link>
+            <Link to="/" className={cn(buttonVariants({ variant: "ghost" }))}>
+              {m.nav_home()}
+            </Link>
+          </div>
+        }
+      />
+    </PublicShell>
   )
 }

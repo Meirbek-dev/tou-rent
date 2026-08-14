@@ -29,6 +29,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
+use crate::upload;
 
 const TEMPLATE: &str = include_str!("templates/contract.typ");
 
@@ -126,19 +127,36 @@ pub async fn tender_contracts(
     Ok(Json(records.into_iter().map(contract_dto).collect()))
 }
 
+/// Договоры кабинета нанимателя (ТЗ § 7).
+///
+/// `next_after` всегда `null`: договоров у нанимателя единицы, продолжения
+/// у выборки нет. Поле остается ради единообразия усекаемых реестров.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MyContractPage {
+    pub items: Vec<ContractDto>,
+    pub next_after: Option<String>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
 /// Мои договоры (кабинет нанимателя).
 #[utoipa::path(
     get,
     path = "/api/v1/contracts/my",
     tag = "contracts",
-    responses((status = 200, description = "Договоры нанимателя", body = [ContractDto]))
+    responses((status = 200, description = "Договоры нанимателя", body = MyContractPage))
 )]
 pub async fn my_contracts(
     user: CurrentUser,
     State(state): State<AppState>,
-) -> Result<Json<Vec<ContractDto>>, ApiError> {
-    let records = contracts::list_for_tenant(&state.db, user.id()).await?;
-    Ok(Json(records.into_iter().map(contract_dto).collect()))
+) -> Result<Json<MyContractPage>, ApiError> {
+    let page = contracts::list_for_tenant(&state.db, user.id()).await?;
+    let truncated = page.truncated;
+    Ok(Json(MyContractPage {
+        items: page.into_iter().map(contract_dto).collect(),
+        next_after: None,
+        truncated,
+    }))
 }
 
 /// Доступ к конкретному договору: ведущие процесс - по праву, наниматель -
@@ -180,7 +198,7 @@ pub async fn draft_contract(
     State(state): State<AppState>,
     Path(lot_id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<ContractDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let record = contracts::draft_from_auction(&state.db, user.id(), lot_id)
         .await
@@ -338,7 +356,7 @@ pub async fn check_checklist_item(
     Path(id): Path<Uuid>,
     Json(body): Json<CheckItemRequest>,
 ) -> Result<Json<Vec<ChecklistItemDto>>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let rows = contracts::check_item(&state.db, user.id(), id, &body.item_code, body.checked)
         .await
@@ -372,7 +390,7 @@ pub async fn advance_contract(
     Path(id): Path<Uuid>,
     Json(body): Json<AdvanceRequest>,
 ) -> Result<Json<ContractDto>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let stage: Stage = body
         .stage
@@ -414,7 +432,7 @@ pub async fn register_contract(
     Path(id): Path<Uuid>,
     Json(body): Json<RegisterContractRequest>,
 ) -> Result<Json<ContractDto>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let record = contracts::register(&state.db, user.id(), id, &body.reg_number)
         .await
@@ -442,26 +460,26 @@ pub async fn upload_scan(
 ) -> Result<Json<ContractDto>, ApiError> {
     // Подписанный экземпляр возвращает наниматель (п. 111) - до сих пор
     // это делал за него организатор, и следа действия самой стороны
-    // договора не оставалось
+    // договора не оставалось. Право проверяется до записи в бакет: досье
+    // под Object Lock (INV-042), сироту оттуда не убрать
     ensure_contract_party(&user, &state, id).await?;
 
-    let mut stored: Option<String> = None;
-    while let Some(field) = multipart.next_field().await.map_err(ApiError::internal)? {
-        let filename = field.file_name().unwrap_or("scan.pdf").to_owned();
-        let bytes = field.bytes().await.map_err(ApiError::internal)?;
-        if bytes.is_empty() {
-            continue;
-        }
-        let key = format!("contracts/{id}/signed-{filename}");
-        state
-            .storage
-            .put(&ObjectPath::from(key.as_str()), PutPayload::from(bytes))
-            .await
-            .map_err(ApiError::internal)?;
-        stored = Some(key);
-    }
+    // Прежний разбор клал в бакет КАЖДУЮ часть формы, а в БД записывал ключ
+    // только последней: все прочие оставались несносимыми сиротами. Плюс ключ
+    // строился из имени файла как есть - с путем и кавычками внутри
+    let file =
+        upload::take_file(&mut multipart, "file", "scan.pdf", upload::MAX_FILE_BYTES).await?;
 
-    let key = stored.ok_or_else(|| ApiError::Validation("файл не приложен".to_owned()))?;
+    let key = format!("contracts/{id}/signed-{}", file.filename);
+    state
+        .storage
+        .put(
+            &ObjectPath::from(key.as_str()),
+            PutPayload::from_bytes(file.bytes),
+        )
+        .await
+        .map_err(ApiError::internal)?;
+
     let record = contracts::attach_scan(&state.db, user.id(), id, &key)
         .await
         .map_err(contract_error)?;
@@ -490,7 +508,7 @@ pub async fn contract_pdf(
 
     // Свой договор видит наниматель; чужие - организатор и секретарь
     if record.tenant_id != user.id() {
-        user.require(Action::TenderManage)?;
+        user.require(Action::ContractManage)?;
     }
     let pdf_key = record.pdf_key.ok_or(ApiError::NotFound)?;
 

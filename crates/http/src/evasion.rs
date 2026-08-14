@@ -15,6 +15,7 @@ use object_store::path::Path as ObjectPath;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
+use tou_db::RowCursor;
 use tou_db::evasion::{self, EvasionError};
 use tou_db::results::MeetingError;
 use tou_db::{admission, results, tenders};
@@ -22,16 +23,18 @@ use tou_domain::evasion::EvasionGround;
 use tou_domain::notification::NotificationKind;
 use tou_domain::obligation::ObligationAction;
 use tou_domain::policy::Action;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::admission::{GeneratedProtocolDto, format_almaty, member_role_ru, short_number};
 use crate::announcement::format_decimal_ru;
+use crate::dto::cursor;
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::pdf;
-use crate::request::{Json, Path};
+use crate::request::{Json, Path, Query};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/winner2.typ");
 
@@ -123,7 +126,7 @@ pub async fn declare_evasion(
     Path(id): Path<Uuid>,
     Json(body): Json<DeclareEvasionRequest>,
 ) -> Result<(StatusCode, Json<DeclaredEvasionDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let ground: EvasionGround = body.ground.parse().map_err(|_| {
         ApiError::Validation(format!("неизвестное основание уклонения: {}", body.ground))
@@ -182,23 +185,58 @@ pub struct EvaderDto {
     pub last_tender_id: Option<Uuid>,
 }
 
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct EvaderPageParams {
+    /// Курсор следующей страницы - значение `next_after` предыдущей
+    pub after: Option<String>,
+    pub limit: Option<i64>,
+}
+
+/// Страница реестра уклонистов (ТЗ § 7).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EvaderPage {
+    pub items: Vec<EvaderDto>,
+    /// Курсор продолжения; `null` - реестр показан до конца
+    pub next_after: Option<String>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
 /// Реестр уклонистов (FR-505, п. 52.4, 120): их заявки в будущих тендерах
 /// отклоняются автоматически - реестр показывает, кого это касается.
 #[utoipa::path(
     get,
     path = "/api/v1/evaders",
     tag = "evasion",
-    responses((status = 200, description = "Реестр уклонистов", body = [EvaderDto]))
+    params(EvaderPageParams),
+    responses((status = 200, description = "Страница реестра уклонистов", body = EvaderPage))
 )]
 pub async fn evader_registry(
     user: CurrentUser,
     State(state): State<AppState>,
-) -> Result<Json<Vec<EvaderDto>>, ApiError> {
+    Query(params): Query<EvaderPageParams>,
+) -> Result<Json<EvaderPage>, ApiError> {
     user.require(Action::ApplicationReadAll)?;
 
-    let rows = evasion::registry(&state.db).await?;
-    Ok(Json(
-        rows.into_iter()
+    let after = params.after.as_deref().map(cursor::parse).transpose()?;
+    let limit = crate::page_limit(params.limit);
+
+    let page = evasion::registry(&state.db, after, limit).await?;
+    let truncated = page.truncated;
+    // Курсор берется до перекладки строк: `user_id` последней и есть ключ
+    let next_after = cursor::next(
+        truncated,
+        page.last().map(|row| {
+            RowCursor::new(
+                row.last_declared_at.unwrap_or(OffsetDateTime::UNIX_EPOCH),
+                row.user_id,
+            )
+        }),
+    );
+
+    Ok(Json(EvaderPage {
+        items: page
+            .into_iter()
             .map(|row| EvaderDto {
                 user_id: row.user_id,
                 full_name: row.full_name,
@@ -208,7 +246,9 @@ pub async fn evader_registry(
                 last_tender_id: row.last_tender_id,
             })
             .collect(),
-    ))
+        next_after,
+        truncated,
+    }))
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -275,16 +315,18 @@ pub async fn generate_winner2_protocol(
 
     let evasions = evasion::list_for_tender(&state.db, id).await?;
     if evasions.is_empty() {
-        return Err(ApiError::RuleViolation(
-            "протокол о победителе № 2 оформляется после признания уклонения (п. 116–117)".into(),
+        return Err(ApiError::rule(
+            RuleViolation::WinnerEvasion,
+            "протокол о победителе № 2 оформляется после признания уклонения (п. 116–117)",
         ));
     }
 
     let meeting = results::results_meeting(&state.db, user.id(), id)
         .await
         .map_err(|err| match err {
-            MeetingError::NoCommission => ApiError::RuleViolation(
-                "нет действующей комиссии с утвержденным составом (FR-1101)".into(),
+            MeetingError::NoCommission => ApiError::rule(
+                RuleViolation::CommissionComposition,
+                "нет действующей комиссии с утвержденным составом (FR-1101)",
             ),
             MeetingError::Db(db) => db.into(),
         })?;
@@ -391,8 +433,9 @@ pub async fn generate_winner2_protocol(
     .await?;
 
     let protocol = inserted.ok_or_else(|| {
-        ApiError::RuleViolation(
-            "протокол о победителе № 2 уже сформирован (UNIQUE по тендеру)".into(),
+        ApiError::rule(
+            RuleViolation::DuplicateRecord,
+            "протокол о победителе № 2 уже сформирован (UNIQUE по тендеру)",
         )
     })?;
 

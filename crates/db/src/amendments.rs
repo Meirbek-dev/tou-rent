@@ -8,6 +8,7 @@
 use time::OffsetDateTime;
 use tou_domain::amendment::{AmendmentFacts, CancellationFacts};
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -19,20 +20,26 @@ pub enum AmendmentError {
     NotFound,
     /// Правило п. 27 или п. 78 (домен и триггер БД)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 impl From<tou_domain::amendment::AmendmentError> for AmendmentError {
     fn from(err: tou_domain::amendment::AmendmentError) -> Self {
-        AmendmentError::Rejected(err.to_string())
+        AmendmentError::Rejected(RuleRejection::new(
+            RuleViolation::TenderDocumentationChange,
+            err.to_string(),
+        ))
     }
 }
 
 impl From<tou_domain::amendment::CancellationError> for AmendmentError {
     fn from(err: tou_domain::amendment::CancellationError) -> Self {
-        AmendmentError::Rejected(err.to_string())
+        AmendmentError::Rejected(RuleRejection::new(
+            RuleViolation::TenderCancellation,
+            err.to_string(),
+        ))
     }
 }
 
@@ -43,7 +50,7 @@ fn map_rule(err: sqlx::Error) -> AmendmentError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return AmendmentError::Rejected(db_err.message().to_owned());
+        return AmendmentError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     AmendmentError::Db(err)
 }
@@ -235,11 +242,11 @@ pub async fn decline_amendment(
         .await?;
 
         let amendment_id = amendment.ok_or_else(|| {
-            AmendmentError::Rejected(
+            AmendmentError::Rejected(RuleRejection::new(
+                RuleViolation::TenderDocumentationChange,
                 "отказ по п. 26.5 возможен по своей действующей заявке тендера, \
-                 условия которого изменены (FR-1004)"
-                    .to_owned(),
-            )
+                 условия которого изменены (FR-1004)",
+            ))
         })?;
 
         let tender_id = sqlx::query_scalar!(
@@ -301,9 +308,10 @@ pub async fn cancel_tender(
         .map_err(map_rule)?;
 
         if updated.is_none() {
-            return Err(AmendmentError::Rejected(
-                "тендер уже отменен либо переход из текущего статуса запрещен (INV-021)".to_owned(),
-            ));
+            return Err(AmendmentError::Rejected(RuleRejection::new(
+                RuleViolation::TenderStatusTransition,
+                "тендер уже отменен либо переход из текущего статуса запрещен (INV-021)",
+            )));
         }
 
         schedule_refunds_of_tender(&mut *tx, tender_id).await?;
@@ -346,7 +354,10 @@ pub async fn cancel_lot(
         .map_err(map_rule)?;
 
         let tender_id = tender_id.ok_or_else(|| {
-            AmendmentError::Rejected("лот не найден либо уже отменен (п. 78)".to_owned())
+            AmendmentError::Rejected(RuleRejection::new(
+                RuleViolation::TenderCancellation,
+                "лот не найден либо уже отменен (п. 78)",
+            ))
         })?;
 
         let applications =

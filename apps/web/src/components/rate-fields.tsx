@@ -1,4 +1,5 @@
 import { useSuspenseQuery } from "@tanstack/react-query"
+
 import { m } from "#/paraglide/messages"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
@@ -19,6 +20,29 @@ import type { RateCalculation, RateOptions } from "@/lib/organizer"
 // калькулятора, потому что их переиспользуют формы лота и инвестиционного
 // договора: маршрут не импортируется из другого маршрута (гейт G7).
 
+/**
+ * Обозначения множителей Прил. 4.
+ *
+ * Сами обозначения предметные, но на экран они попадают как подписи полей,
+ * а значит проходят через переводы наравне с остальным текстом (NFR-01):
+ * в казахской и английской версиях «Копф» читается не так, как в русской.
+ * Таблица перечисляет ключи `RateOptions` поименно - добавленный в контракт
+ * множитель уронит проверку типов здесь, а не молча выпадет из формы.
+ */
+const COEFFICIENT_LABELS: Record<keyof RateOptions, () => string> = {
+  kt: m.rate_coef_kt,
+  kk: m.rate_coef_kk,
+  ksk: m.rate_coef_ksk,
+  kr: m.rate_coef_kr,
+  kvd: m.rate_coef_kvd,
+  kopf: m.rate_coef_kopf,
+  kfu: m.rate_coef_kfu,
+  ksots: m.rate_coef_ksots,
+  k: m.rate_coef_k,
+  kn: m.rate_coef_kn,
+  kv: m.rate_coef_kv,
+}
+
 /** Селекты опций по каждому множителю Прил. 4 (переиспользуется формой лота). */
 export function RateOptionsFields({
   value,
@@ -32,14 +56,16 @@ export function RateOptionsFields({
   const { data: catalog } = useSuspenseQuery(rateOptionsQuery)
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {COEFFICIENTS.map(([field, label]) => {
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+      {COEFFICIENTS.map(([field]) => {
         const options = catalog.options.filter(
           (option) => option.coefficient === field
         )
         return (
           <div key={field} className="flex flex-col gap-1.5">
-            <Label htmlFor={`${idPrefix}-${field}`}>{label}</Label>
+            <Label htmlFor={`${idPrefix}-${field}`}>
+              {COEFFICIENT_LABELS[field]()}
+            </Label>
             <NativeSelect
               id={`${idPrefix}-${field}`}
               value={value[field]}
@@ -79,9 +105,11 @@ export function RateBreakdown({ calc }: { calc: RateCalculation }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {COEFFICIENTS.map(([field, label]) => (
+            {COEFFICIENTS.map(([field]) => (
               <TableRow key={field}>
-                <TableCell className="font-medium">{label}</TableCell>
+                <TableCell className="font-medium">
+                  {COEFFICIENT_LABELS[field]()}
+                </TableCell>
                 <TableCell className="text-muted-foreground">
                   {calc.factors[field].option_code}
                 </TableCell>

@@ -26,6 +26,7 @@ import { Route as AppParticipantRouteRouteImport } from './routes/app/participan
 import { Route as AppReportsRouteImport } from './routes/app/reports'
 import { Route as AppSecretaryRouteRouteImport } from './routes/app/secretary/route'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
+import { Route as AuthPasswordRouteImport } from './routes/auth/password'
 import { Route as AuthRegisterRouteImport } from './routes/auth/register'
 import { Route as ObjectsIndexRouteImport } from './routes/objects/index'
 import { Route as TendersIndexRouteImport } from './routes/tenders/index'
@@ -39,6 +40,7 @@ import { Route as AppOrganizerIndexRouteImport } from './routes/app/organizer/in
 import { Route as AppOrganizerCalculatorRouteImport } from './routes/app/organizer/calculator'
 import { Route as AppOrganizerInvestmentRouteImport } from './routes/app/organizer/investment'
 import { Route as AppOrganizerLandRouteImport } from './routes/app/organizer/land'
+import { Route as AppOrganizerObjectsRouteImport } from './routes/app/organizer/objects'
 import { Route as AppOrganizerSpecialRouteImport } from './routes/app/organizer/special'
 import { Route as AppParticipantIndexRouteImport } from './routes/app/participant/index'
 import { Route as AppParticipantContractsRouteImport } from './routes/app/participant/contracts'
@@ -138,6 +140,11 @@ const AuthLoginRoute = AuthLoginRouteImport.update({
   path: '/auth/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthPasswordRoute = AuthPasswordRouteImport.update({
+  id: '/auth/password',
+  path: '/auth/password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRegisterRoute = AuthRegisterRouteImport.update({
   id: '/auth/register',
   path: '/auth/register',
@@ -201,6 +208,11 @@ const AppOrganizerInvestmentRoute = AppOrganizerInvestmentRouteImport.update({
 const AppOrganizerLandRoute = AppOrganizerLandRouteImport.update({
   id: '/land',
   path: '/land',
+  getParentRoute: () => AppOrganizerRouteRoute,
+} as any)
+const AppOrganizerObjectsRoute = AppOrganizerObjectsRouteImport.update({
+  id: '/objects',
+  path: '/objects',
   getParentRoute: () => AppOrganizerRouteRoute,
 } as any)
 const AppOrganizerSpecialRoute = AppOrganizerSpecialRouteImport.update({
@@ -294,6 +306,7 @@ export interface FileRoutesByFullPath {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
   '/tenders/$tenderId': typeof TendersTenderIdRoute
   '/app/': typeof AppIndexRoute
@@ -303,6 +316,7 @@ export interface FileRoutesByFullPath {
   '/app/organizer/calculator': typeof AppOrganizerCalculatorRoute
   '/app/organizer/investment': typeof AppOrganizerInvestmentRoute
   '/app/organizer/land': typeof AppOrganizerLandRoute
+  '/app/organizer/objects': typeof AppOrganizerObjectsRoute
   '/app/organizer/special': typeof AppOrganizerSpecialRoute
   '/app/participant/contracts': typeof AppParticipantContractsRoute
   '/app/admin/': typeof AppAdminIndexRoute
@@ -331,6 +345,7 @@ export interface FileRoutesByTo {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
   '/tenders/$tenderId': typeof TendersTenderIdRoute
   '/app': typeof AppIndexRoute
@@ -340,6 +355,7 @@ export interface FileRoutesByTo {
   '/app/organizer/calculator': typeof AppOrganizerCalculatorRoute
   '/app/organizer/investment': typeof AppOrganizerInvestmentRoute
   '/app/organizer/land': typeof AppOrganizerLandRoute
+  '/app/organizer/objects': typeof AppOrganizerObjectsRoute
   '/app/organizer/special': typeof AppOrganizerSpecialRoute
   '/app/participant/contracts': typeof AppParticipantContractsRoute
   '/app/admin': typeof AppAdminIndexRoute
@@ -377,6 +393,7 @@ export interface FileRoutesById {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
   '/auth/login': typeof AuthLoginRoute
+  '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
   '/tenders/$tenderId': typeof TendersTenderIdRoute
   '/app/': typeof AppIndexRoute
@@ -386,6 +403,7 @@ export interface FileRoutesById {
   '/app/organizer/calculator': typeof AppOrganizerCalculatorRoute
   '/app/organizer/investment': typeof AppOrganizerInvestmentRoute
   '/app/organizer/land': typeof AppOrganizerLandRoute
+  '/app/organizer/objects': typeof AppOrganizerObjectsRoute
   '/app/organizer/special': typeof AppOrganizerSpecialRoute
   '/app/participant/contracts': typeof AppParticipantContractsRoute
   '/app/admin/': typeof AppAdminIndexRoute
@@ -424,6 +442,7 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/reports'
     | '/auth/login'
+    | '/auth/password'
     | '/auth/register'
     | '/tenders/$tenderId'
     | '/app/'
@@ -433,6 +452,7 @@ export interface FileRouteTypes {
     | '/app/organizer/calculator'
     | '/app/organizer/investment'
     | '/app/organizer/land'
+    | '/app/organizer/objects'
     | '/app/organizer/special'
     | '/app/participant/contracts'
     | '/app/admin/'
@@ -461,6 +481,7 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/reports'
     | '/auth/login'
+    | '/auth/password'
     | '/auth/register'
     | '/tenders/$tenderId'
     | '/app'
@@ -470,6 +491,7 @@ export interface FileRouteTypes {
     | '/app/organizer/calculator'
     | '/app/organizer/investment'
     | '/app/organizer/land'
+    | '/app/organizer/objects'
     | '/app/organizer/special'
     | '/app/participant/contracts'
     | '/app/admin'
@@ -506,6 +528,7 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/reports'
     | '/auth/login'
+    | '/auth/password'
     | '/auth/register'
     | '/tenders/$tenderId'
     | '/app/'
@@ -515,6 +538,7 @@ export interface FileRouteTypes {
     | '/app/organizer/calculator'
     | '/app/organizer/investment'
     | '/app/organizer/land'
+    | '/app/organizer/objects'
     | '/app/organizer/special'
     | '/app/participant/contracts'
     | '/app/admin/'
@@ -543,6 +567,7 @@ export interface RootRouteChildren {
   LandPlotsRoute: typeof LandPlotsRoute
   SpecialOrdersRoute: typeof SpecialOrdersRoute
   AuthLoginRoute: typeof AuthLoginRoute
+  AuthPasswordRoute: typeof AuthPasswordRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
   TendersTenderIdRoute: typeof TendersTenderIdRoute
   ObjectsIndexRoute: typeof ObjectsIndexRoute
@@ -670,6 +695,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/password': {
+      id: '/auth/password'
+      path: '/auth/password'
+      fullPath: '/auth/password'
+      preLoaderRoute: typeof AuthPasswordRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/register': {
       id: '/auth/register'
       path: '/auth/register'
@@ -759,6 +791,13 @@ declare module '@tanstack/react-router' {
       path: '/land'
       fullPath: '/app/organizer/land'
       preLoaderRoute: typeof AppOrganizerLandRouteImport
+      parentRoute: typeof AppOrganizerRouteRoute
+    }
+    '/app/organizer/objects': {
+      id: '/app/organizer/objects'
+      path: '/objects'
+      fullPath: '/app/organizer/objects'
+      preLoaderRoute: typeof AppOrganizerObjectsRouteImport
       parentRoute: typeof AppOrganizerRouteRoute
     }
     '/app/organizer/special': {
@@ -908,6 +947,7 @@ interface AppOrganizerRouteRouteChildren {
   AppOrganizerCalculatorRoute: typeof AppOrganizerCalculatorRoute
   AppOrganizerInvestmentRoute: typeof AppOrganizerInvestmentRoute
   AppOrganizerLandRoute: typeof AppOrganizerLandRoute
+  AppOrganizerObjectsRoute: typeof AppOrganizerObjectsRoute
   AppOrganizerSpecialRoute: typeof AppOrganizerSpecialRoute
   AppOrganizerIndexRoute: typeof AppOrganizerIndexRoute
   AppOrganizerTendersTenderIdRoute: typeof AppOrganizerTendersTenderIdRoute
@@ -919,6 +959,7 @@ const AppOrganizerRouteRouteChildren: AppOrganizerRouteRouteChildren = {
   AppOrganizerCalculatorRoute: AppOrganizerCalculatorRoute,
   AppOrganizerInvestmentRoute: AppOrganizerInvestmentRoute,
   AppOrganizerLandRoute: AppOrganizerLandRoute,
+  AppOrganizerObjectsRoute: AppOrganizerObjectsRoute,
   AppOrganizerSpecialRoute: AppOrganizerSpecialRoute,
   AppOrganizerIndexRoute: AppOrganizerIndexRoute,
   AppOrganizerTendersTenderIdRoute: AppOrganizerTendersTenderIdRoute,
@@ -1004,6 +1045,7 @@ const rootRouteChildren: RootRouteChildren = {
   LandPlotsRoute: LandPlotsRoute,
   SpecialOrdersRoute: SpecialOrdersRoute,
   AuthLoginRoute: AuthLoginRoute,
+  AuthPasswordRoute: AuthPasswordRoute,
   AuthRegisterRoute: AuthRegisterRoute,
   TendersTenderIdRoute: TendersTenderIdRoute,
   ObjectsIndexRoute: ObjectsIndexRoute,

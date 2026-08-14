@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { CheckCheckIcon } from "lucide-react"
+
 import { m } from "#/paraglide/messages"
+import { QueryBoundary } from "@/components/query-boundary"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
 import {
@@ -8,6 +13,8 @@ import {
   publicRecordsQuery,
   publishRecord,
 } from "@/lib/public-records"
+import { serverLabel } from "@/lib/server-label"
+import { notifySuccess } from "@/lib/toast"
 
 import type { PendingPublication } from "@/lib/public-records"
 
@@ -19,8 +26,7 @@ import type { PendingPublication } from "@/lib/public-records"
  * джобом и остается в досье решения (INV-076, FR-1206).
  */
 export function PublicationsPanel() {
-  const { data: pending } = useQuery(pendingPublicationsQuery)
-  if (pending === undefined) return null
+  const pending = useQuery(pendingPublicationsQuery)
 
   return (
     <section aria-labelledby="publications" className="flex flex-col gap-3">
@@ -28,17 +34,47 @@ export function PublicationsPanel() {
         {m.publications_title()}
       </h2>
       <p className="text-sm text-muted-foreground">{m.publications_hint()}</p>
-      {pending.length === 0 ? (
-        <p className="text-muted-foreground">{m.publications_empty()}</p>
-      ) : (
-        <ul className="flex flex-col gap-3" data-testid="publications-pending">
-          {pending.map((item) => (
-            <li key={`${item.kind}-${item.source_id}`}>
-              <PendingCard item={item} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <QueryBoundary
+        query={pending}
+        skeleton={
+          <div className="flex flex-col gap-3" aria-hidden="true">
+            <Skeleton className="h-28 w-full rounded-lg" />
+            <Skeleton className="h-28 w-full rounded-lg" />
+          </div>
+        }
+        empty={{
+          when: (page) => page.items.length === 0,
+          icon: CheckCheckIcon,
+          title: m.publications_empty_title(),
+          description: m.publications_empty(),
+        }}
+      >
+        {(page) => (
+          <>
+            {/* Список ждущих публикации разгружается работой: поднятый признак
+                означает не вторую страницу, а то, что работы больше, чем видно */}
+            {page.truncated && (
+              <p
+                role="status"
+                className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400"
+                data-testid="publications-truncated"
+              >
+                {m.list_truncated({ count: page.items.length })}
+              </p>
+            )}
+            <ul
+              className="flex flex-col gap-3"
+              data-testid="publications-pending"
+            >
+              {page.items.map((item) => (
+                <li key={`${item.kind}-${item.source_id}`}>
+                  <PendingCard item={item} />
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </QueryBoundary>
     </section>
   )
 }
@@ -49,6 +85,7 @@ function PendingCard({ item }: { item: PendingPublication }) {
   const publish = useMutation({
     mutationFn: () => publishRecord(item.kind, item.source_id),
     onSuccess: async () => {
+      notifySuccess(m.publications_published())
       await Promise.all([
         queryClient.invalidateQueries({
           queryKey: pendingPublicationsQuery.queryKey,
@@ -65,9 +102,7 @@ function PendingCard({ item }: { item: PendingPublication }) {
   return (
     <article className="flex flex-col gap-2 rounded-lg border p-4">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="rounded-md border px-2 py-0.5 text-sm">
-          {item.kind_title_ru}
-        </span>
+        <Badge variant="neutral">{serverLabel(item, "kind_title")}</Badge>
         <span className="text-sm text-muted-foreground">{item.rule_ref}</span>
         <span
           className="text-sm text-muted-foreground"

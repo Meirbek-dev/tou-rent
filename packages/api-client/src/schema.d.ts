@@ -38,6 +38,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/audit/chain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Состояние hash-цепочки аудита (INV-A01, FR-1601).
+         * @description Отвечает не «цела ли цепочка прямо сейчас», а «что показала последняя
+         *     сверка и когда она была»: пересчет журнала по запросу из браузера дал бы
+         *     произвольному нажатию кнопки полный проход по всему аудиту. Сверку ведет
+         *     фоновый воркер по расписанию, здесь - чтение его следа. Пустой ответ
+         *     (`checked_at = null`) значит, что сверок не было вовсе, - для дежурного
+         *     это такой же сигнал, как и разрыв.
+         */
+        get: operations["audit_chain"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -49,6 +74,65 @@ export interface paths {
         get: operations["list_users"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Деактивация и возврат учетной записи (W-07).
+         * @description Снятие ролей уволившемуся не отключает саму запись: она входит, видит
+         *     публичную часть и остается субъектом своих прошлых заявок. Отключение
+         *     закрывает оба пути сразу - и вход, и уже открытую сессию (`CurrentUser`
+         *     сверяет `is_active` на каждом запросе).
+         *
+         *     Удаления записи здесь нет и не будет: к ней привязаны поданные заявки,
+         *     договоры и депозит, и «удалить пользователя» означало бы разорвать
+         *     доказательную базу.
+         */
+        put: operations["set_user_active"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/users/{user_id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Сброс пароля админом (W-07, FR-1503).
+         * @description Канала доставки у контура 1 нет (почта - T41), поэтому «ссылка на
+         *     восстановление» здесь была бы выдумкой. Честный вариант без канала один:
+         *     систему генерирует одноразовый пароль сама, показывает его админу ровно
+         *     в ответе на нажатие кнопки и больше нигде - ни в логе, ни в БД, ни в
+         *     аудите (там от него остается только отпечаток, см. миграцию
+         *     `20260811000000_user_account_audit.sql`). Дальше пароль передает человек
+         *     человеку тем каналом, которым он и так подтверждает личность заявителя,
+         *     а владелец учетной записи меняет его через `/api/v1/auth/password`.
+         *
+         *     Пароль не придумывает админ: придуманный человеком он и слаб, и известен
+         *     придумавшему заранее - тогда «сброс» ничем не отличается от «узнать
+         *     чужой пароль». Сгенерированный известен админу ровно так же, но только
+         *     до первой смены, и владелец видит по журналу, что запись трогали.
+         */
+        post: operations["reset_password"];
         delete?: never;
         options?: never;
         head?: never;
@@ -465,7 +549,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Выход: сессия уничтожается в Redis. */
+        /** Выход: сессия уничтожается в Redis, CSRF-токен гасится в браузере. */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -545,6 +629,27 @@ export interface paths {
         get: operations["oidc_logout"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Смена собственного пароля из сессии (W-07).
+         * @description До нее вернуть себе доступ было нечем: маршрута восстановления нет, а
+         *     сменить скомпрометированный пароль изнутри было негде.
+         */
+        post: operations["change_password"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2883,7 +2988,13 @@ export interface components {
              */
             version: number;
         };
-        /** @description Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020). */
+        /**
+         * @description Сведения о заявителе (Прил. 2; поля-приближение контура 1, A-020).
+         *
+         *     Тот же тип принимает сведения заявителя особого порядка (Прил. 3,
+         *     `special.rs`), поэтому предметная проверка реквизитов здесь - единственная
+         *     на оба маршрута.
+         */
         ApplicantDetailsDto: {
             address: string;
             email?: string | null;
@@ -3040,6 +3151,30 @@ export interface components {
              */
             server_time: string;
         };
+        AuditChainDto: {
+            /**
+             * Format: int64
+             * @description `audit.log.id` первой разошедшейся записи; заполнен только при разрыве
+             */
+            broken_at?: number | null;
+            /**
+             * Format: date-time
+             * @description Момент последней сверки; `null` - сверок еще не было ни одной
+             */
+            checked_at?: string | null;
+            /**
+             * Format: int64
+             * @description Записей в журнале на момент последней сверки
+             */
+            entries?: number | null;
+            /** @description Итог последней сверки; `null` - сверок еще не было */
+            intact?: boolean | null;
+            /**
+             * Format: date-time
+             * @description Момент последней сверки, на которой цепочка сходилась
+             */
+            last_intact_at?: string | null;
+        };
         AuthProvidersDto: {
             oidc?: null | components["schemas"]["OidcProviderDto"];
         };
@@ -3122,6 +3257,15 @@ export interface components {
             label_kk?: string | null;
             label_ru: string;
             required: boolean;
+        };
+        ChangePasswordRequest: {
+            /**
+             * @description Текущий пароль - обязателен: без него угнанная сессия становится
+             *     угнанной учетной записью
+             */
+            current_password: string;
+            /** @description Те же границы, что и при регистрации */
+            new_password: string;
         };
         CheckItemRequest: {
             /** @description `false` снимает отметку, пока договор не подписан наймодателем */
@@ -3416,7 +3560,7 @@ export interface components {
          * @description Машинные коды ошибок контракта (enum без catch-all).
          * @enum {string}
          */
-        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "timeout" | "internal";
+        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "idempotency_in_flight" | "timeout" | "internal";
         EvaderDto: {
             /**
              * Format: int32
@@ -3431,6 +3575,14 @@ export interface components {
             last_tender_id?: string | null;
             /** Format: uuid */
             user_id: string;
+        };
+        /** @description Страница реестра уклонистов (ТЗ § 7). */
+        EvaderPage: {
+            items: components["schemas"]["EvaderDto"][];
+            /** @description Курсор продолжения; `null` - реестр показан до конца */
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
         };
         /** @description Зафиксированное уклонение (FR-903). */
         EvasionDto: {
@@ -3806,6 +3958,14 @@ export interface components {
             /** @description Пункт Правил - основание проводки */
             rule_ref?: string | null;
         };
+        /** @description Страница выписки по счету (ТЗ § 7). */
+        LedgerEntryPage: {
+            items: components["schemas"]["LedgerEntryDto"][];
+            /** @description Курсор продолжения; `null` - журнал показан до конца */
+            next_after?: string | null;
+            /** @description Показана не вся выписка */
+            truncated: boolean;
+        };
         LoginRequest: {
             email: string;
             password: string;
@@ -3900,6 +4060,31 @@ export interface components {
             amount: string;
             /** Format: int32 */
             year: number;
+        };
+        /**
+         * @description Договоры кабинета нанимателя (ТЗ § 7).
+         *
+         *     `next_after` всегда `null`: договоров у нанимателя единицы, продолжения
+         *     у выборки нет. Поле остается ради единообразия усекаемых реестров.
+         */
+        MyContractPage: {
+            items: components["schemas"]["ContractDto"][];
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
+        };
+        /**
+         * @description Протоколы кабинета участника (ТЗ § 7).
+         *
+         *     `next_after` всегда `null`: выборку ограничивает участие одного человека,
+         *     продолжения у нее нет. Поле остается, чтобы усекаемые реестры отвечали
+         *     одинаково и клиенту не приходилось помнить, у какого из них какая форма.
+         */
+        MyProtocolPage: {
+            items: components["schemas"]["ProtocolDto"][];
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
         };
         NewCoefficientRequest: {
             coefficient: string;
@@ -4015,10 +4200,31 @@ export interface components {
             tender_id?: string | null;
             tender_title?: string | null;
         };
+        /**
+         * @description Дашборд сроков (ТЗ § 7).
+         *
+         *     `next_after` всегда `null`: рабочий список разгружается работой, а не
+         *     листанием. Поднятый `truncated` здесь значит, что сроков накопилось
+         *     больше, чем дашборд показывает, - это про завал, а не про страницу.
+         */
+        ObligationPage: {
+            items: components["schemas"]["ObligationDto"][];
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
+        };
         OidcProviderDto: {
             label: string;
             /** @description Ссылка начала входа - обычная навигация, работает без JS (NFR-04) */
             login_url: string;
+        };
+        /**
+         * @description Одноразовый пароль в ответе на сброс - единственный раз, когда он вообще
+         *     существует в открытом виде.
+         */
+        PasswordResetDto: {
+            /** @description Показывается админу один раз и нигде не сохраняется */
+            password: string;
         };
         /** @description Материал, который Правила велят опубликовать (FR-1403). */
         PendingPublicationDto: {
@@ -4037,6 +4243,19 @@ export interface components {
             source_id: string;
             title: string;
         };
+        /**
+         * @description Рабочий список ожидающих публикации (ТЗ § 7).
+         *
+         *     `next_after` здесь всегда `null`: продолжения у списка нет - он не
+         *     реестр, а очередь работы, и `truncated` означает не «есть вторая
+         *     страница», а «работы накопилось больше, чем система показывает».
+         */
+        PendingPublicationPage: {
+            items: components["schemas"]["PendingPublicationDto"][];
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
+        };
         PlaceBidRequest: {
             /** @example 57750 */
             amount: string;
@@ -4051,6 +4270,7 @@ export interface components {
         Problem: {
             code: components["schemas"]["ErrorCode"];
             detail?: string | null;
+            rule?: null | components["schemas"]["Rule"];
             /** Format: int32 */
             status: number;
             title: string;
@@ -4105,6 +4325,14 @@ export interface components {
             unpublish_at: string;
             /** Format: date-time */
             unpublished_at?: string | null;
+        };
+        /** @description Страница реестра портала (ТЗ § 7). */
+        PublicRecordPage: {
+            items: components["schemas"]["PublicRecordDto"][];
+            /** @description Курсор продолжения; `null` - реестр показан до конца */
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
         };
         PublishRecordRequest: {
             /** @description Вид публикации: `decision` | `rate` | `investment_act` */
@@ -4273,11 +4501,15 @@ export interface components {
         /** @description Реестр отчетности: колонки и строки в одном порядке (арх. § 9). */
         RegistryDto: {
             columns: string[];
+            /** @description Курсор продолжения; `null` - реестр показан до конца */
+            next_after?: string | null;
             /** @description `decisions` | `contracts` | `receipts` */
             registry: string;
             /** @description Строки реестра: значения предформатированы сервером (ru, NFR-01) */
             rows: string[][];
             title_ru: string;
+            /** @description Показана не вся выборка: за строками ответа есть еще */
+            truncated: boolean;
         };
         RegistrySummaryDto: {
             registry: string;
@@ -4297,6 +4529,15 @@ export interface components {
              * @description Черновик повторного тендера (п. 82)
              */
             tender_id: string;
+        };
+        /**
+         * @description Причина отказа по правилу предметной области (закрытый перечень)
+         * @enum {string}
+         */
+        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
+        SetActiveRequest: {
+            /** @description `false` - учетная запись отключается, `true` - возвращается */
+            is_active: boolean;
         };
         SetMrpRequest: {
             /**
@@ -4544,6 +4785,12 @@ export interface components {
             full_name: string;
             /** Format: uuid */
             id: string;
+            /**
+             * @description Учетная запись действует. Деактивированная не входит и не работает по
+             *     уже открытой сессии (W-07); в кабинете админа это состояние видно
+             *     и переключается
+             */
+            is_active: boolean;
             locale: string;
             /**
              * @description Роли из `core.role_grants` (snake_case, см. enum `Role` домена)
@@ -4661,6 +4908,35 @@ export interface operations {
             };
         };
     };
+    audit_chain: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Состояние цепочки аудита */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditChainDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_users: {
         parameters: {
             query?: {
@@ -4686,6 +4962,108 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    set_user_active: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Пользователь */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Состояние изменено */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Отключение самого себя */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    reset_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Пользователь */
+                user_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Одноразовый пароль выдан */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PasswordResetDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Пользователь не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description У записи нет локального пароля */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5282,6 +5660,24 @@ export interface operations {
                     "application/json": components["schemas"]["BidDto"][];
                 };
             };
+            /** @description Участник не допущен к лоту этих торгов */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Торги не найдены */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     place_bid: {
@@ -5732,6 +6128,55 @@ export interface operations {
             };
         };
     };
+    change_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Пароль изменен */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Текущий пароль неверен */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Данные не прошли проверку */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много попыток */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     auth_providers: {
         parameters: {
             query?: never;
@@ -5879,7 +6324,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ContractDto"][];
+                    "application/json": components["schemas"]["MyContractPage"];
                 };
             };
         };
@@ -6512,20 +6957,24 @@ export interface operations {
     };
     evader_registry: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор следующей страницы - значение `next_after` предыдущей */
+                after?: string | null;
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Реестр уклонистов */
+            /** @description Страница реестра уклонистов */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["EvaderDto"][];
+                    "application/json": components["schemas"]["EvaderPage"];
                 };
             };
         };
@@ -7195,7 +7644,11 @@ export interface operations {
     };
     account_entries: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор следующей страницы - значение `next_after` предыдущей */
+                after?: string | null;
+                limit?: number | null;
+            };
             header?: never;
             path: {
                 /** @description Счет книги */
@@ -7205,13 +7658,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Проводки счета */
+            /** @description Страница проводок счета */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerEntryDto"][];
+                    "application/json": components["schemas"]["LedgerEntryPage"];
                 };
             };
         };
@@ -7647,7 +8100,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ObligationDto"][];
+                    "application/json": components["schemas"]["ObligationPage"];
                 };
             };
         };
@@ -7667,7 +8120,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProtocolDto"][];
+                    "application/json": components["schemas"]["MyProtocolPage"];
                 };
             };
         };
@@ -7747,20 +8200,24 @@ export interface operations {
     };
     list_public_records: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор следующей страницы - значение `next_after` предыдущей */
+                after?: string | null;
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Публикации особого порядка */
+            /** @description Страница публикаций особого порядка */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicRecordDto"][];
+                    "application/json": components["schemas"]["PublicRecordPage"];
                 };
             };
         };
@@ -7831,7 +8288,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PendingPublicationDto"][];
+                    "application/json": components["schemas"]["PendingPublicationPage"];
                 };
             };
             /** @description Недостаточно прав */
@@ -8374,6 +8831,9 @@ export interface operations {
                 from?: string | null;
                 /** @description Конец периода включительно (ISO 8601) */
                 to?: string | null;
+                /** @description Курсор следующей страницы - значение `next_after` предыдущей */
+                after?: string | null;
+                limit?: number | null;
             };
             header?: never;
             path: {
@@ -8384,7 +8844,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Реестр */
+            /** @description Страница реестра */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8402,7 +8862,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Неизвестный реестр или дата */
+            /** @description Неизвестный реестр, дата или курсор */
             422: {
                 headers: {
                     [name: string]: unknown;

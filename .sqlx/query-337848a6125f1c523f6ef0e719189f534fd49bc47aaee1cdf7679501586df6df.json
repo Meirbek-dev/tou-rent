@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT intact AS \"intact!\", entries AS \"entries!\", broken_at\n           FROM audit.verify_chain_report()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "intact!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "entries!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "broken_at",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "337848a6125f1c523f6ef0e719189f534fd49bc47aaee1cdf7679501586df6df"
+}

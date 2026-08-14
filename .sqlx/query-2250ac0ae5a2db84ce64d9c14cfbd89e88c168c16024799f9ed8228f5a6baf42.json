@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM audit.chain_checks WHERE id = (SELECT max(id) FROM audit.chain_checks)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "2250ac0ae5a2db84ce64d9c14cfbd89e88c168c16024799f9ed8228f5a6baf42"
+}

@@ -8,6 +8,7 @@
 
 use rust_decimal::Decimal;
 use tou_domain::ids::ApplicationId;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use tou_domain::turn::{Circle, Participant, ParticipantState, Progress, TurnError};
 use uuid::Uuid;
 
@@ -19,14 +20,22 @@ pub enum CircleError {
     NotFound,
     /// Правило круга (FR-604–605): не ваш ход, выбыл, не явился, не допущен
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 impl From<TurnError> for CircleError {
     fn from(err: TurnError) -> Self {
-        CircleError::Rejected(err.to_string())
+        // Неявка - правило оглашения (FR-605), остальное - правило круга
+        // (FR-604): различие видно клиенту, а не только в тексте лога.
+        let rule = match &err {
+            TurnError::Absent => RuleViolation::AuctionAnnouncement,
+            TurnError::NotYourTurn | TurnError::AlreadyPassed | TurnError::NotInCircle => {
+                RuleViolation::AuctionTurnOrder
+            }
+        };
+        CircleError::Rejected(RuleRejection::new(rule, err.to_string()))
     }
 }
 
@@ -167,7 +176,7 @@ fn map_rule(err: sqlx::Error) -> CircleError {
     if let sqlx::Error::Database(db_err) = &err
         && matches!(db_err.code().as_deref(), Some("23514") | Some("P0001"))
     {
-        return CircleError::Rejected(db_err.message().to_owned());
+        return CircleError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     CircleError::Db(err)
 }

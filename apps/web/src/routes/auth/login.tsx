@@ -6,10 +6,13 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
+import { AppLogo } from "@/components/app-logo"
+import { FormAlert } from "@/components/form-alert"
 import { SiteHeader } from "@/components/site-header"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Spinner } from "@/components/ui/spinner"
 import { api, authProvidersQuery } from "@/lib/api"
 import { meQuery, problemMessage } from "@/lib/auth"
 import { cn } from "@/lib/utils"
@@ -55,84 +58,127 @@ function LoginPage() {
     },
   })
 
+  const failed = login.isError
+
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto flex w-full max-w-md flex-col gap-6 px-6 py-16">
-        <h1 className="font-heading text-2xl font-semibold">
-          {m.auth_login_title()}
-        </h1>
-        {oidcError !== undefined && (
-          <p role="alert" className="text-sm text-destructive">
-            {m.auth_oidc_failed()}
-          </p>
-        )}
-        {providers.oidc && (
+      <main
+        id="main"
+        className="mx-auto flex w-full max-w-[26rem] flex-col gap-6 px-4 py-14 sm:px-6"
+      >
+        <div className="flex flex-col gap-6 rounded-xl border bg-card p-6 shadow-xs sm:p-8">
           <div className="flex flex-col gap-4">
-            <a
-              href={providers.oidc.login_url}
-              data-testid="login-oidc"
-              className={cn(buttonVariants({ variant: "outline" }), "w-full")}
-            >
-              {m.auth_sign_in_with({ provider: providers.oidc.label })}
-            </a>
-            <p className="text-center text-sm text-muted-foreground">
-              {m.auth_or_password()}
-            </p>
+            <AppLogo />
+            <div className="flex flex-col gap-2">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {m.auth_login_title()}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {m.auth_login_hint()}
+              </p>
+            </div>
           </div>
-        )}
-        <form
-          className="flex flex-col gap-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            login.mutate()
-          }}
-        >
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="login-email">{m.auth_email()}</Label>
-            <Input
-              id="login-email"
-              type="email"
-              autoComplete="email"
-              required
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="login-password">{m.auth_password()}</Label>
-            <Input
-              id="login-password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </div>
-          {login.isError && (
-            <p role="alert" className="text-sm text-destructive">
-              {problemMessage(login.error)}
-            </p>
+
+          {oidcError !== undefined && (
+            <FormAlert>{m.auth_oidc_failed()}</FormAlert>
           )}
-          <Button
-            type="submit"
-            data-testid="login-submit"
-            disabled={login.isPending}
+
+          {providers.oidc && (
+            <div className="flex flex-col gap-4">
+              <a
+                href={providers.oidc.login_url}
+                data-testid="login-oidc"
+                className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+              >
+                {m.auth_sign_in_with({ provider: providers.oidc.label })}
+              </a>
+              <p className="text-center text-sm text-muted-foreground">
+                {m.auth_or_password()}
+              </p>
+            </div>
+          )}
+
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              login.mutate()
+            }}
           >
-            {login.isPending ? m.auth_signing_in() : m.sign_in()}
-          </Button>
-        </form>
-        <p className="text-sm text-muted-foreground">
-          {m.auth_no_account()}{" "}
-          <Link
-            to="/auth/register"
-            className="underline underline-offset-4"
-            data-testid="go-to-register"
-          >
-            {m.auth_register_submit()}
-          </Link>
-        </p>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="login-email">{m.auth_email()}</Label>
+              <Input
+                id="login-email"
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                spellCheck={false}
+                autoCapitalize="none"
+                required
+                aria-invalid={failed}
+                {...(failed && { "aria-describedby": "login-error" })}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="login-password">{m.auth_password()}</Label>
+              <Input
+                id="login-password"
+                type="password"
+                autoComplete="current-password"
+                required
+                aria-invalid={failed}
+                {...(failed && { "aria-describedby": "login-error" })}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </div>
+            {failed && (
+              <FormAlert id="login-error">
+                {problemMessage(login.error)}
+              </FormAlert>
+            )}
+            <Button
+              type="submit"
+              data-testid="login-submit"
+              disabled={login.isPending}
+            >
+              {login.isPending && <Spinner />}
+              {login.isPending ? m.auth_signing_in() : m.sign_in()}
+            </Button>
+          </form>
+        </div>
+
+        <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+          <p>
+            {m.auth_no_account()}{" "}
+            <Link
+              to="/auth/register"
+              className="text-primary underline underline-offset-4"
+              data-testid="go-to-register"
+            >
+              {m.auth_register_submit()}
+            </Link>
+          </p>
+          {/*
+            W-07: канала восстановления по почте в контуре 1 нет (T41), и
+            обещать «ссылку на восстановление» было бы враньем. Здесь сказано,
+            как вернуть доступ на самом деле - через администратора, - и дана
+            ссылка на смену пароля для тех, кто его помнит.
+          */}
+          <p>
+            {m.auth_forgot_password()}{" "}
+            <Link
+              to="/auth/password"
+              className="text-primary underline underline-offset-4"
+              data-testid="go-to-change-password"
+            >
+              {m.auth_password_change_title()}
+            </Link>
+          </p>
+        </div>
       </main>
     </>
   )

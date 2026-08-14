@@ -1,213 +1,157 @@
-import { useState } from "react"
-import { createFileRoute } from "@tanstack/react-router"
-import {
-  useMutation,
-  useQueryClient,
-  useSuspenseQuery,
-} from "@tanstack/react-query"
+import { Link, createFileRoute } from "@tanstack/react-router"
+import { useSuspenseQuery } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
-import { MyDeadlines } from "@/components/my-deadlines"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { api } from "@/lib/api"
-import { problemMessage } from "@/lib/auth"
-import { objectsQuery } from "@/lib/organizer"
+import { PageHeader } from "@/components/page-header"
+import { QueueCard } from "@/components/queue-card"
+import { StatCard } from "@/components/stat-card"
+import { buttonVariants } from "@/components/ui/button"
+import { useNowMs } from "@/hooks/use-now"
+import { objectsQuery, organizerTendersQuery } from "@/lib/organizer"
+import { deadlineUrgency } from "@/lib/relative-time"
+import { cn } from "@/lib/utils"
 
-import type { ObjectKind } from "@/lib/organizer"
+import type { QueueItem } from "@/components/queue-card"
+import type { DeadlineUrgency } from "@/lib/relative-time"
 
-// FR-101: реестр объектов организатора - список + создание.
+/** Сколько тендеров показывать в очереди «истекает срок». */
+const CLOSING_SOON = 3
+
+/** Статусы, при которых срок подачи еще имеет смысл (Правила п. 21). */
+const OPEN_STATUSES = ["announced", "repeat_announced", "accepting"]
+
+// Обзор кабинета организатора: сколько объектов и тендеров в каждом
+// состоянии и у каких тендеров горит срок приема заявок.
+//
+// Числа считаются по уже загруженным страницам реестров - отдельных
+// агрегирующих маршрутов у сервера нет, и выдумывать их ради плитки нельзя.
+// Поэтому счет, упершийся в границу страницы, показывается с «+»: «100+»
+// и «ровно 100» - разные утверждения (тот же прием, что на витрине портала).
 export const Route = createFileRoute("/app/organizer/")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(objectsQuery),
-  component: ObjectsPage,
+  loader: async ({ context }) => {
+    await Promise.all([
+      context.queryClient.ensureQueryData(objectsQuery),
+      context.queryClient.ensureQueryData(organizerTendersQuery),
+    ])
+  },
+  head: () => ({ meta: [{ title: `${m.cabinet_organizer()} - ToU Rent` }] }),
+  component: OrganizerHome,
 })
 
-const KIND_LABELS: Record<ObjectKind, () => string> = {
-  building: m.object_kind_building,
-  premises: m.object_kind_premises,
-  structure: m.object_kind_structure,
-  land_plot: m.object_kind_land_plot,
-}
+function OrganizerHome() {
+  const { data: objects } = useSuspenseQuery(objectsQuery)
+  const { data: tenders } = useSuspenseQuery(organizerTendersQuery)
+  const nowMs = useNowMs()
 
-const STATUS_LABELS: Record<string, () => string> = {
-  free: m.object_status_free,
-  in_tender: m.object_status_in_tender,
-  leased: m.object_status_leased,
-}
+  const freeObjects = objects.items.filter(
+    (object) => object.status === "free"
+  ).length
+  const objectsInTender = objects.items.filter(
+    (object) => object.status === "in_tender"
+  ).length
+  const drafts = tenders.items.filter(
+    (tender) => tender.status === "draft"
+  ).length
+  const accepting = tenders.items.filter(
+    (tender) => tender.status === "accepting"
+  ).length
 
-function ObjectsPage() {
-  const { data: page } = useSuspenseQuery(objectsQuery)
-  const queryClient = useQueryClient()
+  // Ближайший срок - первым; сортировка по строке ISO не зависит от «сейчас»
+  // и потому одинакова на сервере и в браузере
+  const closing = tenders.items
+    .filter(
+      (tender) =>
+        tender.submission_deadline != null &&
+        OPEN_STATUSES.includes(tender.status)
+    )
+    .toSorted((left, right) =>
+      (left.submission_deadline ?? "").localeCompare(
+        right.submission_deadline ?? ""
+      )
+    )
 
-  const [kind, setKind] = useState<ObjectKind>("premises")
-  const [name, setName] = useState("")
-  const [address, setAddress] = useState("")
-  const [area, setArea] = useState("")
-  const [floorPart, setFloorPart] = useState("")
+  const closingItems: QueueItem[] = closing.map((tender) => ({
+    id: tender.id,
+    label: tender.title,
+    to: `/app/organizer/tenders/${tender.id}`,
+    at: tender.submission_deadline,
+  }))
 
-  const create = useMutation({
-    mutationFn: async () => {
-      const { data, error } = await api.POST("/api/v1/objects", {
-        body: {
-          kind,
-          name,
-          address,
-          area_m2: area,
-          floor_part: floorPart === "" ? null : floorPart,
-        },
-      })
-      if (error !== undefined || data === undefined) {
-        throw error ?? new Error("failed to create object")
-      }
-      return data
-    },
-    onSuccess: async () => {
-      setName("")
-      setAddress("")
-      setArea("")
-      setFloorPart("")
-      await queryClient.invalidateQueries({ queryKey: objectsQuery.queryKey })
-    },
-  })
+  // Тон плитки приема заявок берется от самого горящего срока
+  const urgency: DeadlineUrgency =
+    nowMs === null
+      ? "normal"
+      : (closing
+          .map((tender) =>
+            deadlineUrgency(tender.submission_deadline ?? "", nowMs)
+          )
+          .find((value) => value !== "normal") ?? "normal")
 
   return (
-    <div className="flex flex-col gap-8">
-      <MyDeadlines />
-
-      <section aria-labelledby="objects-create">
-        <h2
-          id="objects-create"
-          className="mb-3 font-heading text-lg font-semibold"
-        >
-          {m.object_create_title()}
-        </h2>
-        <form
-          className="flex flex-wrap items-end gap-3 rounded-lg border p-4"
-          onSubmit={(event) => {
-            event.preventDefault()
-            create.mutate()
-          }}
-        >
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="obj-kind">{m.object_kind_label()}</Label>
-            <NativeSelect
-              id="obj-kind"
-              value={kind}
-              onChange={(event) => setKind(event.target.value as ObjectKind)}
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        title={m.cabinet_organizer()}
+        description={m.org_dash_subtitle()}
+        actions={
+          <>
+            <Link
+              to="/app/organizer/objects"
+              className={cn(buttonVariants({ variant: "outline" }))}
             >
-              {(Object.keys(KIND_LABELS) as ObjectKind[]).map((value) => (
-                <NativeSelectOption key={value} value={value}>
-                  {KIND_LABELS[value]()}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </div>
-          <div className="flex min-w-56 flex-1 flex-col gap-1.5">
-            <Label htmlFor="obj-name">{m.object_name_label()}</Label>
-            <Input
-              id="obj-name"
-              required
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </div>
-          <div className="flex min-w-56 flex-1 flex-col gap-1.5">
-            <Label htmlFor="obj-address">{m.object_address_label()}</Label>
-            <Input
-              id="obj-address"
-              required
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-            />
-          </div>
-          <div className="flex w-32 flex-col gap-1.5">
-            <Label htmlFor="obj-area">{m.object_area_label()}</Label>
-            <Input
-              id="obj-area"
-              required
-              type="number"
-              min="0.01"
-              step="0.01"
-              value={area}
-              onChange={(event) => setArea(event.target.value)}
-            />
-          </div>
-          <div className="flex w-40 flex-col gap-1.5">
-            <Label htmlFor="obj-floor">{m.object_floor_label()}</Label>
-            <Input
-              id="obj-floor"
-              value={floorPart}
-              onChange={(event) => setFloorPart(event.target.value)}
-            />
-          </div>
-          <Button
-            type="submit"
-            data-testid="create-object"
-            disabled={create.isPending}
-          >
-            {m.object_create_submit()}
-          </Button>
-          {create.isError && (
-            <p role="alert" className="w-full text-sm text-destructive">
-              {problemMessage(create.error)}
-            </p>
-          )}
-        </form>
-      </section>
+              {m.org_nav_objects()}
+            </Link>
+            <Link
+              to="/app/organizer/tenders/new"
+              className={cn(buttonVariants())}
+            >
+              {m.tender_create_cta()}
+            </Link>
+          </>
+        }
+      />
 
-      <section aria-labelledby="objects-list">
-        <h2
-          id="objects-list"
-          className="mb-3 font-heading text-lg font-semibold"
-        >
-          {m.objects_list_title()}
-        </h2>
-        {page.items.length === 0 ? (
-          <p className="text-muted-foreground">{m.objects_empty()}</p>
-        ) : (
-          <div className="rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col">{m.object_name_label()}</TableHead>
-                  <TableHead scope="col">{m.object_kind_label()}</TableHead>
-                  <TableHead scope="col">{m.object_address_label()}</TableHead>
-                  <TableHead scope="col" className="text-right">
-                    {m.object_area_label()}
-                  </TableHead>
-                  <TableHead scope="col">{m.object_status_label()}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {page.items.map((object) => (
-                  <TableRow key={object.id}>
-                    <TableCell className="font-medium">{object.name}</TableCell>
-                    <TableCell>{KIND_LABELS[object.kind]()}</TableCell>
-                    <TableCell className="max-w-md whitespace-normal text-muted-foreground">
-                      {object.address}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {object.area_m2}
-                    </TableCell>
-                    <TableCell>
-                      {STATUS_LABELS[object.status]?.() ?? object.status}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard
+          label={m.org_dash_objects_free()}
+          value={pageCount(objects.next_after, freeObjects)}
+          to="/app/organizer/objects"
+        />
+        <StatCard
+          label={m.org_dash_objects_in_tender()}
+          value={pageCount(objects.next_after, objectsInTender)}
+          to="/app/organizer/objects"
+        />
+        <StatCard
+          label={m.org_dash_tenders_accepting()}
+          value={pageCount(tenders.next_after, accepting)}
+          urgency={urgency}
+          to="/app/organizer/tenders"
+        />
+        <StatCard
+          label={m.org_dash_tenders_draft()}
+          value={pageCount(tenders.next_after, drafts)}
+          to="/app/organizer/tenders"
+        />
+      </div>
+
+      <QueueCard
+        title={m.org_dash_closing_title()}
+        count={closing.length}
+        items={closingItems.slice(0, CLOSING_SOON)}
+        empty={m.org_dash_closing_empty()}
+        seeAll={{
+          to: "/app/organizer/tenders",
+          label: m.org_tenders_title(),
+        }}
+      />
     </div>
   )
+}
+
+/**
+ * Счет по странице реестра: «+» означает, что записей больше, чем
+ * прочитано. Молчать об этом нельзя - иначе плитка утверждает точное число,
+ * которого не знает.
+ */
+function pageCount(next: string | null | undefined, shown: number): string {
+  return next == null ? String(shown) : `${shown}+`
 }

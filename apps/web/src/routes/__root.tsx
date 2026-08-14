@@ -8,8 +8,14 @@ import { Suspense, lazy } from "react"
 
 import PostHogProvider from "../integrations/posthog/provider"
 
-import { getLocale } from "#/paraglide/runtime"
+import {
+  baseLocale,
+  getLocale,
+  localizeHref,
+  locales,
+} from "#/paraglide/runtime"
 import * as m from "#/paraglide/messages"
+import { buttonVariants } from "@/components/ui/button"
 import { themeInitializer } from "@/lib/theme"
 
 import faviconUrl from "../../favicon.ico?url"
@@ -29,39 +35,59 @@ interface MyRouterContext {
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-  beforeLoad: async () => {
-    // Other redirect strategies are possible; see
-    // https://github.com/TanStack/router/tree/main/examples/react/i18n-paraglide#offline-redirect
-    if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("lang", getLocale())
+  head: ({ matches }) => {
+    // Локаль живет в пути (стратегия "url": /kk/..., /en/..., ru без
+    // префикса), поэтому у каждой страницы есть три различимых адреса -
+    // и поисковику надо сказать, что это одна и та же страница.
+    const pathname = matches.at(-1)?.pathname ?? "/"
+
+    return {
+      meta: [
+        {
+          charSet: "utf-8",
+        },
+        {
+          name: "viewport",
+          content: "width=device-width, initial-scale=1",
+        },
+        // Цвет служебных полос браузера повторяет --background обеих тем
+        {
+          name: "theme-color",
+          media: "(prefers-color-scheme: light)",
+          content: "#ffffff",
+        },
+        {
+          name: "theme-color",
+          media: "(prefers-color-scheme: dark)",
+          content: "#161616",
+        },
+        {
+          title: "ToU Rent",
+        },
+      ],
+      links: [
+        {
+          rel: "icon",
+          href: faviconUrl,
+          sizes: "any",
+        },
+        {
+          rel: "stylesheet",
+          href: appCss,
+        },
+        ...locales.map((locale) => ({
+          rel: "alternate",
+          hrefLang: locale,
+          href: localizeHref(pathname, { locale }),
+        })),
+        {
+          rel: "alternate",
+          hrefLang: "x-default",
+          href: localizeHref(pathname, { locale: baseLocale }),
+        },
+      ],
     }
   },
-
-  head: () => ({
-    meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "ToU Rent",
-      },
-    ],
-    links: [
-      {
-        rel: "icon",
-        href: faviconUrl,
-        sizes: "any",
-      },
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
-  }),
   notFoundComponent: NotFoundPage,
   errorComponent: ErrorPage,
   shellComponent: RootDocument,
@@ -78,7 +104,10 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
  */
 function ErrorPage({ reset }: { error: Error; reset: () => void }) {
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center gap-4 px-4 text-center">
+    <main
+      id="main"
+      className="mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center gap-4 px-4 text-center"
+    >
       <h1 className="text-3xl font-bold tracking-tight">
         {m.page_error_title()}
       </h1>
@@ -87,14 +116,11 @@ function ErrorPage({ reset }: { error: Error; reset: () => void }) {
         <button
           type="button"
           onClick={reset}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          className={buttonVariants({ size: "lg" })}
         >
           {m.page_error_retry()}
         </button>
-        <Link
-          to="/"
-          className="rounded-md border px-4 py-2 text-sm font-medium hover:bg-accent"
-        >
+        <Link to="/" className={buttonVariants({ variant: "outline" })}>
           {m.nav_home()}
         </Link>
       </div>
@@ -104,18 +130,18 @@ function ErrorPage({ reset }: { error: Error; reset: () => void }) {
 
 function NotFoundPage() {
   return (
-    <main className="mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center gap-4 px-4 text-center">
-      <p className="text-sm font-semibold text-primary">404</p>
+    <main
+      id="main"
+      className="mx-auto flex min-h-[70vh] max-w-3xl flex-col items-center justify-center gap-4 px-4 text-center"
+    >
+      <p className="text-sm font-semibold text-primary tabular-nums">404</p>
       <h1 className="text-3xl font-bold tracking-tight">
         {m.page_not_found_title()}
       </h1>
       <p className="max-w-xl text-muted-foreground">
         {m.page_not_found_text()}
       </p>
-      <Link
-        to="/"
-        className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-      >
+      <Link to="/" className={buttonVariants({ size: "lg" })}>
         {m.nav_home()}
       </Link>
     </main>
@@ -130,6 +156,14 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        {/* Первая точка табуляции страницы: клавиатурному пользователю не
+            приходится проходить всю шапку ради содержимого (SC 2.4.1) */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow-lg focus:outline-2 focus:outline-offset-2 focus:outline-ring"
+        >
+          {m.skip_to_content()}
+        </a>
         <PostHogProvider>
           {children}
           <Suspense fallback={null}>

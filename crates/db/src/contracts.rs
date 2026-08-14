@@ -10,6 +10,7 @@ use rust_decimal::Decimal;
 use time::OffsetDateTime;
 use tou_domain::contract::{Progress, Stage};
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -21,14 +22,25 @@ pub enum ContractError {
     NotFound,
     /// Правило конвейера (порядок шагов, INV-115, FR-901, FR-905)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 impl From<tou_domain::contract::StageError> for ContractError {
     fn from(err: tou_domain::contract::StageError) -> Self {
-        ContractError::Rejected(err.to_string())
+        // Незавершенная сверка - отдельное правило (INV-115): участнику оно
+        // говорит, что делать, а «шаг не в том порядке» - не говорит.
+        let rule = match &err {
+            tou_domain::contract::StageError::ChecklistIncomplete => {
+                RuleViolation::DocumentCheckIncomplete
+            }
+            tou_domain::contract::StageError::AlreadyDone(_)
+            | tou_domain::contract::StageError::OutOfOrder { .. } => {
+                RuleViolation::ContractStageOrder
+            }
+        };
+        ContractError::Rejected(RuleRejection::new(rule, err.to_string()))
     }
 }
 
@@ -39,7 +51,7 @@ fn map_rule(err: sqlx::Error) -> ContractError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505") | Some("23P01")
         )
     {
-        return ContractError::Rejected(db_err.message().to_owned());
+        return ContractError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     ContractError::Db(err)
 }
@@ -143,16 +155,24 @@ pub async fn list_for_tender(db: &Db, tender_id: Uuid) -> Result<Vec<ContractRec
 }
 
 /// Договоры нанимателя (кабинет участника).
-pub async fn list_for_tenant(db: &Db, tenant_id: Uuid) -> Result<Vec<ContractRecord>, sqlx::Error> {
+///
+/// Курсора нет: договоров у одного нанимателя единицы - выборку ограничивает
+/// сама предметная область. Потолок остается защитой от невероятного, но
+/// молчать о нем нельзя: наниматель не должен гадать, все ли договоры видит.
+pub async fn list_for_tenant(
+    db: &Db,
+    tenant_id: Uuid,
+) -> Result<crate::Page<ContractRecord>, sqlx::Error> {
     let rows = contract_query!(
         " WHERE c.tenant_id = $1 ORDER BY c.created_at DESC LIMIT $2",
         tenant_id,
-        crate::MAX_ROWS
+        crate::probe_limit(crate::MAX_ROWS)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "contracts::list_for_tenant");
-    Ok(rows)
+    let page = crate::Page::probe(rows, crate::MAX_ROWS);
+    crate::warn_if_truncated(page.truncated, "contracts::list_for_tenant");
+    Ok(page)
 }
 
 /// Составление договора по итогам торгов (FR-901, п. 108, 110).
@@ -204,20 +224,21 @@ pub async fn draft_from_auction(
         .await?;
 
         let row = row.ok_or_else(|| {
-            ContractError::Rejected(
-                "договор составляется по завершенным торгам лота (п. 108)".to_owned(),
-            )
+            ContractError::Rejected(RuleRejection::new(
+                RuleViolation::ContractConclusion,
+                "договор составляется по завершенным торгам лота (п. 108)",
+            ))
         })?;
 
         let winner_evaded = row.winner_evaded;
         // Третьего места Правила не знают: после уклонения № 2 договор по лоту
         // не составляется, тендер идет к основанию п. 81.4 (FR-801)
         if row.runner_up_evaded {
-            return Err(ContractError::Rejected(
+            return Err(ContractError::Rejected(RuleRejection::new(
+                RuleViolation::ContractConclusion,
                 "победитель и участник № 2 уклонились - договор по лоту не составляется, \
-                 тендер признается несостоявшимся (п. 81.4, 117)"
-                    .to_owned(),
-            ));
+                 тендер признается несостоявшимся (п. 81.4, 117)",
+            )));
         }
         let place = if winner_evaded { "runner_up" } else { "winner" };
         let (application, amount): (Option<Uuid>, Option<Decimal>) = if winner_evaded {
@@ -228,16 +249,17 @@ pub async fn draft_from_auction(
         let (winner_application_id, monthly_rate) = match (application, amount) {
             (Some(application), Some(amount)) => (application, amount),
             _ if winner_evaded => {
-                return Err(ContractError::Rejected(
+                return Err(ContractError::Rejected(RuleRejection::new(
+                    RuleViolation::ContractConclusion,
                     "по лоту нет участника № 2 - договор не составляется, тендер идет \
-                     к признанию несостоявшимся (п. 81.4, 117)"
-                        .to_owned(),
-                ));
+                     к признанию несостоявшимся (п. 81.4, 117)",
+                )));
             }
             _ => {
-                return Err(ContractError::Rejected(
-                    "по лоту нет победителя - договор не составляется (п. 74)".to_owned(),
-                ));
+                return Err(ContractError::Rejected(RuleRejection::new(
+                    RuleViolation::ContractConclusion,
+                    "по лоту нет победителя - договор не составляется (п. 74)",
+                )));
             }
         };
 
@@ -366,9 +388,10 @@ pub async fn check_item(
         match signed {
             None => return Err(ContractError::NotFound),
             Some(Some(_)) => {
-                return Err(ContractError::Rejected(
-                    "договор подписан наймодателем - сверка закрыта (п. 113, 115)".to_owned(),
-                ));
+                return Err(ContractError::Rejected(RuleRejection::new(
+                    RuleViolation::DocumentCheckIncomplete,
+                    "договор подписан наймодателем - сверка закрыта (п. 113, 115)",
+                )));
             }
             Some(None) => {}
         }
@@ -388,9 +411,10 @@ pub async fn check_item(
         .map_err(map_rule)?;
 
         if updated.rows_affected() == 0 {
-            return Err(ContractError::Rejected(
-                "позиция вне перечня сверки этого договора (п. 113)".to_owned(),
-            ));
+            return Err(ContractError::Rejected(RuleRejection::new(
+                RuleViolation::DocumentCheckIncomplete,
+                "позиция вне перечня сверки этого договора (п. 113)",
+            )));
         }
 
         // Отметка «сверка завершена» держится фактом: все позиции отмечены
@@ -428,7 +452,10 @@ pub async fn advance(
     record.progress().check(stage)?;
 
     if stage == Stage::Registered {
-        return Err(ContractError::Rejected(REGISTRATION_IS_SEPARATE.to_owned()));
+        return Err(ContractError::Rejected(RuleRejection::new(
+            RuleViolation::ContractRegistration,
+            REGISTRATION_IS_SEPARATE,
+        )));
     }
 
     crate::with_actor(db, actor, async |tx| {
@@ -494,7 +521,10 @@ pub async fn advance(
                 }
                 // Отсечена выше: у регистрации своя операция с номером журнала
                 Stage::Registered => {
-                    return Err(ContractError::Rejected(REGISTRATION_IS_SEPARATE.to_owned()));
+                    return Err(ContractError::Rejected(RuleRejection::new(
+                        RuleViolation::ContractRegistration,
+                        REGISTRATION_IS_SEPARATE,
+                    )));
                 }
             };
         done.map_err(map_rule)?;
@@ -557,9 +587,10 @@ pub async fn register_on(
     reg_number: &str,
 ) -> Result<ContractRecord, ContractError> {
     if reg_number.trim().is_empty() {
-        return Err(ContractError::Rejected(
-            "номер в журнале регистрации договоров обязателен (п. 126)".to_owned(),
-        ));
+        return Err(ContractError::Rejected(RuleRejection::new(
+            RuleViolation::ContractRegistration,
+            "номер в журнале регистрации договоров обязателен (п. 126)",
+        )));
     }
 
     {
@@ -594,7 +625,10 @@ pub async fn register_on(
             .await
             .map_err(|err| match err {
                 crate::ledger::LedgerError::Db(db) => ContractError::Db(db),
-                other => ContractError::Rejected(other.to_string()),
+                other => ContractError::Rejected(RuleRejection::new(
+                    RuleViolation::ContractDeposit,
+                    other.to_string(),
+                )),
             })?;
         crate::obligations::schedule(
             &mut *tx,

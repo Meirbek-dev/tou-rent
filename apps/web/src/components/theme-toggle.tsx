@@ -1,5 +1,4 @@
-import { Moon02Icon, Sun03Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { MoonIcon, SunIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { m } from "#/paraglide/messages"
@@ -60,18 +59,8 @@ export function ThemeToggle() {
       title={label}
       onClick={toggleTheme}
     >
-      <HugeiconsIcon
-        icon={Moon02Icon}
-        strokeWidth={2}
-        className="dark:hidden"
-        aria-hidden="true"
-      />
-      <HugeiconsIcon
-        icon={Sun03Icon}
-        strokeWidth={2}
-        className="hidden dark:block"
-        aria-hidden="true"
-      />
+      <MoonIcon className="dark:hidden" aria-hidden="true" />
+      <SunIcon className="hidden dark:block" aria-hidden="true" />
     </Button>
   )
 }

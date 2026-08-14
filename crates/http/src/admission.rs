@@ -31,6 +31,7 @@ use crate::pdf;
 use crate::request::{Json, Path};
 use crate::state::AppState;
 use crate::tenders::TenderDto;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/admission.typ");
 
@@ -66,8 +67,9 @@ pub(crate) fn open_error(err: OpenError) -> ApiError {
     match err {
         OpenError::NotFound => ApiError::NotFound,
         OpenError::Rejected(reason) => ApiError::RuleViolation(reason),
-        OpenError::NoCommission => ApiError::RuleViolation(
-            "нет действующей комиссии с утвержденным составом (FR-1101)".into(),
+        OpenError::NoCommission => ApiError::rule(
+            RuleViolation::CommissionComposition,
+            "нет действующей комиссии с утвержденным составом (FR-1101)",
         ),
         OpenError::Db(db) => db.into(),
     }
@@ -193,14 +195,17 @@ pub async fn decide_application(
     let meeting = admission::qualification_meeting(&state.db, application.tender_id)
         .await?
         .ok_or_else(|| {
-            ApiError::RuleViolation("заседание комиссии по тендеру не назначено".into())
+            ApiError::rule(
+                RuleViolation::CommissionMeeting,
+                "заседание комиссии по тендеру не назначено",
+            )
         })?;
 
     // Итог голосования - единственный источник вердикта (FR-1103)
     let tally = tou_db::commission::tally(&state.db, meeting.id, id).await?;
     let decision = tally
         .outcome()
-        .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+        .map_err(|err| ApiError::rule(RuleViolation::CommissionVote, err.to_string()))?;
 
     let (verdict, reason) = match decision {
         tou_domain::commission::Decision::Admitted => ("admitted", None),
@@ -221,9 +226,9 @@ pub async fn decide_application(
     let record = admission::decide(&state.db, user.id(), id, verdict, reason)
         .await
         .map_err(|err| match err {
-            DecideError::NotDecidable => ApiError::RuleViolation(
-                "решение принимается на открытом заседании после вскрытия, по заявке                  в статусе «подана» (FR-502, FR-1102)"
-                    .into(),
+            DecideError::NotDecidable => ApiError::rule(
+                RuleViolation::ApplicationNotPending,
+                "решение принимается на открытом заседании после вскрытия, по заявке                  в статусе «подана» (FR-502, FR-1102)",
             ),
             DecideError::Rejected(reason) => ApiError::RuleViolation(reason),
             DecideError::Db(db) => db.into(),
@@ -286,9 +291,13 @@ pub struct RejectionReasonDto {
     responses((status = 200, description = "Основания п. 52", body = [RejectionReasonDto]))
 )]
 pub async fn rejection_reasons(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<RejectionReasonDto>>, ApiError> {
+    // Закрытый перечень из Правил: отклоненный участник вправе знать,
+    // по какому из оснований п. 52 его заявку не допустили
+    user.require(Action::RefdataRead)?;
+
     let reasons = tou_db::refdata::rejection_reasons(&state.db).await?;
     Ok(Json(
         reasons
@@ -410,8 +419,9 @@ pub async fn generate_admission_protocol(
                 generated_at: protocol.generated_at,
             }),
         )),
-        None => Err(ApiError::RuleViolation(
-            "протокол допуска уже сформирован (UNIQUE по тендеру)".into(),
+        None => Err(ApiError::rule(
+            RuleViolation::DuplicateRecord,
+            "протокол допуска уже сформирован (UNIQUE по тендеру)",
         )),
     }
 }
@@ -536,15 +546,18 @@ pub async fn notify_admitted(
 fn map_notify_admitted_error(error: NotifyAdmittedError) -> ApiError {
     match error {
         NotifyAdmittedError::TenderNotFound => ApiError::NotFound,
-        NotifyAdmittedError::AdmissionProtocolMissing => ApiError::RuleViolation(
-            "уведомление допущенных возможно после протокола допуска (FR-504)".into(),
+        NotifyAdmittedError::AdmissionProtocolMissing => ApiError::rule(
+            RuleViolation::AdmissionNotice,
+            "уведомление допущенных возможно после протокола допуска (FR-504)",
         ),
-        NotifyAdmittedError::AlreadyNotified => ApiError::RuleViolation(
-            "допущенные по тендеру уже уведомлены (FR-504 - однократно)".into(),
+        NotifyAdmittedError::AlreadyNotified => ApiError::rule(
+            RuleViolation::AdmissionNotice,
+            "допущенные по тендеру уже уведомлены (FR-504 - однократно)",
         ),
-        NotifyAdmittedError::NoAdmittedApplications => {
-            ApiError::RuleViolation("по тендеру нет допущенных заявок - уведомлять некого".into())
-        }
+        NotifyAdmittedError::NoAdmittedApplications => ApiError::rule(
+            RuleViolation::AdmissionNotice,
+            "по тендеру нет допущенных заявок - уведомлять некого",
+        ),
         NotifyAdmittedError::Infrastructure(source) => ApiError::Internal(source),
     }
 }

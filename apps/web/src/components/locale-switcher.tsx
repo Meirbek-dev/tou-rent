@@ -1,5 +1,4 @@
-import { ArrowDown01Icon, Globe02Icon } from "@hugeicons/core-free-icons"
-import { HugeiconsIcon } from "@hugeicons/react"
+import { ChevronDownIcon, GlobeIcon } from "lucide-react"
 
 import { getLocale, locales, setLocale } from "#/paraglide/runtime"
 import { m } from "#/paraglide/messages"
@@ -52,18 +51,11 @@ export default function LocaleSwitcher() {
           />
         }
       >
-        <HugeiconsIcon
-          icon={Globe02Icon}
-          strokeWidth={2}
-          className="size-4"
-          aria-hidden="true"
-        />
+        <GlobeIcon className="size-4" aria-hidden="true" />
         <span className="min-w-5 text-center font-semibold tracking-wide">
           {current.toUpperCase()}
         </span>
-        <HugeiconsIcon
-          icon={ArrowDown01Icon}
-          strokeWidth={2}
+        <ChevronDownIcon
           className="size-3 text-muted-foreground transition-transform group-aria-expanded/button:rotate-180"
           aria-hidden="true"
         />

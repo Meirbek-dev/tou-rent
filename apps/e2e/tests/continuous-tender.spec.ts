@@ -44,7 +44,9 @@ test("сквозной путь без вставки состояния: пуб
     await loginAsUi(page, accounts.organizer)
 
     await test.step("объект и тендер с лотом (FR-101, FR-301)", async () => {
-      await page.goto("/app/organizer")
+      await page.goto("/app/organizer/objects")
+      // Форма создания живет в диалоге - его сперва открывают кнопкой
+      await page.getByTestId("open-create-object").click()
       await page.locator("#obj-name").fill(objectName)
       await page.locator("#obj-address").fill("г. Павлодар, ул. Ломова, 68")
       await page.locator("#obj-area").fill("42")
@@ -95,7 +97,10 @@ test("сквозной путь без вставки состояния: пуб
         )
       }).toPass({ timeout: 30_000 })
 
-      await participantPage.locator("#apply-idnum").fill("990101300123")
+      // Контрольный разряд ИИН считается по национальному алгоритму
+      // (crates/domain/src/identity.rs, W-13): у 99010130012 он равен 2.
+      // Прежнее значение ...23 форма теперь отклоняет до отправки
+      await participantPage.locator("#apply-idnum").fill("990101300122")
       await participantPage
         .locator("#apply-address")
         .fill("г. Павлодар, ул. Ломова, 68")
@@ -107,7 +112,11 @@ test("сквозной путь без вставки состояния: пуб
           response.url().includes("/applications") &&
           response.request().method() === "POST"
       )
+      // Подача подтверждается диалогом: в нем пересказаны цена,
+      // гарантийный взнос и срок приема
+      await participantPage.getByTestId("apply-submit").click()
       await participantPage
+        .getByRole("alertdialog")
         .getByRole("button", { name: "Подать заявку" })
         .click()
       const response = await submitted
@@ -128,7 +137,8 @@ test("сквозной путь без вставки состояния: пуб
       const secretaryPage = await secretary.newPage()
       await loginAsUi(secretaryPage, accounts.secretary)
 
-      await secretaryPage.goto(`/app/secretary/tenders/${tenderId}`)
+      // Экран ведения тендера разложен по вкладкам, вкладка живет в адресе
+      await secretaryPage.goto(`/app/secretary/tenders/${tenderId}?tab=meeting`)
 
       // Вскрытие возможно только на открытом заседании при кворуме
       // (FR-1102, п. 12) - это часть того же пути, а не подготовка
@@ -162,6 +172,7 @@ test("сквозной путь без вставки состояния: пуб
       await expect(secretaryPage.getByTestId("open-tender")).toBeHidden()
 
       // Цена, скрытая до вскрытия (INV-040), становится видна комиссии
+      await secretaryPage.getByRole("tab", { name: "Заявки" }).click()
       await expect(secretaryPage.getByText("55 000").first()).toBeVisible()
       await secretary.close()
     })

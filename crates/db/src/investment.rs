@@ -8,6 +8,7 @@
 
 use rust_decimal::Decimal;
 use time::{Date, OffsetDateTime};
+use tou_domain::rule::RuleRejection;
 use uuid::Uuid;
 
 use crate::Db;
@@ -18,7 +19,7 @@ pub enum InvestmentError {
     NotFound,
     /// Отказ правила п. 91–94 (триггер или CHECK)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -30,7 +31,7 @@ fn map_rule(err: sqlx::Error) -> InvestmentError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return InvestmentError::Rejected(db_err.message().to_owned());
+        return InvestmentError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     InvestmentError::Db(err)
 }
@@ -159,15 +160,14 @@ pub async fn create(
         .ok_or(InvestmentError::NotFound)?;
 
         let object_id = request.object_id.ok_or_else(|| {
-            InvestmentError::Rejected(
-                "FR-1204: инвестиционный договор заключается на конкретный объект (п. 91)"
-                    .to_owned(),
-            )
+            InvestmentError::Rejected(RuleRejection::classify(
+                "FR-1204: инвестиционный договор заключается на конкретный объект (п. 91)",
+            ))
         })?;
         let investment_amount = request.investment_amount.ok_or_else(|| {
-            InvestmentError::Rejected(
-                "FR-1204: в заявке не указан объем инвестиций (п. 97)".to_owned(),
-            )
+            InvestmentError::Rejected(RuleRejection::classify(
+                "FR-1204: в заявке не указан объем инвестиций (п. 97)",
+            ))
         })?;
         let tenant_id = request.applicant_id;
 

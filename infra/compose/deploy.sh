@@ -20,8 +20,10 @@
 #
 # Поведение самого скрипта настраивается окружением, а не .env:
 #   DEPLOY_FORCE=1   - обойти окно заморозки (см. выше)
+#   DEPLOY_BUILD=1   - собрать api и web на хосте вместо пулла из реестра
+#                      (стенд без GitLab Registry, см. ниже)
 #   HEALTH_TIMEOUT   - сколько секунд ждать здоровья каждого контейнера (180)
-#   COMPOSE          - чем звать compose (`podman compose`)
+#   COMPOSE          - чем звать compose (`podman compose`, `docker compose`)
 #   ENV_FILE         - путь к файлу переменных (.env)
 #   STATE_FILE       - где хранится последний успешный тег (.deployed-tag)
 set -euo pipefail
@@ -31,6 +33,11 @@ cd "$(dirname "$0")"
 COMPOSE="${COMPOSE:-podman compose}"
 COMPOSE_FILE="docker-compose.prod.yml"
 ENV_FILE="${ENV_FILE:-.env}"
+DEPLOY_BUILD="${DEPLOY_BUILD:-0}"
+# Образы, которые всегда берутся из публичных реестров: их теги пиньованы
+# (T70) и собирать их нечем. Перечислены явно, потому что при сборке на хосте
+# общий `compose pull` полез бы и за api/web - в реестр, которого нет
+INFRA_SERVICES="caddy postgres redis rustfs rustfs-init rustfs-iam"
 HEALTH_TIMEOUT="${HEALTH_TIMEOUT:-180}"
 # Тег, который в последний раз прошел проверку здоровья. Пишется только после
 # успеха, поэтому в файле всегда стоит версия, про которую известно, что она
@@ -41,8 +48,21 @@ log() { printf '\033[1;94m==>\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;91mdeploy: %s\033[0m\n' "$*" >&2; exit 1; }
 
 [ -f "$ENV_FILE" ] || fail "нет файла $ENV_FILE (скопируйте .env.prod.example и заполните)"
-# shellcheck disable=SC1090
-set -a && . "./$ENV_FILE" && set +a
+
+# Файл читается построчно, а не через `.`: в нем есть значения с пробелами
+# (OIDC_LABEL - `. .env` принимал вторую половину за команду) и секреты, в
+# которых оболочка съела бы `$` и `#`. Самому compose это и не нужно - `.env`
+# рядом с файлом compose он читает сам; скрипту нужны ровно три переменные.
+# Окружение имеет приоритет над файлом - так же, как у compose: тег из CI
+# не должен молча подменяться значением из .env
+env_value() {
+  sed -n "s/^[[:space:]]*$1[[:space:]]*=//p" "$ENV_FILE" | tail -n 1 \
+    | sed -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'\$/\1/"
+}
+
+TAG="${TAG:-$(env_value TAG)}"
+REGISTRY="${REGISTRY:-$(env_value REGISTRY)}"
+TOU_DOMAIN="${TOU_DOMAIN:-$(env_value TOU_DOMAIN)}"
 
 compose() { $COMPOSE -f "$COMPOSE_FILE" "$@"; }
 
@@ -116,8 +136,11 @@ rollback() {
 
   log "откат на последний успешный тег: $prev"
   # Подстановка тега - в подоболочке: `compose` здесь функция, и присваивание
-  # перед ее вызовом в разных оболочках живет по-разному
-  (export TAG="$prev" && compose pull) >/dev/null 2>&1 || true
+  # перед ее вызовом в разных оболочках живет по-разному. При сборке на хосте
+  # тянуть неоткуда - нужный образ либо остался локально, либо откат не выйдет
+  if [ "$DEPLOY_BUILD" != "1" ]; then
+    (export TAG="$prev" && compose pull) >/dev/null 2>&1 || true
+  fi
   (export TAG="$prev" && compose up -d --remove-orphans) \
     || fail "откат на $prev не выполнен - стенд требует ручного вмешательства"
 
@@ -145,8 +168,20 @@ else
   log "$STATE_FILE отсутствует - откатываться будет некуда, если версия не поднимется"
 fi
 
-log "пулл образов"
-compose pull
+if [ "$DEPLOY_BUILD" = "1" ]; then
+  # Стенд без реестра: образы api и web собираются на самом хосте из
+  # infra/docker/*.Dockerfile и тегируются тем же именем ${REGISTRY}/*:${TAG},
+  # что и в compose, - остальной скрипт про разницу не знает. Цена решения -
+  # откат: локально собранный тег живет только на этом хосте, и если старый
+  # образ с него удален (prune), возвращаться будет не к чему
+  log "сборка api и web на хосте (DEPLOY_BUILD=1)"
+  compose build api web
+  log "пулл инфраструктурных образов"
+  compose pull $INFRA_SERVICES
+else
+  log "пулл образов"
+  compose pull
+fi
 
 log "миграции БД"
 compose run --rm api-migrate

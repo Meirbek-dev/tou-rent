@@ -21,7 +21,7 @@ use serde_json::json;
 use time::{Date, OffsetDateTime};
 use tou_db::investment::{self, AcceptanceRecord, InvestmentError, InvestmentRecord};
 use tou_domain::investment::{Attachment, Extension, Extensions, Progress, Term};
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -31,6 +31,8 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Multipart, Path};
 use crate::state::AppState;
+use crate::upload;
+use tou_domain::rule::RuleViolation;
 
 const CONTRACT_TEMPLATE: &str = include_str!("templates/investment_contract.typ");
 const ACT_TEMPLATE: &str = include_str!("templates/investment_act.typ");
@@ -62,9 +64,12 @@ pub struct InvestmentAttachmentDto {
     responses((status = 200, description = "Приложения п. 91", body = [InvestmentAttachmentDto]))
 )]
 pub async fn investment_attachments(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<InvestmentAttachmentDto>>, ApiError> {
+    // Закрытый перечень из Правил: заявитель обязан знать, что приложить
+    user.require(Action::RefdataRead)?;
+
     let rows = investment::list_attachments(&state.db).await?;
     Ok(Json(
         rows.into_iter()
@@ -226,7 +231,7 @@ pub async fn draft_investment_contract(
     State(state): State<AppState>,
     Json(body): Json<DraftInvestmentRequest>,
 ) -> Result<(StatusCode, Json<InvestmentContractDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::InvestmentManage)?;
     body.validate()
         .map_err(|r| ApiError::Validation(r.to_string()))?;
 
@@ -241,8 +246,9 @@ pub async fn draft_investment_contract(
         .await?
         .ok_or(ApiError::NotFound)?;
     let object_id = request.object_id.ok_or_else(|| {
-        ApiError::RuleViolation(
-            "FR-1204: инвестиционный договор заключается на конкретный объект (п. 91)".to_owned(),
+        ApiError::rule(
+            RuleViolation::InvestmentContract,
+            "FR-1204: инвестиционный договор заключается на конкретный объект (п. 91)",
         )
     })?;
     let object = tou_db::objects::get(&state.db, object_id)
@@ -291,7 +297,7 @@ pub async fn upload_attachment(
     Path((id, code)): Path<(Uuid, String)>,
     mut multipart: Multipart,
 ) -> Result<StatusCode, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::InvestmentManage)?;
 
     // Перечень п. 91 закрыт: код вне него до базы не доходит
     let attachment: Attachment = code
@@ -302,45 +308,23 @@ pub async fn upload_attachment(
         .await?
         .ok_or(ApiError::NotFound)?;
 
-    let mut part = None;
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| ApiError::Validation(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("attachment")
-                .chars()
-                .take(255)
-                .collect::<String>();
-            let content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_owned();
-            let bytes = field
-                .bytes()
-                .await
-                .map_err(|e| ApiError::Validation(e.to_string()))?;
-            part = Some((filename, content_type, bytes));
-            break;
-        }
-    }
-    let (filename, content_type, bytes) =
-        part.ok_or_else(|| ApiError::Validation("часть 'file' отсутствует".into()))?;
+    // Права, перечень п. 91 и существование договора проверены выше - только
+    // теперь читается файл: в бакет досье (Object Lock, INV-042) не должно
+    // попадать ничего, что заведомо будет отвергнуто
+    let file =
+        upload::take_file(&mut multipart, "file", "attachment", upload::MAX_FILE_BYTES).await?;
+    let size_bytes = i64::try_from(file.bytes.len()).map_err(ApiError::internal)?;
 
     let file_key = format!(
         "investment-contracts/{}/{}",
         record.contract_id,
         attachment.as_str()
     );
-    let size_bytes = i64::try_from(bytes.len()).map_err(ApiError::internal)?;
     state
         .storage
         .put(
             &ObjectPath::from(file_key.as_str()),
-            PutPayload::from_bytes(bytes),
+            PutPayload::from_bytes(file.bytes),
         )
         .await
         .map_err(ApiError::internal)?;
@@ -352,8 +336,8 @@ pub async fn upload_attachment(
             contract_id: record.contract_id,
             code: attachment.as_str(),
             file_key: &file_key,
-            filename: &filename,
-            content_type: &content_type,
+            filename: &file.filename,
+            content_type: file.content_type,
             size_bytes,
         },
     )
@@ -609,7 +593,7 @@ pub async fn extend_investment(
     };
     extensions
         .allow(extension, progress)
-        .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+        .map_err(|err| ApiError::rule(RuleViolation::InvestmentContract, err.to_string()))?;
 
     let months = match extension {
         Extension::ThreeYears => tou_domain::investment::EXTENSION_MONTHS,
@@ -695,15 +679,10 @@ fn attachment_label_ru(attachment: Attachment) -> &'static str {
 }
 
 /// Договор ведет организатор, продление оформляет Правление, приемку -
-/// секретарь комиссии: читают все трое (A-072).
+/// секретарь комиссии: читают все трое (A-072). Состав прав описан в домене
+/// (`Compound::INVESTMENT_CONTRACT_READ`) и стоит в снимке матрицы.
 fn require_investment_access(user: &CurrentUser) -> Result<(), ApiError> {
-    if user.require(Action::TenderManage).is_ok()
-        || user.require(Action::BoardDecide).is_ok()
-        || user.require(Action::ProtocolGenerate).is_ok()
-    {
-        return Ok(());
-    }
-    Err(ApiError::Forbidden)
+    user.require_any(Compound::INVESTMENT_CONTRACT_READ)
 }
 
 #[cfg(test)]

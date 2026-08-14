@@ -5,8 +5,11 @@ import {
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query"
+import { BuildingIcon } from "lucide-react"
+import { Link } from "@tanstack/react-router"
 import { m } from "#/paraglide/messages"
-import { Button } from "@/components/ui/button"
+import { EmptyState } from "@/components/empty-state"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
@@ -30,6 +33,7 @@ export const Route = createFileRoute("/app/organizer/tenders/new")({
       context.queryClient.ensureQueryData(rateOptionsQuery),
     ])
   },
+  head: () => ({ meta: [{ title: `${m.tender_create_title()} - ToU Rent` }] }),
   component: NewTenderPage,
 })
 
@@ -105,8 +109,22 @@ function NewTenderPage() {
     },
   })
 
+  // Тупик «объектов нет» был абзацем без выхода: лот без объекта не создать,
+  // а куда идти заводить объект - страница не говорила
   if (objectsPage.items.length === 0) {
-    return <p className="text-muted-foreground">{m.tender_new_no_objects()}</p>
+    return (
+      <EmptyState
+        icon={BuildingIcon}
+        titleAs="h1"
+        title={m.objects_empty_title()}
+        description={m.tender_new_no_objects()}
+        action={
+          <Link to="/app/organizer/objects" className={buttonVariants()}>
+            {m.object_create_title()}
+          </Link>
+        }
+      />
+    )
   }
 
   return (
@@ -117,9 +135,9 @@ function NewTenderPage() {
         create.mutate()
       }}
     >
-      <h2 className="font-heading text-lg font-semibold">
+      <h1 className="font-heading text-2xl font-semibold">
         {m.tender_create_title()}
-      </h2>
+      </h1>
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="tender-title">{m.tender_title_label()}</Label>
@@ -154,7 +172,8 @@ function NewTenderPage() {
               >
                 {objectsPage.items.map((object) => (
                   <NativeSelectOption key={object.id} value={object.id}>
-                    {object.name} - {object.area_m2} м²
+                    {object.name} -{" "}
+                    {m.object_area_value({ area: object.area_m2 })}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>

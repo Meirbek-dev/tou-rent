@@ -1,3 +1,12 @@
+import {
+  CircleCheckIcon,
+  CircleXIcon,
+  SendIcon,
+  Undo2Icon,
+  WalletIcon,
+  type LucideIcon,
+} from "lucide-react"
+
 import { m } from "#/paraglide/messages"
 import { Badge } from "@/components/ui/badge"
 
@@ -12,15 +21,18 @@ const LABELS: Record<ApplicationStatus, () => string> = {
   rejected: m.app_status_rejected,
 }
 
-const VARIANTS: Record<
-  ApplicationStatus,
-  "default" | "secondary" | "outline" | "destructive"
-> = {
-  submitted: "default",
-  withdrawn: "outline",
-  fee_confirmed: "secondary",
-  admitted: "secondary",
-  rejected: "destructive",
+type StatusView = {
+  variant: "info" | "success" | "warning" | "neutral" | "destructive"
+  icon: LucideIcon
+}
+
+/** Тот же словарь тонов, что и у тендера: цвет значит одно и то же. */
+const VIEWS: Record<ApplicationStatus, StatusView> = {
+  submitted: { variant: "info", icon: SendIcon },
+  withdrawn: { variant: "neutral", icon: Undo2Icon },
+  fee_confirmed: { variant: "success", icon: WalletIcon },
+  admitted: { variant: "success", icon: CircleCheckIcon },
+  rejected: { variant: "destructive", icon: CircleXIcon },
 }
 
 export function applicationStatusLabel(status: ApplicationStatus): string {
@@ -32,7 +44,12 @@ export function ApplicationStatusBadge({
 }: {
   status: ApplicationStatus
 }) {
+  const { variant, icon: Icon } = VIEWS[status]
+
   return (
-    <Badge variant={VARIANTS[status]}>{applicationStatusLabel(status)}</Badge>
+    <Badge variant={variant}>
+      <Icon aria-hidden="true" />
+      {applicationStatusLabel(status)}
+    </Badge>
   )
 }

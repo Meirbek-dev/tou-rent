@@ -19,6 +19,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 fn rule_error(err: CommissionError) -> ApiError {
     match err {
@@ -206,9 +207,12 @@ async fn current_member(
     state: &AppState,
     user: &CurrentUser,
 ) -> Result<commission::MemberRow, ApiError> {
-    let record = commission::active(&state.db)
-        .await?
-        .ok_or_else(|| ApiError::RuleViolation("действующей комиссии нет".to_owned()))?;
+    let record = commission::active(&state.db).await?.ok_or_else(|| {
+        ApiError::rule(
+            RuleViolation::CommissionComposition,
+            "действующей комиссии нет",
+        )
+    })?;
     commission::member_of(&state.db, record.id, user.id())
         .await?
         .ok_or(ApiError::Forbidden)
@@ -376,7 +380,10 @@ pub async fn cast_vote(
     let meeting = tou_db::admission::qualification_meeting(&state.db, application.tender_id)
         .await?
         .ok_or_else(|| {
-            ApiError::RuleViolation("заседание комиссии по тендеру не назначено".to_owned())
+            ApiError::rule(
+                RuleViolation::CommissionMeeting,
+                "заседание комиссии по тендеру не назначено",
+            )
         })?;
 
     commission::cast_vote(
@@ -584,7 +591,10 @@ pub async fn open_meeting(
     let meeting = tou_db::admission::qualification_meeting(&state.db, id)
         .await?
         .ok_or_else(|| {
-            ApiError::RuleViolation("явка не отмечена - заседание не назначено (п. 12)".to_owned())
+            ApiError::rule(
+                RuleViolation::CommissionMeeting,
+                "явка не отмечена - заседание не назначено (п. 12)",
+            )
         })?;
 
     commission::open_meeting(&state.db, user.id(), meeting.id)

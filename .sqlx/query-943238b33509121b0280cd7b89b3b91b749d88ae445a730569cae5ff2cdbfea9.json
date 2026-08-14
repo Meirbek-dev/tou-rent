@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM core.notifications WHERE payload->>'tender_id' = $1::uuid::text",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "943238b33509121b0280cd7b89b3b91b749d88ae445a730569cae5ff2cdbfea9"
+}

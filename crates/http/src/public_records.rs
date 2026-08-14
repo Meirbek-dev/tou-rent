@@ -17,16 +17,19 @@ use object_store::ObjectStoreExt as _;
 use object_store::path::Path as ObjectPath;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
+use tou_db::RowCursor;
 use tou_db::public_records::{self, NewPublicRecord, PublicRecord, PublicationError};
 use tou_domain::policy::Action;
 use tou_domain::publication::PublicRecordKind;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+use crate::dto::cursor;
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
-use crate::request::{Json, Path};
+use crate::request::{Json, Path, Query};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 fn publication_error(err: PublicationError) -> ApiError {
     match err {
@@ -80,6 +83,23 @@ fn record_dto(record: PublicRecord) -> PublicRecordDto {
     }
 }
 
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct RecordsPageParams {
+    /// Курсор следующей страницы - значение `next_after` предыдущей
+    pub after: Option<String>,
+    pub limit: Option<i64>,
+}
+
+/// Страница реестра портала (ТЗ § 7).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PublicRecordPage {
+    pub items: Vec<PublicRecordDto>,
+    /// Курсор продолжения; `null` - реестр показан до конца
+    pub next_after: Option<String>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
 /// Реестр публикаций особого порядка (FR-1403, п. 90, 92, 97): портал
 /// показывает материалы, доступные сейчас - снятые по истечении шести
 /// месяцев остаются только в досье (INV-076).
@@ -87,13 +107,30 @@ fn record_dto(record: PublicRecord) -> PublicRecordDto {
     get,
     path = "/api/v1/public-records",
     tag = "public-records",
-    responses((status = 200, description = "Публикации особого порядка", body = [PublicRecordDto]))
+    params(RecordsPageParams),
+    responses((status = 200, description = "Страница публикаций особого порядка",
+        body = PublicRecordPage))
 )]
 pub async fn list_public_records(
     State(state): State<AppState>,
-) -> Result<Json<Vec<PublicRecordDto>>, ApiError> {
-    let records = public_records::list_public(&state.db).await?;
-    Ok(Json(records.into_iter().map(record_dto).collect()))
+    Query(params): Query<RecordsPageParams>,
+) -> Result<Json<PublicRecordPage>, ApiError> {
+    let after = params.after.as_deref().map(cursor::parse).transpose()?;
+    let limit = crate::page_limit(params.limit);
+
+    let page = public_records::list_public(&state.db, after, limit).await?;
+    let truncated = page.truncated;
+    let next_after = cursor::next(
+        truncated,
+        page.last()
+            .map(|record| RowCursor::new(record.published_at, record.id)),
+    );
+
+    Ok(Json(PublicRecordPage {
+        items: page.into_iter().map(record_dto).collect(),
+        next_after,
+        truncated,
+    }))
 }
 
 /// Печатная форма публикации (FR-1403): открыта, пока материал публичен.
@@ -158,6 +195,19 @@ pub struct PendingPublicationDto {
     pub ready: bool,
 }
 
+/// Рабочий список ожидающих публикации (ТЗ § 7).
+///
+/// `next_after` здесь всегда `null`: продолжения у списка нет - он не
+/// реестр, а очередь работы, и `truncated` означает не «есть вторая
+/// страница», а «работы накопилось больше, чем система показывает».
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PendingPublicationPage {
+    pub items: Vec<PendingPublicationDto>,
+    pub next_after: Option<String>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
 /// Что ждет публикации (FR-1403, п. 97): рабочий список уполномоченного
 /// подразделения - решения по публикуемым категориям, обоснования ставок
 /// и акты приемки, по которым публикации еще нет.
@@ -166,19 +216,20 @@ pub struct PendingPublicationDto {
     path = "/api/v1/public-records/pending",
     tag = "public-records",
     responses(
-        (status = 200, description = "Ожидают публикации", body = [PendingPublicationDto]),
+        (status = 200, description = "Ожидают публикации", body = PendingPublicationPage),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
     )
 )]
 pub async fn pending_publications(
     user: CurrentUser,
     State(state): State<AppState>,
-) -> Result<Json<Vec<PendingPublicationDto>>, ApiError> {
-    user.require(Action::TenderManage)?;
+) -> Result<Json<PendingPublicationPage>, ApiError> {
+    user.require(Action::RecordPublish)?;
 
-    let items = public_records::pending(&state.db).await?;
-    Ok(Json(
-        items
+    let page = public_records::pending(&state.db).await?;
+    let truncated = page.truncated;
+    Ok(Json(PendingPublicationPage {
+        items: page
             .into_iter()
             .map(|item| PendingPublicationDto {
                 kind: item.kind.as_str().to_owned(),
@@ -190,7 +241,9 @@ pub async fn pending_publications(
                 ready: item.ready,
             })
             .collect(),
-    ))
+        next_after: None,
+        truncated,
+    }))
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -221,7 +274,7 @@ pub async fn publish_record(
     State(state): State<AppState>,
     Json(body): Json<PublishRecordRequest>,
 ) -> Result<(StatusCode, Json<PublicRecordDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::RecordPublish)?;
 
     let kind: PublicRecordKind = body
         .kind
@@ -303,8 +356,9 @@ async fn rate_material(state: &AppState, contract_id: Uuid) -> Result<Material, 
         .ok_or(ApiError::NotFound)?;
 
     let calculation = contract.rate_calculation.ok_or_else(|| {
-        ApiError::RuleViolation(
-            "FR-1403: расчет ставки договора не заморожен - публиковать нечего (п. 97)".to_owned(),
+        ApiError::rule(
+            RuleViolation::SpecialPublication,
+            "FR-1403: расчет ставки договора не заморожен - публиковать нечего (п. 97)",
         )
     })?;
 

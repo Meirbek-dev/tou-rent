@@ -11,6 +11,7 @@ use tou_domain::auction::{self, Outcome};
 use tou_domain::ids::ApplicationId;
 use tou_domain::money::Money;
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -232,6 +233,37 @@ pub async fn bids_of(
     .await
 }
 
+/// Текущий максимум ленты (INV-063) - одним запросом, а не перебором ставок.
+///
+/// Минимум следующей ставки показывается на каждом событии комнаты, а лента
+/// за час торгов растет. Считать максимум по выборке [`bids_of`] значило
+/// тянуть ее целиком на каждую трансляцию (NFR-02) и, что хуже, ошибаться:
+/// выборка обрезана `LIMIT` по возрастанию `seq`, то есть после
+/// [`crate::MAX_ROWS`]-й ставки максимум остается за ее пределами - клиенту
+/// уходит заниженный минимум, а триггер `core.enforce_bid_rules` (он считает
+/// максимум по всей таблице и потому прав) отбивает каждую следующую ставку.
+///
+/// `max()` по пустой выборке дает NULL - отсюда `Option`, а не «ноль ставок
+/// значит ноль тенге».
+pub async fn max_amount(db: &Db, auction_id: Uuid) -> Result<Option<Decimal>, sqlx::Error> {
+    let mut conn = db.acquire().await?;
+    max_amount_on(&mut conn, auction_id).await
+}
+
+/// Тот же максимум в транзакции вызывающего - вариант `*_on` (арх. v3 § 6):
+/// тест наполняет ленту и откатывает ее, не засоряя стенд.
+pub async fn max_amount_on(
+    conn: &mut sqlx::PgConnection,
+    auction_id: Uuid,
+) -> Result<Option<Decimal>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT max(amount) FROM core.bids WHERE auction_id = $1",
+        auction_id
+    )
+    .fetch_one(conn)
+    .await
+}
+
 /// Допущенная заявка участника на лот - право торговаться (п. 62).
 pub async fn admitted_application_of(
     db: &Db,
@@ -254,7 +286,7 @@ pub enum TransitionError {
     NotFound,
     /// Отказ БД (INV-066) или неподходящий статус комнаты
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -463,7 +495,7 @@ pub enum BidError {
     NotAdmitted,
     /// Отказ БД: шаг (INV-063), истекший таймер (INV-066), статус комнаты
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -517,7 +549,7 @@ pub async fn place_bid(db: &Db, actor: Uuid, new: NewBid) -> Result<BidRecord, B
             sqlx::Error::Database(db_err)
                 if matches!(db_err.code().as_deref(), Some("23514") | Some("23503")) =>
             {
-                BidError::Rejected(db_err.message().to_owned())
+                BidError::Rejected(crate::rule::rejection(db_err.as_ref()))
             }
             other => BidError::Db(other),
         })?;
@@ -562,7 +594,10 @@ async fn status_conflict(
     .fetch_optional(conn)
     .await;
     match current {
-        Ok(Some(status)) => TransitionError::Rejected(format!("{expectation} (сейчас {status})")),
+        Ok(Some(status)) => TransitionError::Rejected(RuleRejection::new(
+            RuleViolation::StatusNotAllowed,
+            format!("{expectation} (сейчас {status})"),
+        )),
         Ok(None) => TransitionError::NotFound,
         Err(err) => TransitionError::Db(err),
     }
@@ -573,7 +608,7 @@ fn map_rule_violation(error: sqlx::Error) -> TransitionError {
         sqlx::Error::Database(db_err)
             if matches!(db_err.code().as_deref(), Some("23514") | Some("23503")) =>
         {
-            TransitionError::Rejected(db_err.message().to_owned())
+            TransitionError::Rejected(crate::rule::rejection(db_err.as_ref()))
         }
         other => TransitionError::Db(other),
     }

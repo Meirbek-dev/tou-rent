@@ -8,6 +8,7 @@
 
 use rust_decimal::Decimal;
 use time::{Date, OffsetDateTime};
+use tou_domain::rule::RuleRejection;
 use uuid::Uuid;
 
 use crate::Db;
@@ -18,7 +19,7 @@ pub enum BenefitError {
     NotFound,
     /// Отказ правила п. 95–96 (триггер условий льготы)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -30,7 +31,7 @@ fn map_rule(err: sqlx::Error) -> BenefitError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return BenefitError::Rejected(db_err.message().to_owned());
+        return BenefitError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     BenefitError::Db(err)
 }

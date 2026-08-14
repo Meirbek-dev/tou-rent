@@ -18,7 +18,7 @@ use serde_json::json;
 use time::{Date, OffsetDateTime};
 use tou_db::contract_amendments::{self, AmendmentError, AmendmentRecord};
 use tou_domain::contract::{ContractField, FieldChange, check_changes};
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -28,6 +28,7 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/contract_amendment.typ");
 
@@ -111,8 +112,7 @@ pub async fn contract_amendments(
         .await?
         .ok_or(ApiError::NotFound)?;
     if contract.tenant_id != user.id() {
-        user.require(Action::TenderManage)
-            .or_else(|_| user.require(Action::ApplicationReadAll))?;
+        user.require_any(Compound::CONTRACT_PROCESS_READ)?;
     }
 
     let records = contract_amendments::list_for_contract(&state.db, id).await?;
@@ -165,7 +165,7 @@ pub async fn create_amendment(
     Path(id): Path<Uuid>,
     Json(body): Json<CreateAmendmentRequest>,
 ) -> Result<(StatusCode, Json<ContractAmendmentDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
     body.validate()
         .map_err(|r| ApiError::Validation(r.to_string()))?;
 
@@ -190,7 +190,8 @@ pub async fn create_amendment(
             })
         })
         .collect::<Result<_, ApiError>>()?;
-    check_changes(&changes).map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+    check_changes(&changes)
+        .map_err(|err| ApiError::rule(RuleViolation::ContractTermsImmutable, err.to_string()))?;
 
     let rows: Vec<contract_amendments::NewChange<'_>> = changes
         .iter()
@@ -295,8 +296,7 @@ pub async fn contract_amendment_pdf(
         .await?
         .ok_or(ApiError::NotFound)?;
     if contract.tenant_id != user.id() {
-        user.require(Action::TenderManage)
-            .or_else(|_| user.require(Action::ApplicationReadAll))?;
+        user.require_any(Compound::CONTRACT_PROCESS_READ)?;
     }
 
     let pdf_key = record.pdf_key.ok_or(ApiError::NotFound)?;
@@ -347,7 +347,7 @@ pub async fn amendable_fields(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<AmendableFieldDto>>, ApiError> {
     // Перечень нужен тому, кто составляет допсоглашение (п. 125)
-    user.require(Action::TenderManage)?;
+    user.require(Action::ContractManage)?;
 
     let records = contract_amendments::list_fields(&state.db).await?;
     Ok(Json(

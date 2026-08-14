@@ -8,6 +8,7 @@
 use time::OffsetDateTime;
 use tou_domain::commission::{Attendance, Composition, MemberRole, Tally, Vote};
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -19,7 +20,7 @@ pub enum CommissionError {
     NotFound,
     /// Текст правила из триггера (FR-1101–1104)
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
@@ -32,7 +33,7 @@ pub(crate) fn map_rule(err: sqlx::Error) -> CommissionError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return CommissionError::Rejected(db_err.message().to_owned());
+        return CommissionError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     CommissionError::Db(err)
 }
@@ -224,9 +225,9 @@ pub async fn record_attendance(
         match opened {
             None => return Err(CommissionError::NotFound),
             Some(Some(_)) => {
-                return Err(CommissionError::Rejected(
-                    "FR-1102: заседание уже открыто - явка зафиксирована (п. 12)".to_owned(),
-                ));
+                return Err(CommissionError::Rejected(RuleRejection::classify(
+                    "FR-1102: заседание уже открыто - явка зафиксирована (п. 12)",
+                )));
             }
             Some(None) => {}
         }
@@ -334,9 +335,10 @@ pub async fn open_meeting(db: &Db, actor: Uuid, meeting_id: Uuid) -> Result<(), 
     .await?;
 
     if updated == 0 {
-        return Err(CommissionError::Rejected(
-            "заседание не найдено или уже открыто".to_owned(),
-        ));
+        return Err(CommissionError::Rejected(RuleRejection::new(
+            RuleViolation::CommissionMeeting,
+            "заседание не найдено или уже открыто",
+        )));
     }
     Ok(())
 }
@@ -488,9 +490,9 @@ pub async fn cast_vote(
         match decided.as_deref() {
             None => return Err(CommissionError::NotFound),
             Some("admitted") | Some("rejected") => {
-                return Err(CommissionError::Rejected(
-                    "FR-1103: решение по заявке уже принято - голос не меняется".to_owned(),
-                ));
+                return Err(CommissionError::Rejected(RuleRejection::classify(
+                    "FR-1103: решение по заявке уже принято - голос не меняется",
+                )));
             }
             Some(_) => {}
         }

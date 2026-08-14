@@ -3,7 +3,8 @@ import { createFileRoute } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 import { DepositPanel } from "@/components/deposit-panel"
-import { MyDeadlines } from "@/components/my-deadlines"
+import { PageHeader } from "@/components/page-header"
+import { Panel } from "@/components/panel"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,6 +23,7 @@ import type { LedgerAccountDto } from "@/lib/ledger"
 // Кабинет департамента финансов (М10): подтверждение поступления взносов
 // вручную (FR-405, банк-интеграции нет) и депозитная книга (FR-1001).
 export const Route = createFileRoute("/app/finance/")({
+  head: () => ({ meta: [{ title: `${m.cabinet_finance()} - ToU Rent` }] }),
   component: FinanceHome,
 })
 
@@ -29,13 +31,18 @@ function FinanceHome() {
   const { data: accounts } = useQuery(ledgerAccountsQuery())
 
   return (
-    <div className="flex flex-col gap-8">
-      <MyDeadlines />
+    <div className="flex flex-col gap-6">
+      {/* Имя кабинета - заголовок страницы: из макета он ушел вместе
+          с прежней шапкой (каркас называет кабинет группой боковой
+          навигации) */}
+      <PageHeader
+        title={m.cabinet_finance()}
+        description={m.finance_dash_subtitle()}
+      />
+      {/* Подтверждение взноса - первым: это единственное действие кабинета,
+          книга под ним - его последствие */}
       <ConfirmFeeForm />
-      <section className="flex flex-col gap-3">
-        <h2 className="font-heading text-lg font-semibold">
-          {m.ledger_title()}
-        </h2>
+      <Panel title={m.ledger_title()} titleAs="h2">
         {accounts === undefined || accounts.length === 0 ? (
           <p className="text-sm text-muted-foreground">{m.ledger_empty()}</p>
         ) : (
@@ -45,7 +52,7 @@ function FinanceHome() {
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
     </div>
   )
 }
@@ -76,11 +83,11 @@ function ConfirmFeeForm() {
   })
 
   return (
-    <section className="flex flex-col gap-3">
-      <h2 className="font-heading text-lg font-semibold">
-        {m.fee_confirm_title()}
-      </h2>
-      <p className="text-sm text-muted-foreground">{m.fee_confirm_hint()}</p>
+    <Panel
+      title={m.fee_confirm_title()}
+      titleAs="h2"
+      description={m.fee_confirm_hint()}
+    >
       <form
         className="flex flex-wrap items-end gap-3"
         data-testid="fee-confirm-form"
@@ -89,7 +96,9 @@ function ConfirmFeeForm() {
           confirm.mutate()
         }}
       >
-        <div className="flex min-w-72 flex-col gap-1.5">
+        {/* На узком экране `min-w-72` вылезало за поле страницы: минимум
+            включается только там, где ширины хватает */}
+        <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:min-w-72">
           <Label htmlFor="fee-application">{m.fee_application_label()}</Label>
           <Input
             id="fee-application"
@@ -127,11 +136,11 @@ function ConfirmFeeForm() {
         </Button>
       </form>
       {confirm.isError && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="mt-3 text-sm text-destructive">
           {problemMessage(confirm.error)}
         </p>
       )}
-    </section>
+    </Panel>
   )
 }
 

@@ -25,7 +25,7 @@ use time::OffsetDateTime;
 use tou_db::special::{self, FileRecord, RequestRecord, SpecialError};
 use tou_domain::notification::NotificationKind;
 use tou_domain::obligation::Term;
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use tou_domain::special::{
     BoardDecision, Competition, Conclusion, SpecialCategory, SpecialDecision, SpecialRequestStatus,
 };
@@ -39,6 +39,8 @@ use crate::extract::CurrentUser;
 use crate::pdf;
 use crate::request::{Json, Multipart, Path, Query};
 use crate::state::AppState;
+use crate::upload;
+use tou_domain::rule::RuleViolation;
 
 const TEMPLATE: &str = include_str!("templates/special_request.typ");
 const DECISION_TEMPLATE: &str = include_str!("templates/special_decision.typ");
@@ -96,9 +98,12 @@ pub struct SpecialCategoryDto {
     responses((status = 200, description = "Категории п. 87", body = [SpecialCategoryDto]))
 )]
 pub async fn special_categories(
-    _user: CurrentUser,
+    user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<SpecialCategoryDto>>, ApiError> {
+    // Закрытый перечень из Правил: с него заявитель начинает заявку
+    user.require(Action::RefdataRead)?;
+
     let categories = special::list_categories(&state.db).await?;
     let mut documents: HashMap<String, Vec<CategoryDocumentDto>> = HashMap::new();
     for document in special::list_category_documents(&state.db).await? {
@@ -398,41 +403,40 @@ pub async fn upload_special_file(
 ) -> Result<(StatusCode, Json<SpecialRequestFileDto>), ApiError> {
     user.require(Action::ApplicationSubmit)?;
 
-    let mut part = None;
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|e| ApiError::Validation(e.to_string()))?
-    {
-        if field.name() == Some("file") {
-            let filename = field
-                .file_name()
-                .unwrap_or("document")
-                .chars()
-                .take(255)
-                .collect::<String>();
-            let content_type = field
-                .content_type()
-                .unwrap_or("application/octet-stream")
-                .to_owned();
-            let bytes = field
-                .bytes()
-                .await
-                .map_err(|e| ApiError::Validation(e.to_string()))?;
-            part = Some((filename, content_type, bytes));
-            break;
-        }
+    // Право есть у любого участника, поэтому принадлежность заявки и ее
+    // состояние проверяются ДО записи в бакет: досье под Object Lock
+    // (INV-042), объект оттуда не удалить, и отказ после `put` оставлял бы
+    // сироту на пять лет. Атомарная проверка в `special::add_file` остается -
+    // она закрывает гонку с решением по заявке
+    let record = special::get(&state.db, id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if record.applicant_id != user.id() {
+        // Чужая заявка - 404, иначе по коду ответа перебираются чужие id
+        return Err(ApiError::NotFound);
     }
-    let (filename, content_type, bytes) =
-        part.ok_or_else(|| ApiError::Validation("часть 'file' отсутствует".into()))?;
+    if ![
+        SpecialRequestStatus::Submitted.as_str(),
+        SpecialRequestStatus::UnderReview.as_str(),
+    ]
+    .contains(&record.status.as_str())
+    {
+        return Err(ApiError::rule(
+            RuleViolation::SpecialOrderApplication,
+            "документ прикладывается к своей заявке до решения (п. 88)",
+        ));
+    }
+
+    let file =
+        upload::take_file(&mut multipart, "file", "document", upload::MAX_FILE_BYTES).await?;
+    let size_bytes = i64::try_from(file.bytes.len()).map_err(ApiError::internal)?;
 
     let file_key = format!("special-requests/{id}/{}", Uuid::now_v7());
     let object_path = ObjectPath::from(file_key.as_str());
-    let size_bytes = i64::try_from(bytes.len()).map_err(ApiError::internal)?;
 
     state
         .storage
-        .put(&object_path, PutPayload::from_bytes(bytes))
+        .put(&object_path, PutPayload::from_bytes(file.bytes))
         .await
         .map_err(ApiError::internal)?;
 
@@ -443,8 +447,8 @@ pub async fn upload_special_file(
             request_id: id,
             document_code: query.document_code.as_deref(),
             file_key: &file_key,
-            filename: &filename,
-            content_type: &content_type,
+            filename: &file.filename,
+            content_type: file.content_type,
             size_bytes,
         },
     )
@@ -460,8 +464,9 @@ pub async fn upload_special_file(
             tracing::warn!(%file_key, "документ загружен, метаданные отклонены");
             match other {
                 Err(err) => Err(err),
-                _ => Err(ApiError::RuleViolation(
-                    "документ прикладывается к своей заявке до решения (п. 88)".into(),
+                _ => Err(ApiError::rule(
+                    RuleViolation::SpecialOrderApplication,
+                    "документ прикладывается к своей заявке до решения (п. 88)",
                 )),
             }
         }
@@ -513,7 +518,7 @@ pub async fn download_special_file(
                 header::CONTENT_DISPOSITION,
                 format!(
                     "attachment; filename=\"{}\"",
-                    sanitize_filename(&file.filename)
+                    upload::sanitize_filename(&file.filename)
                 ),
             ),
         ],
@@ -745,7 +750,7 @@ pub async fn review_special_request(
 ) -> Result<(StatusCode, Json<SpecialReviewDto>), ApiError> {
     // Проверку ведет уполномоченное подразделение - в модели ролей
     // организатор (юридическая служба, п. 2.4; A-068)
-    user.require(Action::TenderManage)?;
+    user.require(Action::SpecialReview)?;
     body.validate()
         .map_err(|r| ApiError::Validation(r.to_string()))?;
 
@@ -834,7 +839,7 @@ pub async fn decide_special_request(
         .await?
         .ok_or(ApiError::NotFound)?;
     BoardDecision::take(conclusion, status, competition, choice)
-        .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+        .map_err(|err| ApiError::rule(RuleViolation::BoardDecision, err.to_string()))?;
 
     let record = special::decide(
         &state.db,
@@ -985,9 +990,7 @@ pub async fn pending_special_requests(
     Query(params): Query<SpecialListParams>,
 ) -> Result<Json<Vec<SpecialRequestDto>>, ApiError> {
     // Список видят те, кто ведет рассмотрение: подразделение и Правление
-    if user.require(Action::BoardDecide).is_err() {
-        user.require(Action::TenderManage)?;
-    }
+    user.require_any(Compound::SPECIAL_DECISION_ACCESS)?;
 
     let statuses: Vec<&str> = match params.status.as_deref() {
         None | Some("") => vec![
@@ -1020,8 +1023,7 @@ async fn load_visible(
     let record = special::get(&state.db, id)
         .await?
         .ok_or(ApiError::NotFound)?;
-    let handles_review =
-        user.require(Action::BoardDecide).is_ok() || user.require(Action::TenderManage).is_ok();
+    let handles_review = user.require_any(Compound::SPECIAL_DECISION_ACCESS).is_ok();
     if record.applicant_id != user.id() && !handles_review {
         return Err(ApiError::NotFound);
     }
@@ -1136,13 +1138,6 @@ fn term_ru(term: Term) -> String {
         Term::BusinessDays(days) => format!("{days} рабочих дней"),
         Term::CalendarDays(days) => format!("{days} календарных дней"),
     }
-}
-
-/// Заголовок не должен ломаться кавычками/переводами строк в имени файла.
-fn sanitize_filename(name: &str) -> String {
-    name.chars()
-        .map(|c| if c == '"' || c.is_control() { '_' } else { c })
-        .collect()
 }
 
 #[cfg(test)]

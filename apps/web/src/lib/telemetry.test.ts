@@ -88,7 +88,7 @@ describe("scrubEvent", () => {
       },
     })
 
-    expect(event?.request).toEqual({
+    expect(event?.["request"]).toEqual({
       url: `https://rent.tou.edu.kz/tenders?${REDACTED}`,
       method: "POST",
     })
@@ -107,11 +107,11 @@ describe("scrubEvent", () => {
         ip_address: "10.0.0.1",
       },
     })
-    expect(event?.user).toEqual({ id: "019fe14b" })
+    expect(event?.["user"]).toEqual({ id: "019fe14b" })
   })
 
   it("пользователя без идентификатора убирает целиком", () => {
-    expect(scrubEvent({ user: { email: EMAIL } })?.user).toBeUndefined()
+    expect(scrubEvent({ user: { email: EMAIL } })?.["user"]).toBeUndefined()
   })
 
   it("прогоняет крошки теми же правилами", () => {
@@ -126,7 +126,7 @@ describe("scrubEvent", () => {
       ],
     })
 
-    expect(event?.breadcrumbs).toHaveLength(2)
+    expect(event?.["breadcrumbs"]).toHaveLength(2)
     expect(JSON.stringify(event)).not.toContain("Иванов")
   })
 

@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tou_db::land::{self, ApplicationRecord, LandError, PlotRecord};
 use tou_domain::land::{Covenant, LandDecision, LandDesignation};
-use tou_domain::policy::Action;
+use tou_domain::policy::{Action, Compound};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -22,6 +22,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use tou_domain::rule::RuleViolation;
 
 fn land_error(err: LandError) -> ApiError {
     match err {
@@ -88,7 +89,7 @@ pub async fn list_land_plots(
 ) -> Result<Json<Vec<LandPlotDto>>, ApiError> {
     let manages = user
         .as_ref()
-        .is_some_and(|user| user.require(Action::TenderManage).is_ok());
+        .is_some_and(|user| user.require(Action::LandManage).is_ok());
 
     let records = if manages {
         land::list_all(&state.db).await?
@@ -132,7 +133,7 @@ pub async fn save_land_plot(
     State(state): State<AppState>,
     Json(body): Json<LandPlotRequest>,
 ) -> Result<(StatusCode, Json<LandPlotDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::LandManage)?;
     body.validate()
         .map_err(|r| ApiError::Validation(r.to_string()))?;
 
@@ -174,7 +175,7 @@ pub async fn publish_land_plot(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<LandPlotDto>, ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::LandManage)?;
 
     let record = land::publish_plot(&state.db, user.id(), id)
         .await
@@ -347,9 +348,7 @@ pub async fn list_land_applications(
     user: CurrentUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<LandApplicationDto>>, ApiError> {
-    if user.require(Action::BoardDecide).is_err() {
-        user.require(Action::TenderManage)?;
-    }
+    user.require_any(Compound::LAND_APPLICATION_REVIEW)?;
 
     let records = land::list_all_applications(&state.db).await?;
     Ok(Json(with_covenants(&state, records).await?))
@@ -427,7 +426,7 @@ pub async fn decide_land_application(
         .map_err(|err: tou_domain::land::UnknownLandStatus| ApiError::internal(err))?;
     decision
         .take(status)
-        .map_err(|err| ApiError::RuleViolation(err.to_string()))?;
+        .map_err(|err| ApiError::rule(RuleViolation::LandApplication, err.to_string()))?;
 
     let record = land::decide(
         &state.db,
@@ -474,7 +473,7 @@ pub async fn draft_land_contract(
     State(state): State<AppState>,
     Json(body): Json<LandContractRequest>,
 ) -> Result<(StatusCode, Json<LandApplicationDto>), ApiError> {
-    user.require(Action::TenderManage)?;
+    user.require(Action::LandManage)?;
     body.validate()
         .map_err(|r| ApiError::Validation(r.to_string()))?;
 

@@ -11,6 +11,7 @@
 use time::OffsetDateTime;
 use tou_domain::evasion::{Consequence, EvasionGround, Facts, Place};
 use tou_domain::obligation::ObligationAction;
+use tou_domain::rule::{RuleRejection, RuleViolation};
 use uuid::Uuid;
 
 use crate::Db;
@@ -22,14 +23,17 @@ pub enum EvasionError {
     NotFound,
     /// Правило п. 116–117 (домен) либо отказ БД
     #[error("{0}")]
-    Rejected(String),
+    Rejected(RuleRejection),
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 impl From<tou_domain::evasion::EvasionError> for EvasionError {
     fn from(err: tou_domain::evasion::EvasionError) -> Self {
-        EvasionError::Rejected(err.to_string())
+        EvasionError::Rejected(RuleRejection::new(
+            RuleViolation::WinnerEvasion,
+            err.to_string(),
+        ))
     }
 }
 
@@ -40,7 +44,7 @@ fn map_rule(err: sqlx::Error) -> EvasionError {
             Some("P0001") | Some("23514") | Some("23503") | Some("23505")
         )
     {
-        return EvasionError::Rejected(db_err.message().to_owned());
+        return EvasionError::Rejected(crate::rule::rejection(db_err.as_ref()));
     }
     EvasionError::Db(err)
 }
@@ -238,19 +242,39 @@ pub struct EvaderRow {
 
 /// Реестр уклонистов (FR-505, п. 120): их заявки отклоняются автоматически
 /// основанием п. 52.4 - реестр показывает, кого и за что это касается.
-pub async fn registry(db: &Db) -> Result<Vec<EvaderRow>, sqlx::Error> {
+///
+/// Реестр растет монотонно: из него не выбывают, поэтому он идет курсором,
+/// а не потолком. Ключ - пара «последнее уклонение + пользователь»
+/// ([`crate::RowCursor`]); `COALESCE` нужен, потому что `DESC` в PostgreSQL
+/// ставит NULL первыми и курсор по такому порядку не сдвинулся бы с места.
+/// Подстановка - `epoch`, а не `-infinity`: ровно ее умеет назвать курсор
+/// на проводе, и порядок БД совпадает с тем, что видит клиент.
+pub async fn registry(
+    db: &Db,
+    after: Option<crate::RowCursor>,
+    limit: i64,
+) -> Result<crate::Page<EvaderRow>, sqlx::Error> {
+    let (after_at, after_id) = crate::RowCursor::parts(after);
     // Все столбцы view планировщик считает потенциально NULL
     let rows = sqlx::query_as!(
         EvaderRow,
         r#"SELECT user_id AS "user_id!", full_name AS "full_name!",
                   evasions AS "evasions!", last_declared_at, last_ground, last_tender_id
-           FROM core.evader_registry ORDER BY last_declared_at DESC LIMIT $1"#,
-        crate::MAX_ROWS
+           FROM core.evader_registry
+           WHERE ($1::timestamptz IS NULL
+                  OR (COALESCE(last_declared_at, 'epoch'::timestamptz), user_id)
+                     < ($1, $2::uuid))
+           ORDER BY COALESCE(last_declared_at, 'epoch'::timestamptz) DESC, user_id DESC
+           LIMIT $3"#,
+        after_at,
+        after_id,
+        crate::probe_limit(limit)
     )
     .fetch_all(db)
     .await?;
-    crate::warn_if_capped(rows.len(), "evasion::registry");
-    Ok(rows)
+    let page = crate::Page::probe(rows, limit);
+    crate::warn_if_truncated(page.truncated, "evasion::registry");
+    Ok(page)
 }
 
 pub struct GroundRow {

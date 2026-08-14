@@ -20,6 +20,8 @@ AuctionManage: secretary
 BidPlace: participant
 AuctionWatch: participant, organizer, secretary, commission
 ContractRead: organizer, secretary, commission, board, finance
+ContractManage: organizer
+ActManage: organizer
 FeeConfirm: finance
 LedgerRead: finance
 CommissionManage: admin
@@ -27,8 +29,23 @@ MeetingManage: secretary
 CoiDeclare: commission
 VoteCast: commission
 BoardDecide: board
+SpecialReview: organizer
+InvestmentManage: organizer
+RecordPublish: organizer
+LandManage: organizer
 NotificationReadOwn: participant, organizer, secretary, commission, board, finance, admin
 UserManage: admin
 RoleGrant: admin
 RefdataManage: admin
+RefdataRead: participant, organizer, secretary, commission, board, finance, admin
 AuditRead: admin
+
+# составные права (любое из перечисленных действий)
+TenderProcessRead [TenderManage | ApplicationReadAll]: organizer, secretary, commission
+ContractProcessRead [ContractManage | ApplicationReadAll]: organizer, secretary, commission
+ContractRegistryRead [ContractManage | LedgerRead]: organizer, finance
+SpecialDecisionAccess [SpecialReview | BoardDecide]: organizer, board
+LandApplicationReview [LandManage | BoardDecide]: organizer, board
+BenefitRead [ContractManage | BoardDecide]: organizer, board
+InvestmentContractRead [InvestmentManage | BoardDecide | ProtocolGenerate]: organizer, secretary, board
+RateRefdataRead [RateCalculate | RefdataManage]: organizer, admin

@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.decided_at AS \"decided_at!\", d.id AS \"id!\",\n                'special' AS \"order_kind!\",\n                c.label_ru || ' (' || c.rule_ref || ')' AS \"subject!\",\n                u.full_name AS \"applicant?\", d.decision::text AS \"decision!\",\n                d.rationale AS \"rationale!\"\n         FROM core.special_board_decisions d\n         JOIN core.special_requests r ON r.id = d.special_request_id\n         JOIN refdata.special_categories c ON c.code = r.category\n         LEFT JOIN core.users u ON u.id = r.applicant_id\n         WHERE ($1::date IS NULL OR d.decided_at >= $1::date)\n           AND ($2::date IS NULL OR d.decided_at < $2::date + 1)\n           AND ($3::timestamptz IS NULL OR (d.decided_at, d.id) < ($3, $4::uuid))\n         UNION ALL\n         SELECT l.decided_at, l.id, 'land', o.name,\n                u.full_name, l.decision::text, l.rationale\n         FROM core.land_decisions l\n         JOIN core.land_applications a ON a.id = l.land_application_id\n         JOIN core.objects o ON o.id = a.plot_id\n         LEFT JOIN core.users u ON u.id = a.investor_id\n         WHERE ($1::date IS NULL OR l.decided_at >= $1::date)\n           AND ($2::date IS NULL OR l.decided_at < $2::date + 1)\n           AND ($3::timestamptz IS NULL OR (l.decided_at, l.id) < ($3, $4::uuid))\n         -- по порядковым номерам: выходные колонки называются `decided_at!`, `id!`\n         ORDER BY 1 DESC, 2 DESC LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "decided_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "order_kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "subject!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "applicant?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "decision!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "rationale!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Date",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "70a036c79869b23d39fa09f3a7ae93fa3ba0d9ae0e9bea75a16858454dd13d0d"
+}
