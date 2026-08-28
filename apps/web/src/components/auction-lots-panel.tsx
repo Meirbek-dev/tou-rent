@@ -16,6 +16,7 @@ import { Panel } from "@/components/panel"
 import { QueryBoundary } from "@/components/query-boundary"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -99,7 +100,7 @@ function summary(auction: AuctionDto): string {
 
 /**
  * Онлайн-торги по лотам тендера в кабинете секретаря (FR-601): открытие
- * комнаты фиксирует стартовую ставку (INV-062) и шаг 5 % (п. 63), дальше -
+ * комнаты фиксирует стартовую ставку (INV-062) и выбранный шаг ≥5 % (Q-019),
  * переход в комнату, где идет лента и таймер. Здесь же - протокол итогов
  * (FR-701), доступный после завершения торгов по всем лотам.
  */
@@ -141,9 +142,12 @@ export function AuctionLotsPanel({
 function LotRow({ lot }: { lot: LotDto }) {
   const queryClient = useQueryClient()
   const auction = useQuery(lotAuctionQuery(lot.id))
+  const [stepPercent, setStepPercent] = useState("5")
+  const parsedStep = Number(stepPercent)
+  const stepInvalid = !Number.isFinite(parsedStep) || parsedStep < 5
 
   const open = useMutation({
-    mutationFn: () => scheduleAuction(lot.id),
+    mutationFn: () => scheduleAuction(lot.id, stepPercent),
     onSuccess: async () => {
       notifySuccess(m.auction_lot_opened_toast())
       await queryClient.invalidateQueries({
@@ -176,14 +180,40 @@ function LotRow({ lot }: { lot: LotDto }) {
               </div>
             )}
             {data == null ? (
-              <Button
-                variant="outline"
-                data-testid="open-auction"
-                onClick={() => open.mutate()}
-                disabled={open.isPending}
+              <form
+                className="flex flex-wrap items-end gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  if (!stepInvalid) open.mutate()
+                }}
               >
-                {m.auction_open_room()}
-              </Button>
+                <Field data-invalid={stepInvalid} className="w-40">
+                  <FieldLabel htmlFor={`bid-step-${lot.id}`}>
+                    {m.auction_step_percent_label()}
+                  </FieldLabel>
+                  <Input
+                    id={`bid-step-${lot.id}`}
+                    type="number"
+                    inputMode="decimal"
+                    min="5"
+                    step="any"
+                    value={stepPercent}
+                    aria-invalid={stepInvalid}
+                    onChange={(event) => setStepPercent(event.target.value)}
+                  />
+                  <FieldDescription>
+                    {m.auction_step_percent_hint()}
+                  </FieldDescription>
+                </Field>
+                <Button
+                  type="submit"
+                  variant="outline"
+                  data-testid="open-auction"
+                  disabled={open.isPending || stepInvalid}
+                >
+                  {m.auction_open_room()}
+                </Button>
+              </form>
             ) : (
               <Link
                 to="/app/auctions/$auctionId"

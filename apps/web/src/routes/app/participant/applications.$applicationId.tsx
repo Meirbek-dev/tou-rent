@@ -15,8 +15,9 @@ import { Panel } from "@/components/panel"
 import { QueryBoundary } from "@/components/query-boundary"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, tenderQuery } from "@/lib/api"
 import { lotAuctionQuery } from "@/lib/auctions"
@@ -29,10 +30,42 @@ import {
 } from "@/lib/participant"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
-import { UPLOAD_ACCEPT, uploadError } from "@/lib/validation"
+import { uploadError } from "@/lib/validation"
 
 import type { ApplicationDto } from "@/lib/participant"
 import type { ReactNode } from "react"
+
+type ApplicationDocumentKind =
+  | "application_form"
+  | "registration_certificate"
+  | "tax_clearance"
+  | "guarantee_payment"
+  | "qualification_documents"
+
+const DOCUMENT_KINDS: readonly ApplicationDocumentKind[] = [
+  "application_form",
+  "registration_certificate",
+  "tax_clearance",
+  "guarantee_payment",
+  "qualification_documents",
+]
+
+function documentKindLabel(kind: string): string {
+  switch (kind) {
+    case "application_form":
+      return m.application_document_application_form()
+    case "registration_certificate":
+      return m.application_document_registration_certificate()
+    case "tax_clearance":
+      return m.application_document_tax_clearance()
+    case "guarantee_payment":
+      return m.application_document_guarantee_payment()
+    case "qualification_documents":
+      return m.application_document_qualification_documents()
+    default:
+      return m.application_document_legacy()
+  }
+}
 
 // Карточка своей заявки: файлы (FR-401) и отзыв до дедлайна (FR-404).
 export const Route = createFileRoute(
@@ -70,6 +103,8 @@ function ApplicationPage() {
 function ApplicationCard({ application }: { application: ApplicationDto }) {
   const queryClient = useQueryClient()
   const fileInput = useRef<HTMLInputElement>(null)
+  const [documentKind, setDocumentKind] =
+    useState<ApplicationDocumentKind>("application_form")
   // Досье под Object Lock на пять лет (INV-042), поэтому api отвергает файл
   // не того формата или крупнее 10 МБ. Раньше форма об этом не знала, и
   // участник узнавал об отказе, отправив файл целиком
@@ -108,7 +143,10 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
       const { data, error } = await api.POST(
         "/api/v1/applications/{id}/files",
         {
-          params: { path: { id: application.id } },
+          params: {
+            path: { id: application.id },
+            query: { document_kind: documentKind },
+          },
           // Контракт описывает multipart как бинарное тело - отдаем FormData как есть
           body: body as unknown as number[],
           bodySerializer: (b: unknown) => b as FormData,
@@ -224,6 +262,11 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
         title={m.application_files_title()}
         contentClassName="flex flex-col gap-4"
       >
+        <p className="text-sm text-muted-foreground">
+          {application.package_complete
+            ? m.application_package_complete()
+            : m.application_package_incomplete()}
+        </p>
         {application.files.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {m.application_files_empty()}
@@ -232,15 +275,21 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
           <ul className="flex flex-col gap-2">
             {application.files.map((file) => (
               <li key={file.id}>
-                <a
-                  href={`/api/v1/applications/${application.id}/files/${file.id}`}
-                  className={cn(
-                    buttonVariants({ variant: "link" }),
-                    "h-auto px-0"
-                  )}
-                >
-                  {file.filename}
-                </a>
+                {tender?.opened_at != null ? (
+                  <a
+                    href={`/api/v1/applications/${application.id}/files/${file.id}`}
+                    className={cn(
+                      buttonVariants({ variant: "link" }),
+                      "h-auto px-0"
+                    )}
+                  >
+                    {documentKindLabel(file.document_kind)} — {file.filename}
+                  </a>
+                ) : (
+                  <span className="text-sm font-medium">
+                    {documentKindLabel(file.document_kind)} — {file.filename}
+                  </span>
+                )}
                 <span className="ml-2 text-sm text-muted-foreground tabular-nums">
                   {Math.ceil(file.size_bytes / 1024)} KiB
                 </span>
@@ -260,23 +309,47 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
               upload.mutate()
             }}
           >
-            <div className="flex flex-col gap-1.5">
-              <Label htmlFor="application-file">{m.file_upload_label()}</Label>
-              <Input
-                id="application-file"
-                type="file"
-                required
-                accept={UPLOAD_ACCEPT}
-                aria-invalid={fileError !== undefined}
-                ref={fileInput}
-                onChange={() => {
-                  const file = fileInput.current?.files?.[0]
-                  setFileError(
-                    file === undefined ? undefined : uploadError(file)
-                  )
-                }}
-              />
-            </div>
+            <FieldGroup className="min-w-72 flex-1 gap-3">
+              <Field>
+                <FieldLabel htmlFor="application-document-kind">
+                  {m.application_document_kind()}
+                </FieldLabel>
+                <NativeSelect
+                  id="application-document-kind"
+                  value={documentKind}
+                  onChange={(event) =>
+                    setDocumentKind(
+                      event.target.value as ApplicationDocumentKind
+                    )
+                  }
+                >
+                  {DOCUMENT_KINDS.map((kind) => (
+                    <NativeSelectOption key={kind} value={kind}>
+                      {documentKindLabel(kind)}
+                    </NativeSelectOption>
+                  ))}
+                </NativeSelect>
+              </Field>
+              <Field data-invalid={fileError !== undefined}>
+                <FieldLabel htmlFor="application-file">
+                  {m.file_upload_label()}
+                </FieldLabel>
+                <Input
+                  id="application-file"
+                  type="file"
+                  required
+                  accept="application/pdf,.pdf"
+                  aria-invalid={fileError !== undefined}
+                  ref={fileInput}
+                  onChange={() => {
+                    const file = fileInput.current?.files?.[0]
+                    setFileError(
+                      file === undefined ? undefined : uploadError(file)
+                    )
+                  }}
+                />
+              </Field>
+            </FieldGroup>
             <Button type="submit" disabled={upload.isPending}>
               {m.file_upload_submit()}
             </Button>

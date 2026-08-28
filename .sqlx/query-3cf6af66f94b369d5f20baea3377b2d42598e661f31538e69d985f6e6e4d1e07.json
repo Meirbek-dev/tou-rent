@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.application_files\n               (application_id, file_key, filename, document_kind,\n                content_type, size_bytes, encryption_version)\n             SELECT $1::uuid, $2::text, $3::text,\n                    $4::text::core.application_document_kind,\n                    $5::text, $6::bigint, 1::smallint\n             WHERE EXISTS (\n               SELECT 1 FROM core.applications a\n               JOIN core.tenders t ON t.id = a.tender_id\n               WHERE a.id = $1 AND a.participant_id = $7 AND a.status = 'submitted'\n                 AND (t.submission_deadline IS NULL OR core.now() <= t.submission_deadline)\n             ) RETURNING id, application_id, file_key, filename,\n                                document_kind::text AS \"document_kind!\",\n                                content_type, size_bytes, encryption_version, uploaded_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "file_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "filename",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "document_kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "content_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "size_bytes",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "encryption_version",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 8,
+        "name": "uploaded_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3cf6af66f94b369d5f20baea3377b2d42598e661f31538e69d985f6e6e4d1e07"
+}

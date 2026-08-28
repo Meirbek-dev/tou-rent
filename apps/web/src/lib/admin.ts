@@ -8,6 +8,7 @@ export type UserDto = components["schemas"]["UserDto"]
 export type MrpDto = components["schemas"]["MrpDto"]
 export type CoefficientVersionDto =
   components["schemas"]["CoefficientVersionDto"]
+export type SiteAnnouncementDto = components["schemas"]["SiteAnnouncementDto"]
 
 /** Роли, назначаемые админом (FR-1503): `guest` - аноним, он не хранится. */
 export const GRANTABLE_ROLES = [
@@ -107,6 +108,27 @@ export const auditChainQuery = queryOptions({
     return data
   },
 })
+
+/** Объявление для админской формы, включая скрытый черновик. */
+export const adminSiteAnnouncementQuery = queryOptions({
+  queryKey: ["admin", "site-announcement"],
+  queryFn: async () => {
+    const { data, error, response } = await api.GET(
+      "/api/v1/admin/site-announcement"
+    )
+    if (response.status === 404) return null
+    if (error !== undefined || data === undefined) {
+      throw (error as unknown) ?? new Error("failed to load site announcement")
+    }
+    return data
+  },
+})
+
+export const saveSiteAnnouncement = (body: {
+  title: string
+  body: string
+  is_published: boolean
+}) => mutate(api.PUT("/api/v1/admin/site-announcement", { body }))
 
 /** МРП по годам (FR-1901): база расчета ставки Прил. 4. */
 export const mrpQuery = queryOptions({

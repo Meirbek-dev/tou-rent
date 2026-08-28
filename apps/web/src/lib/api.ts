@@ -9,6 +9,7 @@ export type TenderStatus = components["schemas"]["TenderStatusDto"]
 export type ObjectDto = components["schemas"]["ObjectDto"]
 export type ObjectStatus = components["schemas"]["ObjectStatusDto"]
 export type ObjectKind = components["schemas"]["ObjectKindDto"]
+export type SiteAnnouncementDto = components["schemas"]["SiteAnnouncementDto"]
 
 // SSR-загрузчики ходят в api напрямую (в проде - тот же хост за Caddy),
 // браузер - на свой origin: в dev /api проксирует vite (vite.config.ts),
@@ -18,6 +19,19 @@ const baseUrl = import.meta.env.SSR
   : ""
 
 export const api = createApiClient(baseUrl)
+
+/** Объявление на главной: 404 означает, что администратор его еще не опубликовал. */
+export const siteAnnouncementQuery = queryOptions({
+  queryKey: ["site-announcement"],
+  queryFn: async () => {
+    const { data, error, response } = await api.GET("/api/v1/site-announcement")
+    if (response.status === 404) return null
+    if (error !== undefined || data === undefined) {
+      throw (error as unknown) ?? new Error("failed to load site announcement")
+    }
+    return data
+  },
+})
 
 /**
  * Способы входа (FR-1502): кнопка внешнего провайдера появляется, только если
@@ -93,6 +107,20 @@ export const tenderQuery = (id: string) =>
       if ([400, 404, 422].includes(response.status)) return null
       if (error !== undefined || data === undefined) {
         throw new Error("failed to load tender")
+      }
+      return data
+    },
+  })
+
+export const tenderDocumentsQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["tender-documents", id],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/tenders/{id}/documents", {
+        params: { path: { id } },
+      })
+      if (error !== undefined || data === undefined) {
+        throw new Error("failed to load tender documents")
       }
       return data
     },

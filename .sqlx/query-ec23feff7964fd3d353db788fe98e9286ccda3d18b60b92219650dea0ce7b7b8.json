@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.users\n             SET email_confirmed_at = CASE WHEN $2 = 'email' THEN core.now() ELSE email_confirmed_at END,\n                 phone_confirmed_at = CASE WHEN $2 = 'sms' THEN core.now() ELSE phone_confirmed_at END\n             WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec23feff7964fd3d353db788fe98e9286ccda3d18b60b92219650dea0ce7b7b8"
+}

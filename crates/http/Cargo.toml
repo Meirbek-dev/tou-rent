@@ -8,21 +8,26 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+aes-gcm.workspace = true
 argon2.workspace = true
 # multipart - загрузка файлов заявок (FR-401); ws - комната торгов (FR-603)
 axum = { workspace = true, features = ["multipart", "ws"] }
 axum-extra.workspace = true
 fred.workspace = true
 garde.workspace = true
+hkdf.workspace = true
+lettre.workspace = true
 object_store.workspace = true
 zip.workspace = true
 openidconnect.workspace = true
 rand.workspace = true
+reqwest.workspace = true
 rust_decimal.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 # Отпечаток обращения для счетчика попыток (ratelimit, NFR-16)
 sha2.workspace = true
+sha2-compat.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true

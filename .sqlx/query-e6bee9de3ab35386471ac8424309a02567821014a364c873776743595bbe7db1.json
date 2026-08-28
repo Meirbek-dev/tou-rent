@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.account_verifications SET attempts = attempts + 1\n         WHERE id = $1 AND consumed_at IS NULL AND attempts < 5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6bee9de3ab35386471ac8424309a02567821014a364c873776743595bbe7db1"
+}

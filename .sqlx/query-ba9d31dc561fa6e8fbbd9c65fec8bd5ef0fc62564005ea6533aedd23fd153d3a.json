@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT u.id, u.email::text AS \"email!\", u.password_hash,\n                      u.full_name, u.locale,\n                      u.applicant_kind::text AS applicant_kind,\n                      u.id_number, u.phone, u.email_confirmed_at,\n                      u.phone_confirmed_at, u.is_active FROM core.user_identities i\n         JOIN core.users u ON u.id = i.user_id\n         WHERE i.issuer = $1 AND i.subject = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "password_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "full_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "locale",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "applicant_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "id_number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "phone",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "email_confirmed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "phone_confirmed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      false,
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "ba9d31dc561fa6e8fbbd9c65fec8bd5ef0fc62564005ea6533aedd23fd153d3a"
+}

@@ -257,6 +257,7 @@ pub async fn decide(
              WHERE a.id = $1 AND t.id = a.tender_id
                AND t.status = 'qualification'
                AND a.status IN ('submitted', 'fee_confirmed')
+               AND core.application_package_complete(a.id)
              RETURNING a.tender_id",
             application_id,
             verdict,

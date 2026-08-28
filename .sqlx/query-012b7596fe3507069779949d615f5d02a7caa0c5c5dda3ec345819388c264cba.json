@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.objects SET kind = $2::text::core.object_kind, name = $3, name_kk = $4,\n                address = $5, address_kk = $6, area_m2 = $7, floor_part = $8,\n                premises_type_code = $9, premises_kind_code = $10,\n                comfort_code = $11, location_code = $12\n             WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Numeric",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "012b7596fe3507069779949d615f5d02a7caa0c5c5dda3ec345819388c264cba"
+}

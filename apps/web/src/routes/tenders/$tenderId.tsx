@@ -1,7 +1,9 @@
-import { FileQuestionIcon, SearchXIcon } from "lucide-react"
+import { FileQuestionIcon, FileTextIcon, SearchXIcon } from "lucide-react"
 import { Link, createFileRoute, notFound } from "@tanstack/react-router"
+import { useSuspenseQuery } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
+import { getLocale } from "#/paraglide/runtime"
 import { AmendmentsBanner } from "@/components/amendments-banner"
 import { DeadlineBlock } from "@/components/deadline-block"
 import { EmptyState } from "@/components/empty-state"
@@ -18,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { tenderAmendmentsQuery } from "@/lib/amendments"
-import { tenderQuery } from "@/lib/api"
+import { tenderDocumentsQuery, tenderQuery } from "@/lib/api"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { tenderProtocolsQuery } from "@/lib/publications"
 import { cn } from "@/lib/utils"
@@ -43,6 +45,9 @@ export const Route = createFileRoute("/tenders/$tenderId")({
       ),
       context.queryClient.ensureQueryData(
         tenderProtocolsQuery(params.tenderId)
+      ),
+      context.queryClient.ensureQueryData(
+        tenderDocumentsQuery(params.tenderId)
       ),
     ])
 
@@ -101,6 +106,7 @@ function LotFact({
 }
 
 function LotCard({ lot }: { lot: LotDto }) {
+  const kazakh = getLocale() === "kk"
   return (
     <li className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs">
       <div className="flex items-baseline gap-2">
@@ -108,7 +114,9 @@ function LotCard({ lot }: { lot: LotDto }) {
           {m.lot_seq()}
           {lot.seq}
         </span>
-        <h3 className="text-base font-semibold">{lot.purpose}</h3>
+        <h3 className="text-base font-semibold">
+          {kazakh ? lot.purpose_kk : lot.purpose}
+        </h3>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
         <LotFact
@@ -139,7 +147,9 @@ function LotCard({ lot }: { lot: LotDto }) {
 
 function TenderPage() {
   const tender = Route.useLoaderData()
+  const { data: documents } = useSuspenseQuery(tenderDocumentsQuery(tender.id))
 
+  const kazakh = getLocale() === "kk"
   return (
     <PublicShell>
       <div className="flex flex-col gap-8">
@@ -225,7 +235,7 @@ function TenderPage() {
                   <TableRow key={lot.id}>
                     <TableCell className="tabular-nums">{lot.seq}</TableCell>
                     <TableCell className="max-w-md whitespace-normal">
-                      {lot.purpose}
+                      {kazakh ? lot.purpose_kk : lot.purpose}
                     </TableCell>
                     <TableCell className="tabular-nums">
                       {m.lot_months({ months: lot.lease_months })}
@@ -271,15 +281,33 @@ function TenderPage() {
               {m.tender_announcement_pdf()}
             </a>
           </p>
-          {/* Файлов документации в контракте пока нет - их подключает Т8
-              (RustFS). Пока перечень пуст, на его месте стоит пустое
-              состояние, а не абзац-обещание посреди наполненной страницы */}
-          <EmptyState
-            icon={FileQuestionIcon}
-            title={m.tender_docs_empty_title()}
-            description={m.tender_docs_empty()}
-            className="mt-3 py-10"
-          />
+          {documents.length === 0 ? (
+            <EmptyState
+              icon={FileQuestionIcon}
+              title={m.tender_docs_empty_title()}
+              description={m.tender_docs_empty()}
+              className="mt-3 py-10"
+            />
+          ) : (
+            <ul className="mt-3 grid gap-2">
+              {documents.map((document) => (
+                <li key={document.id}>
+                  <a
+                    href={`/api/v1/tenders/${tender.id}/documents/${document.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={cn(
+                      buttonVariants({ variant: "outline" }),
+                      "w-full justify-start"
+                    )}
+                  >
+                    <FileTextIcon data-icon="inline-start" />
+                    {document.title} · v{document.version}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
     </PublicShell>

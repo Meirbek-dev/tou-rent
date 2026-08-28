@@ -12,7 +12,9 @@ pub struct ObjectRecord {
     pub id: Uuid,
     pub kind: String,
     pub name: String,
+    pub name_kk: String,
     pub address: String,
+    pub address_kk: String,
     pub area_m2: Decimal,
     pub floor_part: Option<String>,
     pub premises_type_code: Option<String>,
@@ -35,7 +37,8 @@ macro_rules! object_query {
     ($tail:literal $(, $arg:expr)*) => {
         sqlx::query_as!(
             ObjectRecord,
-            r#"SELECT o.id, o.kind::text AS "kind!", o.name, o.address, o.area_m2,
+            r#"SELECT o.id, o.kind::text AS "kind!", o.name, o.name_kk,
+                      o.address, o.address_kk, o.area_m2,
                       o.floor_part, o.premises_type_code, o.premises_kind_code,
                       o.comfort_code, o.location_code,
                       o.photo_keys, s.status AS "status!", o.created_at, o.updated_at
@@ -51,7 +54,9 @@ macro_rules! object_query {
 pub struct ObjectFields<'a> {
     pub kind: &'a str,
     pub name: &'a str,
+    pub name_kk: &'a str,
     pub address: &'a str,
+    pub address_kk: &'a str,
     pub area_m2: Decimal,
     pub floor_part: Option<&'a str>,
     pub premises_type_code: Option<&'a str>,
@@ -88,7 +93,9 @@ pub async fn list(
            AND ($3::text IS NULL OR s.status = $3)
            AND ($4::text IS NULL OR o.kind = $4::text::core.object_kind)
            AND ($5::text IS NULL OR o.name ILIKE '%' || $5 || '%'
-                                 OR o.address ILIKE '%' || $5 || '%')
+                                 OR o.name_kk ILIKE '%' || $5 || '%'
+                                 OR o.address ILIKE '%' || $5 || '%'
+                                 OR o.address_kk ILIKE '%' || $5 || '%')
            AND ($6::numeric IS NULL OR o.area_m2 >= $6)
            AND ($7::numeric IS NULL OR o.area_m2 <= $7)
          ORDER BY o.id DESC LIMIT $2",
@@ -117,13 +124,15 @@ pub async fn insert(
 ) -> Result<ObjectRecord, sqlx::Error> {
     crate::with_actor(db, actor, async |tx| {
         let id = sqlx::query_scalar!(
-            "INSERT INTO core.objects (kind, name, address, area_m2, floor_part,
+            "INSERT INTO core.objects (kind, name, name_kk, address, address_kk, area_m2, floor_part,
                 premises_type_code, premises_kind_code, comfort_code, location_code)
-             VALUES ($1::text::core.object_kind, $2, $3, $4, $5, $6, $7, $8, $9)
+             VALUES ($1::text::core.object_kind, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING id",
             f.kind,
             f.name,
+            f.name_kk,
             f.address,
+            f.address_kk,
             f.area_m2,
             f.floor_part,
             f.premises_type_code,
@@ -150,14 +159,17 @@ pub async fn update(
 ) -> Result<Option<ObjectRecord>, sqlx::Error> {
     crate::with_actor(db, actor, async |tx| {
         let updated = sqlx::query!(
-            "UPDATE core.objects SET kind = $2::text::core.object_kind, name = $3, address = $4,
-                area_m2 = $5, floor_part = $6, premises_type_code = $7, premises_kind_code = $8,
-                comfort_code = $9, location_code = $10
+            "UPDATE core.objects SET kind = $2::text::core.object_kind, name = $3, name_kk = $4,
+                address = $5, address_kk = $6, area_m2 = $7, floor_part = $8,
+                premises_type_code = $9, premises_kind_code = $10,
+                comfort_code = $11, location_code = $12
              WHERE id = $1",
             id,
             f.kind,
             f.name,
+            f.name_kk,
             f.address,
+            f.address_kk,
             f.area_m2,
             f.floor_part,
             f.premises_type_code,

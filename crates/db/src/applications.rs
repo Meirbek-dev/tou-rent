@@ -28,6 +28,8 @@ pub struct ApplicationRecord {
     pub withdrawn_at: Option<OffsetDateTime>,
     /// Код основания отклонения из закрытого перечня (FR-502, INV-052)
     pub rejection_reason: Option<String>,
+    /// Пять обязательных типов PDF приложены и сохранены зашифрованными.
+    pub package_complete: bool,
     /// Ценовое предложение (Прил. 9). None - строку скрыла RLS (INV-040):
     /// до вскрытия цену видит только сам участник.
     pub price_amount: Option<Decimal>,
@@ -48,6 +50,7 @@ pub(crate) struct ApplicationRow {
     pub(crate) submitted_at: OffsetDateTime,
     pub(crate) withdrawn_at: Option<OffsetDateTime>,
     pub(crate) rejection_reason: Option<String>,
+    pub(crate) package_complete: bool,
     pub(crate) price_amount: Option<Decimal>,
 }
 
@@ -65,6 +68,7 @@ impl From<ApplicationRow> for ApplicationRecord {
             submitted_at: row.submitted_at,
             withdrawn_at: row.withdrawn_at,
             rejection_reason: row.rejection_reason,
+            package_complete: row.package_complete,
             price_amount: row.price_amount,
         }
     }
@@ -85,6 +89,7 @@ macro_rules! application_query {
                       a.applicant_kind::text AS "applicant_kind!",
                       a.applicant_details, a.qualification, a.submitted_at,
                       a.withdrawn_at, a.rejection_reason,
+                      core.application_package_complete(a.id) AS "package_complete!",
                       core.price_amount(p) AS price_amount
                FROM core.applications a
                LEFT JOIN core.price_proposals p ON p.application_id = a.id"# + $tail
@@ -99,8 +104,10 @@ pub struct FileRecord {
     pub application_id: Uuid,
     pub file_key: String,
     pub filename: String,
+    pub document_kind: String,
     pub content_type: String,
     pub size_bytes: i64,
+    pub encryption_version: i16,
     pub uploaded_at: OffsetDateTime,
 }
 
@@ -108,8 +115,9 @@ macro_rules! file_query {
     ($tail:literal $(, $arg:expr)*) => {
         sqlx::query_as!(
             FileRecord,
-            "SELECT id, application_id, file_key, filename, content_type,
-                    size_bytes, uploaded_at
+            "SELECT id, application_id, file_key, filename,
+                    document_kind::text AS \"document_kind!\", content_type,
+                    size_bytes, encryption_version, uploaded_at
              FROM core.application_files" + $tail
             $(, $arg)*
         )
@@ -122,7 +130,8 @@ macro_rules! file_query_returning {
         sqlx::query_as!(
             FileRecord,
             $head + " RETURNING id, application_id, file_key, filename,
-                                content_type, size_bytes, uploaded_at"
+                                document_kind::text AS \"document_kind!\",
+                                content_type, size_bytes, encryption_version, uploaded_at"
             $(, $arg)*
         )
     };
@@ -380,31 +389,40 @@ pub async fn list_for_tender(
 
 /// Метаданные файла заявки. Вставка возможна, пока заявка «подана»
 /// и прием по тендеру не закрыт (состав заявки фиксируется дедлайном, п. 36–39).
+pub struct NewApplicationFile<'a> {
+    pub application_id: Uuid,
+    pub file_key: &'a str,
+    pub filename: &'a str,
+    pub document_kind: &'a str,
+    pub content_type: &'a str,
+    pub size_bytes: i64,
+}
+
 pub async fn add_file(
     db: &Db,
     actor: Uuid,
-    application_id: Uuid,
-    file_key: &str,
-    filename: &str,
-    content_type: &str,
-    size_bytes: i64,
+    new: NewApplicationFile<'_>,
 ) -> Result<Option<FileRecord>, sqlx::Error> {
     crate::with_actor(db, actor, async |tx| {
         file_query_returning!(
             "INSERT INTO core.application_files
-               (application_id, file_key, filename, content_type, size_bytes)
-             SELECT $1::uuid, $2::text, $3::text, $4::text, $5::bigint
+               (application_id, file_key, filename, document_kind,
+                content_type, size_bytes, encryption_version)
+             SELECT $1::uuid, $2::text, $3::text,
+                    $4::text::core.application_document_kind,
+                    $5::text, $6::bigint, 1::smallint
              WHERE EXISTS (
                SELECT 1 FROM core.applications a
                JOIN core.tenders t ON t.id = a.tender_id
-               WHERE a.id = $1 AND a.participant_id = $6 AND a.status = 'submitted'
+               WHERE a.id = $1 AND a.participant_id = $7 AND a.status = 'submitted'
                  AND (t.submission_deadline IS NULL OR core.now() <= t.submission_deadline)
              )",
-            application_id,
-            file_key,
-            filename,
-            content_type,
-            size_bytes,
+            new.application_id,
+            new.file_key,
+            new.filename,
+            new.document_kind,
+            new.content_type,
+            new.size_bytes,
             actor
         )
         .fetch_optional(&mut *tx)
@@ -415,7 +433,7 @@ pub async fn add_file(
 
 pub async fn list_files(db: &Db, application_id: Uuid) -> Result<Vec<FileRecord>, sqlx::Error> {
     file_query!(
-        " WHERE application_id = $1 ORDER BY uploaded_at",
+        " WHERE application_id = $1 ORDER BY document_kind, uploaded_at",
         application_id
     )
     .fetch_all(db)
@@ -425,7 +443,7 @@ pub async fn list_files(db: &Db, application_id: Uuid) -> Result<Vec<FileRecord>
 /// Файлы набора заявок одним запросом (списки без N+1).
 pub async fn files_for(db: &Db, application_ids: &[Uuid]) -> Result<Vec<FileRecord>, sqlx::Error> {
     file_query!(
-        " WHERE application_id = ANY($1) ORDER BY application_id, uploaded_at",
+        " WHERE application_id = ANY($1) ORDER BY application_id, document_kind, uploaded_at",
         application_ids
     )
     .fetch_all(db)

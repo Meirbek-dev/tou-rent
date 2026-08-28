@@ -140,6 +140,11 @@ async fn serve() -> anyhow::Result<()> {
     let sessions = tou_http::session_layer(redis.clone(), secure_cookies);
     let storage = tou_http::storage::connect(&tou_http::storage::StorageConfig::from_env())
         .context("подключение RustFS (S3)")?;
+    let file_cipher = std::sync::Arc::new(
+        tou_http::file_crypto::FileCipher::from_env().context("ключ AES-256 для файлов заявок")?,
+    );
+    let verification_delivery =
+        std::sync::Arc::new(tou_http::verification::VerificationDelivery::from_env());
 
     // Внешний провайдер идентичности (FR-1502, ADR-0003); без OIDC_* - вход
     // остается локальным, как в контуре 1
@@ -151,7 +156,7 @@ async fn serve() -> anyhow::Result<()> {
         );
     }
 
-    let state = tou_http::AppState::new(db, storage)
+    let state = tou_http::AppState::new(db, storage, file_cipher, verification_delivery)
         .with_auction_minutes(auction_minutes()?)
         .with_secure_cookies(secure_cookies)
         // Счетчик попыток и журнал идемпотентности - в том же Redis, что

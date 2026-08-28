@@ -63,6 +63,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/site-announcement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Текущее объявление для формы администратора, включая скрытое. */
+        get: operations["current"];
+        /** Создание, изменение, публикация и скрытие объявления одной операцией. */
+        put: operations["save"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -315,8 +333,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Скачивание вложения: владелец - всегда; secretary/commission - после
-         *     вскрытия (FR-403: состав заявки запечатан до заседания).
+         * Скачивание вложения после вскрытия. До назначенного события AES-ключ не
+         *     применяется ни для владельца, ни для администратора или комиссии.
          */
         get: operations["download_file"];
         put?: never;
@@ -520,6 +538,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/confirm-registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["confirm_registration"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -687,7 +721,8 @@ export interface paths {
         put?: never;
         /**
          * Регистрация участника (FR-1401 мастер - контур web; здесь API).
-         *     Контур 1: email подтверждается автоматически, ссылка пишется в лог (FR-1501).
+         *     Учетная запись создается неподтвержденной. Одноразовый код уходит через
+         *     настроенный SMTP или SMS-шлюз; без подтверждения вход закрыт.
          */
         post: operations["register"];
         delete?: never;
@@ -1322,7 +1357,7 @@ export interface paths {
         put?: never;
         /**
          * Открытие комнаты лота (FR-601): фиксирует стартовую ставку (INV-062)
-         *     и шаг (п. 63). Повторный вызов возвращает уже открытую комнату.
+         *     и выбранный шаг не меньше 5 % (Q-019).
          */
         post: operations["schedule_auction"];
         delete?: never;
@@ -1963,6 +1998,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/site-announcement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Опубликованное объявление. Скрытый черновик для гостя не существует. */
+        get: operations["published"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/special-requests": {
         parameters: {
             query?: never;
@@ -2462,6 +2514,38 @@ export interface paths {
          *     фактов; если оно не наступило - отказ.
          */
         post: operations["declare_failed"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenders/{id}/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_documents"];
+        put?: never;
+        post: operations["upload_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tenders/{id}/documents/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["download_document"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3009,6 +3093,8 @@ export interface components {
          * @enum {string}
          */
         ApplicantKindDto: "individual" | "legal_entity";
+        /** @enum {string} */
+        ApplicationDocumentKindDto: "application_form" | "registration_certificate" | "tax_clearance" | "guarantee_payment" | "qualification_documents" | "legacy";
         ApplicationDto: {
             /** @description Сведения Прил. 2 (персональные данные - NFR-07: в логи не попадают) */
             applicant_details: Record<string, never>;
@@ -3018,6 +3104,8 @@ export interface components {
             id: string;
             /** Format: uuid */
             lot_id: string;
+            /** @description Все пять обязательных PDF загружены в AES-256-конвертах. */
+            package_complete: boolean;
             /** Format: uuid */
             participant_id: string;
             /**
@@ -3040,6 +3128,7 @@ export interface components {
         };
         ApplicationFileDto: {
             content_type: string;
+            document_kind: components["schemas"]["ApplicationDocumentKindDto"];
             filename: string;
             /** Format: uuid */
             id: string;
@@ -3077,10 +3166,15 @@ export interface components {
         };
         AuctionDto: {
             /**
-             * @description Шаг = 5 % от стартовой ставки, зафиксирован при создании комнаты (п. 63)
+             * @description Денежный шаг, зафиксированный при создании комнаты
              * @example 2750
              */
             bid_step: string;
+            /**
+             * @description Процент шага, выбранный секретарем; минимум 5 % (Q-019)
+             * @example 7.5
+             */
+            bid_step_percent: string;
             /**
              * @description Текущий максимум ленты; до первой ставки - `null`
              * @example 57750
@@ -3374,6 +3468,11 @@ export interface components {
              */
             paid_at: string;
         };
+        ConfirmRegistrationRequest: {
+            code: string;
+            email: string;
+            verification_channel: components["schemas"]["VerificationChannel"];
+        };
         /** @description Допсоглашение к договору (FR-906, п. 125). */
         ContractAmendmentDto: {
             changes: components["schemas"]["AmendmentChangeDto"][];
@@ -3469,6 +3568,7 @@ export interface components {
             /** Format: uuid */
             object_id: string;
             purpose: string;
+            purpose_kk: string;
             /** @description Опции коэффициентов Прил. 4; снимок ставки считает сервер (FR-202) */
             rate_options?: components["schemas"]["RateOptionsDto"];
             /** @description FR-205: `monthly` (по умолчанию) либо `hourly` - почасовая аренда (п. 97) */
@@ -3560,7 +3660,7 @@ export interface components {
          * @description Машинные коды ошибок контракта (enum без catch-all).
          * @enum {string}
          */
-        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "idempotency_in_flight" | "timeout" | "internal";
+        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "id_number_taken" | "verification_failed" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "idempotency_in_flight" | "timeout" | "internal";
         EvaderDto: {
             /**
              * Format: int32
@@ -4000,6 +4100,7 @@ export interface components {
             object_id: string;
             /** @description Целевое назначение (Прил. 1 табл. 2) */
             purpose: string;
+            purpose_kk: string;
             /** @description Полный RateCalculation (объяснимость, FR-201) */
             rate_calculation: Record<string, never>;
             /** @description Единица ставки (FR-205): `monthly` - за месяц, `hourly` - за час (п. 97) */
@@ -4132,6 +4233,7 @@ export interface components {
         };
         ObjectDto: {
             address: string;
+            address_kk: string;
             /** @example 42.00 */
             area_m2: string;
             comfort_code?: string | null;
@@ -4143,6 +4245,7 @@ export interface components {
             kind: components["schemas"]["ObjectKindDto"];
             location_code?: string | null;
             name: string;
+            name_kk: string;
             photo_keys: string[];
             premises_kind_code?: string | null;
             premises_type_code?: string | null;
@@ -4164,6 +4267,7 @@ export interface components {
         /** @description Создание и полное обновление объекта (FR-101). */
         ObjectRequest: {
             address: string;
+            address_kk: string;
             /**
              * @description Площадь, м² (> 0)
              * @example 42.00
@@ -4174,6 +4278,7 @@ export interface components {
             kind: components["schemas"]["ObjectKindDto"];
             location_code?: string | null;
             name: string;
+            name_kk: string;
             premises_kind_code?: string | null;
             /** @description Коды опций Прил. 4 для коэффициентов (FR-101) */
             premises_type_code?: string | null;
@@ -4491,12 +4596,20 @@ export interface components {
             reg_number: string;
         };
         RegisterRequest: {
+            applicant_kind: components["schemas"]["ApplicantKindDto"];
             email: string;
             full_name: string;
+            id_number: string;
             /** @description kk / ru / en */
             locale?: string;
             /** @description Минимум 12 символов (TODO-ENGINEER: утвердить парольную политику) */
             password: string;
+            phone: string;
+            verification_channel: components["schemas"]["VerificationChannel"];
+        };
+        RegistrationPendingDto: {
+            email: string;
+            verification_channel: components["schemas"]["VerificationChannel"];
         };
         /** @description Реестр отчетности: колонки и строки в одном порядке (арх. § 9). */
         RegistryDto: {
@@ -4535,6 +4648,18 @@ export interface components {
          * @enum {string}
          */
         Rule: "tender_status_transition" | "tender_publication_terms" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
+        SaveSiteAnnouncementRequest: {
+            body: string;
+            is_published: boolean;
+            title: string;
+        };
+        ScheduleAuctionRequest: {
+            /**
+             * @description Процент от стартовой ставки; значение меньше 5 запрещено (Q-019)
+             * @example 7.5
+             */
+            bid_step_percent: string;
+        };
         SetActiveRequest: {
             /** @description `false` - учетная запись отключается, `true` - возвращается */
             is_active: boolean;
@@ -4552,6 +4677,17 @@ export interface components {
          */
         SetRecordingRequest: {
             recording_url?: string | null;
+        };
+        SiteAnnouncementDto: {
+            body: string;
+            /** Format: uuid */
+            id: string;
+            is_published: boolean;
+            /** Format: date-time */
+            published_at?: string | null;
+            title: string;
+            /** Format: date-time */
+            updated_at: string;
         };
         /** @description Категория особого порядка со своими требованиями (FR-1201, п. 87). */
         SpecialCategoryDto: {
@@ -4724,6 +4860,17 @@ export interface components {
             votes_against: number;
             votes_for: number;
         };
+        TenderDocumentDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            published_at: string;
+            /** Format: uuid */
+            tender_id: string;
+            title: string;
+            /** Format: int32 */
+            version: number;
+        };
         TenderDto: {
             /** Format: date-time */
             announced_at?: string | null;
@@ -4776,6 +4923,7 @@ export interface components {
         };
         /** @description Публичное представление пользователя (без password_hash - NFR-07). */
         UserDto: {
+            applicant_kind?: string | null;
             email: string;
             /**
              * @description Текущая сессия открыта внешним провайдером (FR-1502): выход должен
@@ -4785,6 +4933,7 @@ export interface components {
             full_name: string;
             /** Format: uuid */
             id: string;
+            id_number?: string | null;
             /**
              * @description Учетная запись действует. Деактивированная не входит и не работает по
              *     уже открытой сессии (W-07); в кабинете админа это состояние видно
@@ -4792,6 +4941,7 @@ export interface components {
              */
             is_active: boolean;
             locale: string;
+            phone?: string | null;
             /**
              * @description Роли из `core.role_grants` (snake_case, см. enum `Role` домена)
              * @example [
@@ -4808,6 +4958,8 @@ export interface components {
              */
             next_after?: string | null;
         };
+        /** @enum {string} */
+        VerificationChannel: "email" | "sms";
         VoteDto: {
             dissent?: string | null;
             /** Format: uuid */
@@ -4928,6 +5080,86 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    current: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Объявление для редактирования */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteAnnouncementDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Объявление еще не создано */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    save: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveSiteAnnouncementRequest"];
+            };
+        };
+        responses: {
+            /** @description Объявление сохранено */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteAnnouncementDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Некорректный заголовок или текст */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5417,10 +5649,12 @@ export interface operations {
     };
     upload_file: {
         parameters: {
-            query?: never;
+            query: {
+                /** @description Тип обязательного документа */
+                document_kind: components["schemas"]["ApplicationDocumentKindDto"];
+            };
             header?: never;
             path: {
-                /** @description Заявка */
                 id: string;
             };
             cookie?: never;
@@ -5945,6 +6179,37 @@ export interface operations {
             };
         };
     };
+    confirm_registration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfirmRegistrationRequest"];
+            };
+        };
+        responses: {
+            /** @description Канал подтвержден, вход разрешен */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Код неверен или истек */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -6210,16 +6475,16 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Участник зарегистрирован */
+            /** @description Код подтверждения отправлен */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserDto"];
+                    "application/json": components["schemas"]["RegistrationPendingDto"];
                 };
             };
-            /** @description Email занят */
+            /** @description Email или ИИН/БИН занят */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7711,7 +7976,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScheduleAuctionRequest"];
+            };
+        };
         responses: {
             /** @description Комната торгов */
             200: {
@@ -8910,6 +9179,35 @@ export interface operations {
             };
         };
     };
+    published: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Опубликованное объявление */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteAnnouncementDto"];
+                };
+            };
+            /** @description Объявления нет или оно скрыто */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     pending_special_requests: {
         parameters: {
             query?: {
@@ -10017,6 +10315,83 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_documents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Тендер */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Опубликованные PDF-документы */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenderDocumentDto"][];
+                };
+            };
+        };
+    };
+    upload_document: {
+        parameters: {
+            query: {
+                title: string;
+            };
+            header?: never;
+            path: {
+                /** @description Тендер */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": number[];
+            };
+        };
+        responses: {
+            /** @description Документ добавлен */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenderDocumentDto"];
+                };
+            };
+        };
+    };
+    download_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Тендер */
+                id: string;
+                /** @description Документ */
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Тендерный PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
                 };
             };
         };

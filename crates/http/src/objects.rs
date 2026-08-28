@@ -24,7 +24,9 @@ pub struct ObjectDto {
     pub id: Uuid,
     pub kind: ObjectKindDto,
     pub name: String,
+    pub name_kk: String,
     pub address: String,
+    pub address_kk: String,
     #[schema(value_type = String, example = "42.00")]
     pub area_m2: Decimal,
     pub floor_part: Option<String>,
@@ -50,7 +52,9 @@ impl ObjectDto {
             kind: ObjectKindDto::from_db(&r.kind)?,
             status: ObjectStatusDto::from_db(&r.status)?,
             name: r.name,
+            name_kk: r.name_kk,
             address: r.address,
+            address_kk: r.address_kk,
             area_m2: r.area_m2,
             floor_part: r.floor_part,
             premises_type_code: r.premises_type_code,
@@ -71,8 +75,12 @@ pub struct ObjectRequest {
     pub kind: ObjectKindDto,
     #[garde(length(chars, min = 1, max = 300))]
     pub name: String,
+    #[garde(length(chars, min = 1, max = 300))]
+    pub name_kk: String,
     #[garde(length(chars, min = 1, max = 500))]
     pub address: String,
+    #[garde(length(chars, min = 1, max = 500))]
+    pub address_kk: String,
     /// Площадь, м² (> 0)
     #[garde(custom(positive_area))]
     #[schema(value_type = String, example = "42.00")]
@@ -103,7 +111,9 @@ impl ObjectRequest {
         ObjectFields {
             kind: self.kind.as_db(),
             name: &self.name,
+            name_kk: &self.name_kk,
             address: &self.address,
+            address_kk: &self.address_kk,
             area_m2: self.area_m2,
             floor_part: self.floor_part.as_deref(),
             premises_type_code: self.premises_type_code.as_deref(),

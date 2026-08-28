@@ -1,0 +1,93 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.users\n           (email, password_hash, full_name, locale, applicant_kind, id_number, phone)\n         VALUES ($1::citext, $2, $3, $4, $5::text::core.applicant_kind, $6, $7)\n         ON CONFLICT DO NOTHING RETURNING id, email::text AS \"email!\", password_hash,\n                                  full_name, locale,\n                                  applicant_kind::text AS applicant_kind,\n                                  id_number, phone, email_confirmed_at,\n                                  phone_confirmed_at, is_active",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "password_hash",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "full_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "locale",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "applicant_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "id_number",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "phone",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "email_confirmed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "phone_confirmed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_active",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      false,
+      false,
+      null,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "a8840257f7cc8c1382d45d6fa05d3f13d9e517f708ac3fbd12885a4321c2c432"
+}

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.id, v.user_id, v.code_hash\n         FROM core.account_verifications v\n         JOIN core.users u ON u.id = v.user_id\n         WHERE u.email = $1::citext\n           AND v.channel = $2::text::core.verification_channel\n           AND v.consumed_at IS NULL AND v.expires_at >= core.now()\n           AND v.attempts < 5\n         ORDER BY v.created_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "code_hash",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1c1bc309928aa2f1f5763ac96080277bc18a6b427993bd436f3ce027a088f821"
+}

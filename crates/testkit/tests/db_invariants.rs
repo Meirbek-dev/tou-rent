@@ -581,6 +581,31 @@ async fn place_bid(
     .await
 }
 
+/// Q-019: даже обход HTTP не позволяет открыть комнату с процентом ниже 5.
+#[tokio::test]
+async fn inv063_bid_step_percent_below_five_is_rejected() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, "1 day").await.expect("fixture");
+
+    let error = sqlx::query!(
+        "INSERT INTO core.auctions
+           (lot_id, starting_bid, bid_step_percent, bid_step)
+         VALUES ($1, 55000, 4.99, 2750)",
+        f.lot_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect_err("процент шага ниже 5 должен отклоняться CHECK-ограничением");
+
+    assert!(
+        error
+            .to_string()
+            .contains("auctions_bid_step_percent_minimum"),
+        "ожидали отказ минимального процента шага, получили: {error}"
+    );
+}
+
 /// INV-063 (п. 63): ставка принимается от «максимум + шаг»; до первой ставки
 /// максимумом служит стартовая ставка. Отказ БД обрывает транзакцию, поэтому
 /// принимаемая ставка проверяется первой.

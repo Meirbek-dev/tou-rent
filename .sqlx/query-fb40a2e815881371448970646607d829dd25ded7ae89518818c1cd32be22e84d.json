@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.applications a\n             SET status = $2::text::core.application_status, rejection_reason = $3\n             FROM core.tenders t\n             WHERE a.id = $1 AND t.id = a.tender_id\n               AND t.status = 'qualification'\n               AND a.status IN ('submitted', 'fee_confirmed')\n               AND core.application_package_complete(a.id)\n             RETURNING a.tender_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tender_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fb40a2e815881371448970646607d829dd25ded7ae89518818c1cd32be22e84d"
+}

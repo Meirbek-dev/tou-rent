@@ -43,7 +43,10 @@ macro_rules! user_query {
         sqlx::query_as!(
             UserRecord,
             r#"SELECT u.id, u.email::text AS "email!", u.password_hash,
-                      u.full_name, u.locale, u.is_active"# + $tail
+                      u.full_name, u.locale,
+                      u.applicant_kind::text AS applicant_kind,
+                      u.id_number, u.phone, u.email_confirmed_at,
+                      u.phone_confirmed_at, u.is_active"# + $tail
             $(, $arg)*
         )
     };
@@ -55,7 +58,10 @@ macro_rules! user_query_returning {
         sqlx::query_as!(
             UserRecord,
             $head + r#" RETURNING id, email::text AS "email!", password_hash,
-                                  full_name, locale, is_active"#
+                                  full_name, locale,
+                                  applicant_kind::text AS applicant_kind,
+                                  id_number, phone, email_confirmed_at,
+                                  phone_confirmed_at, is_active"#
             $(, $arg)*
         )
     };

@@ -36,6 +36,7 @@ pub struct LotRecord {
     pub seq: i32,
     pub object_id: Uuid,
     pub purpose: String,
+    pub purpose_kk: String,
     pub lease_months: i32,
     pub base_rate_monthly: Decimal,
     pub guarantee_fee: Decimal,
@@ -87,7 +88,7 @@ macro_rules! lot_query {
     ($tail:literal $(, $arg:expr)*) => {
         sqlx::query_as!(
             LotRecord,
-            r#"SELECT id, tender_id, seq, object_id, purpose, lease_months,
+            r#"SELECT id, tender_id, seq, object_id, purpose, purpose_kk, lease_months,
                       base_rate_monthly, guarantee_fee, rate_calculation,
                       viewing_terms, rate_unit::text AS "rate_unit!", hours_total,
                       cancelled_at, cancel_reason
@@ -100,7 +101,7 @@ macro_rules! lot_query_returning {
     ($head:literal $(, $arg:expr)*) => {
         sqlx::query_as!(
             LotRecord,
-            $head + r#" RETURNING id, tender_id, seq, object_id, purpose, lease_months,
+            $head + r#" RETURNING id, tender_id, seq, object_id, purpose, purpose_kk, lease_months,
                                   base_rate_monthly, guarantee_fee, rate_calculation,
                                   viewing_terms, rate_unit::text AS "rate_unit!", hours_total,
                                   cancelled_at, cancel_reason"#
@@ -202,6 +203,7 @@ pub async fn lots_for(db: &Db, tender_ids: &[Uuid]) -> Result<Vec<LotRecord>, sq
 pub struct NewLot<'a> {
     pub object_id: Uuid,
     pub purpose: &'a str,
+    pub purpose_kk: &'a str,
     pub lease_months: i32,
     pub base_rate_monthly: Decimal,
     pub guarantee_fee: Decimal,
@@ -236,14 +238,15 @@ pub async fn create(
             // `$10::text::core.rate_unit`: единица приходит строкой, приведение
             // к перечислению делает БД
             let record = lot_query_returning!(
-                "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                "INSERT INTO core.lots (tender_id, seq, object_id, purpose, purpose_kk, lease_months,
                     base_rate_monthly, guarantee_fee, rate_calculation, viewing_terms,
                     rate_unit, hours_total)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text::core.rate_unit, $11)",
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::core.rate_unit, $12)",
                 tender.id,
                 idx as i32 + 1,
                 lot.object_id,
                 lot.purpose,
+                lot.purpose_kk,
                 lot.lease_months,
                 lot.base_rate_monthly,
                 lot.guarantee_fee,
@@ -257,6 +260,88 @@ pub async fn create(
             created.push(record);
         }
         Ok((tender, created))
+    })
+    .await
+}
+
+#[derive(Debug, Clone)]
+pub struct TenderDocRecord {
+    pub id: Uuid,
+    pub tender_id: Uuid,
+    pub version: i32,
+    pub title: String,
+    pub file_key: String,
+    pub published_at: OffsetDateTime,
+}
+
+pub async fn documents(db: &Db, tender_id: Uuid) -> Result<Vec<TenderDocRecord>, sqlx::Error> {
+    sqlx::query_as!(
+        TenderDocRecord,
+        "SELECT id, tender_id, version, title, file_key, published_at
+         FROM core.tender_docs WHERE tender_id = $1
+         ORDER BY version DESC, published_at DESC",
+        tender_id
+    )
+    .fetch_all(db)
+    .await
+}
+
+pub async fn documents_for(
+    db: &Db,
+    tender_ids: &[Uuid],
+) -> Result<Vec<TenderDocRecord>, sqlx::Error> {
+    sqlx::query_as!(
+        TenderDocRecord,
+        "SELECT id, tender_id, version, title, file_key, published_at
+         FROM core.tender_docs WHERE tender_id = ANY($1)
+         ORDER BY tender_id, version DESC, published_at DESC",
+        tender_ids
+    )
+    .fetch_all(db)
+    .await
+}
+
+pub async fn document(db: &Db, id: Uuid) -> Result<Option<TenderDocRecord>, sqlx::Error> {
+    sqlx::query_as!(
+        TenderDocRecord,
+        "SELECT id, tender_id, version, title, file_key, published_at
+         FROM core.tender_docs WHERE id = $1",
+        id
+    )
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn add_document(
+    db: &Db,
+    actor: Uuid,
+    tender_id: Uuid,
+    title: &str,
+    file_key: &str,
+) -> Result<Option<TenderDocRecord>, sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        let draft = sqlx::query_scalar!(
+            r#"SELECT status::text AS "status!" FROM core.tenders
+               WHERE id = $1 FOR UPDATE"#,
+            tender_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        if draft.as_deref() != Some("draft") {
+            return Ok(None);
+        }
+        sqlx::query_as!(
+            TenderDocRecord,
+            "INSERT INTO core.tender_docs (tender_id, version, title, file_key)
+             SELECT $1, COALESCE(max(version), 0) + 1, $2, $3
+             FROM core.tender_docs WHERE tender_id = $1
+             RETURNING id, tender_id, version, title, file_key, published_at",
+            tender_id,
+            title,
+            file_key
+        )
+        .fetch_optional(&mut *tx)
+        .await
     })
     .await
 }

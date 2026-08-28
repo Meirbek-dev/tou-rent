@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.account_verifications\n             SET consumed_at = core.now()\n             WHERE id = $1 AND user_id = $2 AND consumed_at IS NULL\n               AND expires_at >= core.now() AND attempts < 5\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "411112d9de8ae599c528608d29e1fb12edfd3902ec2945f9c52f30a06f8ed265"
+}

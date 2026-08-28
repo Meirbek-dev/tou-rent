@@ -40,6 +40,7 @@ export const Route = createFileRoute("/app/organizer/tenders/new")({
 type LotDraft = {
   object_id: string
   purpose: string
+  purpose_kk: string
   lease_months: string
   viewing_terms: string
   rate_options: RateOptions
@@ -53,6 +54,7 @@ function emptyLot(objectId: string): LotDraft {
   return {
     object_id: objectId,
     purpose: "",
+    purpose_kk: "",
     lease_months: "12",
     viewing_terms: "",
     rate_options: defaultRateOptions(),
@@ -84,6 +86,7 @@ function NewTenderPage() {
           lots: lots.map((lot) => ({
             object_id: lot.object_id,
             purpose: lot.purpose,
+            purpose_kk: lot.purpose_kk,
             lease_months: Number(lot.lease_months),
             viewing_terms: lot.viewing_terms === "" ? null : lot.viewing_terms,
             rate_options: lot.rate_options,
@@ -179,13 +182,28 @@ function NewTenderPage() {
               </NativeSelect>
             </div>
             <div className="flex min-w-64 flex-1 flex-col gap-1.5">
-              <Label htmlFor={`lot-${index}-purpose`}>{m.lot_purpose()}</Label>
+              <Label htmlFor={`lot-${index}-purpose`}>
+                {m.lot_purpose_ru()}
+              </Label>
               <Input
                 id={`lot-${index}-purpose`}
                 required
                 value={lot.purpose}
                 onChange={(event) =>
                   patchLot(index, { purpose: event.target.value })
+                }
+              />
+            </div>
+            <div className="flex min-w-64 flex-1 flex-col gap-1.5">
+              <Label htmlFor={`lot-${index}-purpose-kk`}>
+                {m.lot_purpose_kk()}
+              </Label>
+              <Input
+                id={`lot-${index}-purpose-kk`}
+                required
+                value={lot.purpose_kk}
+                onChange={(event) =>
+                  patchLot(index, { purpose_kk: event.target.value })
                 }
               />
             </div>

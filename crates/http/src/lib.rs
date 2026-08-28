@@ -22,6 +22,7 @@ pub mod error;
 pub mod evasion;
 pub mod extract;
 pub mod failure;
+pub mod file_crypto;
 pub mod idempotency;
 pub mod investment;
 pub mod land;
@@ -40,12 +41,14 @@ pub mod refdata;
 pub mod reports;
 pub mod request;
 pub mod results;
+pub mod site_announcements;
 pub mod special;
 pub mod state;
 pub mod storage;
 pub mod tenders;
 pub mod timeout;
 pub mod upload;
+pub mod verification;
 
 use std::sync::LazyLock;
 
@@ -99,6 +102,7 @@ fn api_router() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(healthz))
         .routes(routes!(auth::register))
+        .routes(routes!(auth::confirm_registration))
         .routes(routes!(auth::login))
         .routes(routes!(auth::logout))
         .routes(routes!(auth::me))
@@ -113,6 +117,11 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::reset_password))
         .routes(routes!(admin::set_user_active))
         .routes(routes!(admin::audit_chain))
+        .routes(routes!(site_announcements::published))
+        .routes(routes!(
+            site_announcements::current,
+            site_announcements::save
+        ))
         .routes(routes!(objects::list_objects, objects::create_object))
         .routes(routes!(
             objects::get_object,
@@ -121,6 +130,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         ))
         .routes(routes!(tenders::list_tenders, tenders::create_tender))
         .routes(routes!(tenders::get_tender, tenders::update_tender))
+        .routes(routes!(tenders::list_documents, tenders::upload_document))
+        .routes(routes!(tenders::download_document))
         .routes(routes!(tenders::set_recording))
         .routes(routes!(tenders::publish_tender))
         .routes(routes!(tenders::open_acceptance))
@@ -383,7 +394,7 @@ mod tests {
     fn schema_type_names_are_unique_across_modules() {
         use std::collections::BTreeMap;
 
-        let sources: [(&str, &str); 42] = [
+        let sources: [(&str, &str); 45] = [
             ("acts", include_str!("acts.rs")),
             ("admin", include_str!("admin.rs")),
             ("admission", include_str!("admission.rs")),
@@ -405,6 +416,7 @@ mod tests {
             ("evasion", include_str!("evasion.rs")),
             ("extract", include_str!("extract.rs")),
             ("failure", include_str!("failure.rs")),
+            ("file_crypto", include_str!("file_crypto.rs")),
             ("idempotency", include_str!("idempotency.rs")),
             ("investment", include_str!("investment.rs")),
             ("land", include_str!("land.rs")),
@@ -423,12 +435,14 @@ mod tests {
             ("reports", include_str!("reports.rs")),
             ("request", include_str!("request.rs")),
             ("results", include_str!("results.rs")),
+            ("site_announcements", include_str!("site_announcements.rs")),
             ("special", include_str!("special.rs")),
             ("state", include_str!("state.rs")),
             ("storage", include_str!("storage.rs")),
             ("tenders", include_str!("tenders.rs")),
             ("timeout", include_str!("timeout.rs")),
             ("upload", include_str!("upload.rs")),
+            ("verification", include_str!("verification.rs")),
         ];
 
         // Новый модуль обязан попасть в перечень: иначе проверка тихо

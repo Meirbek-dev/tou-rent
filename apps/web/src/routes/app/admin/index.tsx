@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
@@ -7,10 +7,17 @@ import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Switch } from "@/components/ui/switch"
 import {
   Table,
   TableBody,
@@ -19,10 +26,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
 import {
   GRANTABLE_ROLES,
   addCoefficientVersion,
   addHoliday,
+  adminSiteAnnouncementQuery,
   auditChainQuery,
   coefficientsQuery,
   grantRole,
@@ -32,6 +41,7 @@ import {
   revokeRole,
   setMrp,
   setUserActive,
+  saveSiteAnnouncement,
   usersQuery,
 } from "@/lib/admin"
 import { meQuery, problemMessage } from "@/lib/auth"
@@ -50,7 +60,13 @@ import type { GrantableRole, UserDto } from "@/lib/admin"
 // расчета, а коэффициенты версионируются по дате вступления в силу: админ
 // добавляет версию, а не переписывает историю.
 /** Разделы кабинета: люди отдельно, справочники расчета - отдельно. */
-const TABS = ["users", "mrp", "coefficients", "holidays"] as const
+const TABS = [
+  "users",
+  "announcement",
+  "mrp",
+  "coefficients",
+  "holidays",
+] as const
 
 export const Route = createFileRoute("/app/admin/")({
   validateSearch: tabSearch(TABS),
@@ -84,6 +100,9 @@ function AdminHome() {
       >
         <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="users">{m.admin_users_title()}</TabsTrigger>
+          <TabsTrigger value="announcement">
+            {m.admin_announcement_tab()}
+          </TabsTrigger>
           <TabsTrigger value="mrp">{m.admin_mrp_title()}</TabsTrigger>
           <TabsTrigger value="coefficients">
             {m.admin_coefficients_title()}
@@ -95,12 +114,122 @@ function AdminHome() {
             сейчас не смотрят, незачем */}
         <TabsContent value={tab}>
           {tab === "users" && <UsersPanel />}
+          {tab === "announcement" && <SiteAnnouncementPanel />}
           {tab === "mrp" && <MrpPanel />}
           {tab === "coefficients" && <CoefficientsPanel />}
           {tab === "holidays" && <HolidaysPanel />}
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+function SiteAnnouncementPanel() {
+  const queryClient = useQueryClient()
+  const { data: announcement } = useQuery(adminSiteAnnouncementQuery)
+  const [form, setForm] = useState({
+    title: "",
+    body: "",
+    is_published: false,
+  })
+
+  useEffect(() => {
+    if (announcement === undefined) return
+    setForm(
+      announcement ?? {
+        title: m.admin_announcement_default_title(),
+        body: m.admin_announcement_default_body(),
+        is_published: false,
+      }
+    )
+  }, [announcement])
+
+  const save = useMutation({
+    mutationFn: () => saveSiteAnnouncement(form),
+    onSuccess: async (saved) => {
+      if (saved !== null) setForm(saved)
+      notifySuccess(m.admin_announcement_saved())
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["admin", "site-announcement"],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["site-announcement"] }),
+      ])
+    },
+    onError: (error) => notifyError(problemMessage(error)),
+  })
+
+  return (
+    <Panel
+      title={m.admin_announcement_title()}
+      description={m.admin_announcement_hint()}
+    >
+      <form
+        onSubmit={(event) => {
+          event.preventDefault()
+          save.mutate()
+        }}
+      >
+        <FieldGroup>
+          <Field>
+            <FieldLabel htmlFor="site-announcement-title">
+              {m.admin_announcement_heading()}
+            </FieldLabel>
+            <Input
+              id="site-announcement-title"
+              value={form.title}
+              maxLength={200}
+              required
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  title: event.target.value,
+                }))
+              }
+            />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="site-announcement-body">
+              {m.admin_announcement_body()}
+            </FieldLabel>
+            <Textarea
+              id="site-announcement-body"
+              className="min-h-64"
+              value={form.body}
+              maxLength={20_000}
+              required
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  body: event.target.value,
+                }))
+              }
+            />
+            <FieldDescription>
+              {m.admin_announcement_plain_text_hint()}
+            </FieldDescription>
+          </Field>
+          <Field orientation="horizontal">
+            <Switch
+              id="site-announcement-published"
+              checked={form.is_published}
+              onCheckedChange={(isPublished) =>
+                setForm((current) => ({
+                  ...current,
+                  is_published: isPublished,
+                }))
+              }
+            />
+            <FieldLabel htmlFor="site-announcement-published">
+              {m.admin_announcement_publish()}
+            </FieldLabel>
+          </Field>
+          <Button type="submit" disabled={save.isPending}>
+            {m.admin_announcement_save()}
+          </Button>
+        </FieldGroup>
+      </form>
+    </Panel>
   )
 }
 

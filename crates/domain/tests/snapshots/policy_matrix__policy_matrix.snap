@@ -36,6 +36,7 @@ LandManage: organizer
 NotificationReadOwn: participant, organizer, secretary, commission, board, finance, admin
 UserManage: admin
 RoleGrant: admin
+SiteAnnouncementManage: admin
 RefdataManage: admin
 RefdataRead: participant, organizer, secretary, commission, board, finance, admin
 AuditRead: admin

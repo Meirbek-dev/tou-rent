@@ -99,6 +99,22 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 # Hash-цепочка аудита INV-A01 (паритет с sha256() в БД)
 sha2 = "0.11.0"
 rand = "0.10.2"
+# Шифрование пакетов заявок до вскрытия: AES-256-GCM и отдельный ключ
+# каждой заявки, производный через HKDF-SHA256.
+aes-gcm = "0.10.3"
+hkdf = "0.12.4"
+# hkdf 0.12 использует digest 0.10; основной sha2 0.11 остается для аудита.
+sha2-compat = { package = "sha2", version = "0.10.9" }
+# Доставка одноразовых кодов регистрации: SMTP и настраиваемый SMS HTTP API.
+lettre = { version = "0.11.19", default-features = false, features = [
+  "builder",
+  "smtp-transport",
+  "tokio1-rustls-tls",
+] }
+reqwest = { version = "0.12.28", default-features = false, features = [
+  "json",
+  "rustls-tls",
+] }
 # Вход через внешнего провайдера идентичности (FR-1502, ADR-0003): OIDC
 # authorization code + PKCE; rustls - без системного OpenSSL в образе
 openidconnect = { version = "4.0.1", default-features = false, features = [

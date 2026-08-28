@@ -133,6 +133,96 @@
         }
       }
     },
+    "/api/v1/admin/site-announcement": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Текущее объявление для формы администратора, включая скрытое.",
+        "operationId": "current",
+        "responses": {
+          "200": {
+            "description": "Объявление для редактирования",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteAnnouncementDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объявление еще не создано",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Создание, изменение, публикация и скрытие объявления одной операцией.",
+        "operationId": "save",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSiteAnnouncementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Объявление сохранено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteAnnouncementDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Некорректный заголовок или текст",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
@@ -782,9 +872,17 @@
         "operationId": "upload_file",
         "parameters": [
           {
+            "name": "document_kind",
+            "in": "query",
+            "description": "Тип обязательного документа",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ApplicationDocumentKindDto"
+            }
+          },
+          {
             "name": "id",
             "in": "path",
-            "description": "Заявка",
             "required": true,
             "schema": {
               "type": "string",
@@ -847,7 +945,7 @@
         "tags": [
           "applications"
         ],
-        "summary": "Скачивание вложения: владелец - всегда; secretary/commission - после\nвскрытия (FR-403: состав заявки запечатан до заседания).",
+        "summary": "Скачивание вложения после вскрытия. До назначенного события AES-ключ не\nприменяется ни для владельца, ни для администратора или комиссии.",
         "operationId": "download_file",
         "parameters": [
           {
@@ -1517,6 +1615,39 @@
         }
       }
     },
+    "/api/v1/auth/confirm-registration": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "operationId": "confirm_registration",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConfirmRegistrationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Канал подтвержден, вход разрешен"
+          },
+          "422": {
+            "description": "Код неверен или истек",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -1803,7 +1934,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Регистрация участника (FR-1401 мастер - контур web; здесь API).\nКонтур 1: email подтверждается автоматически, ссылка пишется в лог (FR-1501).",
+        "summary": "Регистрация участника (FR-1401 мастер - контур web; здесь API).\nУчетная запись создается неподтвержденной. Одноразовый код уходит через\nнастроенный SMTP или SMS-шлюз; без подтверждения вход закрыт.",
         "operationId": "register",
         "requestBody": {
           "content": {
@@ -1817,17 +1948,17 @@
         },
         "responses": {
           "201": {
-            "description": "Участник зарегистрирован",
+            "description": "Код подтверждения отправлен",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UserDto"
+                  "$ref": "#/components/schemas/RegistrationPendingDto"
                 }
               }
             }
           },
           "409": {
-            "description": "Email занят",
+            "description": "Email или ИИН/БИН занят",
             "content": {
               "application/json": {
                 "schema": {
@@ -3854,7 +3985,7 @@
         "tags": [
           "auctions"
         ],
-        "summary": "Открытие комнаты лота (FR-601): фиксирует стартовую ставку (INV-062)\nи шаг (п. 63). Повторный вызов возвращает уже открытую комнату.",
+        "summary": "Открытие комнаты лота (FR-601): фиксирует стартовую ставку (INV-062)\nи выбранный шаг не меньше 5 % (Q-019).",
         "operationId": "schedule_auction",
         "parameters": [
           {
@@ -3868,6 +3999,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduleAuctionRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Комната торгов",
@@ -5472,6 +5613,37 @@
         }
       }
     },
+    "/api/v1/site-announcement": {
+      "get": {
+        "tags": [
+          "site-announcements"
+        ],
+        "summary": "Опубликованное объявление. Скрытый черновик для гостя не существует.",
+        "operationId": "published",
+        "responses": {
+          "200": {
+            "description": "Опубликованное объявление",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteAnnouncementDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объявления нет или оно скрыто",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/special-requests": {
       "get": {
         "tags": [
@@ -7016,6 +7188,132 @@
         }
       }
     },
+    "/api/v1/tenders/{id}/documents": {
+      "get": {
+        "tags": [
+          "tenders"
+        ],
+        "operationId": "list_documents",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Тендер",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Опубликованные PDF-документы",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TenderDocumentDto"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "tenders"
+        ],
+        "operationId": "upload_document",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Тендер",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "title",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Документ добавлен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenderDocumentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tenders/{id}/documents/{document_id}": {
+      "get": {
+        "tags": [
+          "tenders"
+        ],
+        "operationId": "download_document",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Тендер",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "document_id",
+            "in": "path",
+            "description": "Документ",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Тендерный PDF",
+            "content": {
+              "application/pdf": {}
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tenders/{id}/dossier": {
       "get": {
         "tags": [
@@ -8395,6 +8693,17 @@
           "legal_entity"
         ]
       },
+      "ApplicationDocumentKindDto": {
+        "type": "string",
+        "enum": [
+          "application_form",
+          "registration_certificate",
+          "tax_clearance",
+          "guarantee_payment",
+          "qualification_documents",
+          "legacy"
+        ]
+      },
       "ApplicationDto": {
         "type": "object",
         "required": [
@@ -8406,7 +8715,8 @@
           "applicant_kind",
           "applicant_details",
           "submitted_at",
-          "files"
+          "files",
+          "package_complete"
         ],
         "properties": {
           "applicant_details": {
@@ -8429,6 +8739,10 @@
           "lot_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "package_complete": {
+            "type": "boolean",
+            "description": "Все пять обязательных PDF загружены в AES-256-конвертах."
           },
           "participant_id": {
             "type": "string",
@@ -8480,6 +8794,7 @@
         "type": "object",
         "required": [
           "id",
+          "document_kind",
           "filename",
           "content_type",
           "size_bytes",
@@ -8488,6 +8803,9 @@
         "properties": {
           "content_type": {
             "type": "string"
+          },
+          "document_kind": {
+            "$ref": "#/components/schemas/ApplicationDocumentKindDto"
           },
           "filename": {
             "type": "string"
@@ -8607,6 +8925,7 @@
           "lot_purpose",
           "status",
           "starting_bid",
+          "bid_step_percent",
           "bid_step",
           "min_next_bid",
           "extended_once",
@@ -8615,8 +8934,13 @@
         "properties": {
           "bid_step": {
             "type": "string",
-            "description": "Шаг = 5 % от стартовой ставки, зафиксирован при создании комнаты (п. 63)",
+            "description": "Денежный шаг, зафиксированный при создании комнаты",
             "example": "2750"
+          },
+          "bid_step_percent": {
+            "type": "string",
+            "description": "Процент шага, выбранный секретарем; минимум 5 % (Q-019)",
+            "example": "7.5"
           },
           "current_max": {
             "type": [
@@ -9362,6 +9686,25 @@
           }
         }
       },
+      "ConfirmRegistrationRequest": {
+        "type": "object",
+        "required": [
+          "email",
+          "verification_channel",
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "verification_channel": {
+            "$ref": "#/components/schemas/VerificationChannel"
+          }
+        }
+      },
       "ContractAmendmentDto": {
         "type": "object",
         "description": "Допсоглашение к договору (FR-906, п. 125).",
@@ -9593,6 +9936,7 @@
         "required": [
           "object_id",
           "purpose",
+          "purpose_kk",
           "lease_months"
         ],
         "properties": {
@@ -9613,6 +9957,9 @@
             "format": "uuid"
           },
           "purpose": {
+            "type": "string"
+          },
+          "purpose_kk": {
             "type": "string"
           },
           "rate_options": {
@@ -9851,6 +10198,8 @@
           "forbidden",
           "invalid_credentials",
           "email_taken",
+          "id_number_taken",
+          "verification_failed",
           "validation_failed",
           "csrf_rejected",
           "not_found",
@@ -11003,6 +11352,7 @@
           "seq",
           "object_id",
           "purpose",
+          "purpose_kk",
           "lease_months",
           "base_rate_monthly",
           "guarantee_fee",
@@ -11057,6 +11407,9 @@
           "purpose": {
             "type": "string",
             "description": "Целевое назначение (Прил. 1 табл. 2)"
+          },
+          "purpose_kk": {
+            "type": "string"
           },
           "rate_calculation": {
             "type": "object",
@@ -11409,7 +11762,9 @@
           "id",
           "kind",
           "name",
+          "name_kk",
           "address",
+          "address_kk",
           "area_m2",
           "photo_keys",
           "status",
@@ -11418,6 +11773,9 @@
         ],
         "properties": {
           "address": {
+            "type": "string"
+          },
+          "address_kk": {
             "type": "string"
           },
           "area_m2": {
@@ -11454,6 +11812,9 @@
             ]
           },
           "name": {
+            "type": "string"
+          },
+          "name_kk": {
             "type": "string"
           },
           "photo_keys": {
@@ -11521,11 +11882,16 @@
         "required": [
           "kind",
           "name",
+          "name_kk",
           "address",
+          "address_kk",
           "area_m2"
         ],
         "properties": {
           "address": {
+            "type": "string"
+          },
+          "address_kk": {
             "type": "string"
           },
           "area_m2": {
@@ -11555,6 +11921,9 @@
             ]
           },
           "name": {
+            "type": "string"
+          },
+          "name_kk": {
             "type": "string"
           },
           "premises_kind_code": {
@@ -12360,13 +12729,23 @@
         "required": [
           "email",
           "password",
-          "full_name"
+          "full_name",
+          "applicant_kind",
+          "id_number",
+          "phone",
+          "verification_channel"
         ],
         "properties": {
+          "applicant_kind": {
+            "$ref": "#/components/schemas/ApplicantKindDto"
+          },
           "email": {
             "type": "string"
           },
           "full_name": {
+            "type": "string"
+          },
+          "id_number": {
             "type": "string"
           },
           "locale": {
@@ -12376,6 +12755,27 @@
           "password": {
             "type": "string",
             "description": "Минимум 12 символов (TODO-ENGINEER: утвердить парольную политику)"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "verification_channel": {
+            "$ref": "#/components/schemas/VerificationChannel"
+          }
+        }
+      },
+      "RegistrationPendingDto": {
+        "type": "object",
+        "required": [
+          "email",
+          "verification_channel"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          },
+          "verification_channel": {
+            "$ref": "#/components/schemas/VerificationChannel"
           }
         }
       },
@@ -12551,6 +12951,38 @@
           "other_rule"
         ]
       },
+      "SaveSiteAnnouncementRequest": {
+        "type": "object",
+        "required": [
+          "title",
+          "body",
+          "is_published"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "is_published": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
+      "ScheduleAuctionRequest": {
+        "type": "object",
+        "required": [
+          "bid_step_percent"
+        ],
+        "properties": {
+          "bid_step_percent": {
+            "type": "string",
+            "description": "Процент от стартовой ставки; значение меньше 5 запрещено (Q-019)",
+            "example": "7.5"
+          }
+        }
+      },
       "SetActiveRequest": {
         "type": "object",
         "required": [
@@ -12585,6 +13017,42 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "SiteAnnouncementDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "body",
+          "is_published",
+          "updated_at"
+        ],
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "is_published": {
+            "type": "boolean"
+          },
+          "published_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "title": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -13080,6 +13548,37 @@
           }
         }
       },
+      "TenderDocumentDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "tender_id",
+          "version",
+          "title",
+          "published_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "published_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tender_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "TenderDto": {
         "type": "object",
         "required": [
@@ -13268,6 +13767,12 @@
           "external_session"
         ],
         "properties": {
+          "applicant_kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "email": {
             "type": "string"
           },
@@ -13282,12 +13787,24 @@
             "type": "string",
             "format": "uuid"
           },
+          "id_number": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "is_active": {
             "type": "boolean",
             "description": "Учетная запись действует. Деактивированная не входит и не работает по\nуже открытой сессии (W-07); в кабинете админа это состояние видно\nи переключается"
           },
           "locale": {
             "type": "string"
+          },
+          "phone": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "roles": {
             "type": "array",
@@ -13322,6 +13839,13 @@
             "description": "Cursor для следующей страницы; None - данных больше нет"
           }
         }
+      },
+      "VerificationChannel": {
+        "type": "string",
+        "enum": [
+          "email",
+          "sms"
+        ]
       },
       "VoteDto": {
         "type": "object",

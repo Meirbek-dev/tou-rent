@@ -19,7 +19,7 @@ use tou_db::auction_turns::{self, CircleError};
 use tou_db::auctions::{
     self, AuctionRecord, BidError, BidRecord, NewBid, ScheduleError, TransitionError,
 };
-use tou_domain::auction;
+use tou_domain::auction::{self, BidStepPercent};
 use tou_domain::money::Money;
 use tou_domain::policy::{Action, is_allowed};
 use tou_domain::role::Role;
@@ -45,7 +45,10 @@ pub struct AuctionDto {
     /// Старт = максимум первоначальных предложений допущенных (INV-062)
     #[schema(value_type = String, example = "55000")]
     pub starting_bid: Decimal,
-    /// Шаг = 5 % от стартовой ставки, зафиксирован при создании комнаты (п. 63)
+    /// Процент шага, выбранный секретарем; минимум 5 % (Q-019)
+    #[schema(value_type = String, example = "7.5")]
+    pub bid_step_percent: Decimal,
+    /// Денежный шаг, зафиксированный при создании комнаты
     #[schema(value_type = String, example = "2750")]
     pub bid_step: Decimal,
     /// Текущий максимум ленты; до первой ставки - `null`
@@ -93,6 +96,7 @@ impl AuctionDto {
             lot_purpose: record.lot_purpose,
             status: record.status,
             starting_bid: record.starting_bid,
+            bid_step_percent: record.bid_step_percent,
             bid_step: record.bid_step,
             current_max,
             min_next_bid,
@@ -194,13 +198,21 @@ pub enum RoomEvent {
     },
 }
 
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ScheduleAuctionRequest {
+    /// Процент от стартовой ставки; значение меньше 5 запрещено (Q-019)
+    #[schema(value_type = String, example = "7.5")]
+    pub bid_step_percent: Decimal,
+}
+
 /// Открытие комнаты лота (FR-601): фиксирует стартовую ставку (INV-062)
-/// и шаг (п. 63). Повторный вызов возвращает уже открытую комнату.
+/// и выбранный шаг не меньше 5 % (Q-019).
 #[utoipa::path(
     post,
     path = "/api/v1/lots/{id}/auction",
     tag = "auctions",
     params(("id" = Uuid, Path, description = "Лот")),
+    request_body = ScheduleAuctionRequest,
     responses(
         (status = 200, description = "Комната торгов", body = AuctionDto),
         (status = 404, description = "Лот не найден", body = crate::error::Problem),
@@ -211,10 +223,13 @@ pub async fn schedule_auction(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(lot_id): Path<Uuid>,
+    Json(body): Json<ScheduleAuctionRequest>,
 ) -> Result<Json<AuctionDto>, ApiError> {
     user.require(Action::AuctionManage)?;
+    let step_percent = BidStepPercent::new(body.bid_step_percent)
+        .map_err(|error| ApiError::Validation(error.to_string()))?;
 
-    let record = auctions::schedule_for_lot(&state.db, user.id(), lot_id)
+    let record = auctions::schedule_for_lot(&state.db, user.id(), lot_id, step_percent)
         .await
         .map_err(|err| match err {
             ScheduleError::LotNotFound => ApiError::NotFound,
@@ -791,6 +806,7 @@ mod tests {
             lot_purpose: "офис".into(),
             status: "scheduled".into(),
             starting_bid: "55000".parse().unwrap(),
+            bid_step_percent: "5".parse().unwrap(),
             bid_step: "2750".parse().unwrap(),
             started_at: None,
             ends_at: None,

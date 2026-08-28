@@ -18,6 +18,11 @@ pub struct UserRecord {
     pub password_hash: Option<String>,
     pub full_name: String,
     pub locale: String,
+    pub applicant_kind: Option<String>,
+    pub id_number: Option<String>,
+    pub phone: Option<String>,
+    pub email_confirmed_at: Option<time::OffsetDateTime>,
+    pub phone_confirmed_at: Option<time::OffsetDateTime>,
     pub is_active: bool,
 }
 
@@ -30,6 +35,8 @@ impl std::fmt::Debug for UserRecord {
             .field("email", &Hidden)
             .field("password_hash", &Hidden)
             .field("full_name", &Hidden)
+            .field("id_number", &Hidden)
+            .field("phone", &Hidden)
             .field("locale", &self.locale)
             .field("is_active", &self.is_active)
             .finish()
@@ -45,7 +52,9 @@ macro_rules! user_query {
         sqlx::query_as!(
             UserRecord,
             r#"SELECT id, email::text AS "email!", password_hash,
-                      full_name, locale, is_active
+                      full_name, locale,
+                      applicant_kind::text AS applicant_kind, id_number, phone,
+                      email_confirmed_at, phone_confirmed_at, is_active
                FROM core.users"# + $tail
             $(, $arg)*
         )
@@ -57,7 +66,10 @@ macro_rules! user_query_returning {
         sqlx::query_as!(
             UserRecord,
             $head + r#" RETURNING id, email::text AS "email!", password_hash,
-                                  full_name, locale, is_active"#
+                                  full_name, locale,
+                                  applicant_kind::text AS applicant_kind,
+                                  id_number, phone, email_confirmed_at,
+                                  phone_confirmed_at, is_active"#
             $(, $arg)*
         )
     };
@@ -122,36 +134,61 @@ pub async fn roles_for(
 pub enum InsertUserError {
     #[error("email уже занят")]
     EmailTaken,
+    #[error("ИИН/БИН уже зарегистрирован")]
+    IdNumberTaken,
     #[error(transparent)]
     Db(#[from] sqlx::Error),
 }
 
 /// Регистрация участника (FR-1501): пользователь + роль `participant`
-/// одной транзакцией; актор аудита - сам пользователь. Контур 1 -
-/// авто-подтверждение email (`email_confirmed_at = core.now()`).
+/// одной транзакцией; актор аудита - сам пользователь. До подтверждения
+/// выбранного канала вход закрыт.
+pub struct NewParticipant<'a> {
+    pub email: &'a str,
+    pub password_hash: &'a str,
+    pub full_name: &'a str,
+    pub locale: &'a str,
+    pub applicant_kind: &'a str,
+    pub id_number: &'a str,
+    pub phone: &'a str,
+    pub verification_channel: &'a str,
+    pub code_hash: &'a str,
+}
+
 pub async fn insert_participant(
     db: &Db,
-    email: &str,
-    password_hash: &str,
-    full_name: &str,
-    locale: &str,
+    new: NewParticipant<'_>,
 ) -> Result<UserRecord, InsertUserError> {
     let mut tx = db.begin().await?;
 
     let inserted = user_query_returning!(
-        "INSERT INTO core.users (email, password_hash, full_name, locale, email_confirmed_at)
-         VALUES ($1::citext, $2, $3, $4, core.now())
-         ON CONFLICT (email) DO NOTHING",
-        email,
-        password_hash,
-        full_name,
-        locale
+        "INSERT INTO core.users
+           (email, password_hash, full_name, locale, applicant_kind, id_number, phone)
+         VALUES ($1::citext, $2, $3, $4, $5::text::core.applicant_kind, $6, $7)
+         ON CONFLICT DO NOTHING",
+        new.email,
+        new.password_hash,
+        new.full_name,
+        new.locale,
+        new.applicant_kind,
+        new.id_number,
+        new.phone
     )
     .fetch_optional(&mut *tx)
     .await?;
 
     let Some(user) = inserted else {
-        return Err(InsertUserError::EmailTaken);
+        let email_exists = sqlx::query_scalar!(
+            r#"SELECT EXISTS(SELECT 1 FROM core.users WHERE email = $1::citext) AS "exists!""#,
+            new.email
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        return Err(if email_exists {
+            InsertUserError::EmailTaken
+        } else {
+            InsertUserError::IdNumberTaken
+        });
     };
 
     // Актор аудита для триггера role_grants (FR-1503, INV-AUDIT).
@@ -170,8 +207,94 @@ pub async fn insert_participant(
     .execute(&mut *tx)
     .await?;
 
+    sqlx::query!(
+        "INSERT INTO core.account_verifications (user_id, channel, code_hash, expires_at)
+         VALUES ($1, $2::text::core.verification_channel, $3, core.now() + interval '15 minutes')",
+        user.id,
+        new.verification_channel,
+        new.code_hash
+    )
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
     Ok(user)
+}
+
+pub struct VerificationRecord {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub code_hash: String,
+}
+
+pub async fn active_verification(
+    db: &Db,
+    email: &str,
+    channel: &str,
+) -> Result<Option<VerificationRecord>, sqlx::Error> {
+    sqlx::query_as!(
+        VerificationRecord,
+        "SELECT v.id, v.user_id, v.code_hash
+         FROM core.account_verifications v
+         JOIN core.users u ON u.id = v.user_id
+         WHERE u.email = $1::citext
+           AND v.channel = $2::text::core.verification_channel
+           AND v.consumed_at IS NULL AND v.expires_at >= core.now()
+           AND v.attempts < 5
+         ORDER BY v.created_at DESC LIMIT 1",
+        email,
+        channel
+    )
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn record_verification_failure(db: &Db, id: Uuid) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "UPDATE core.account_verifications SET attempts = attempts + 1
+         WHERE id = $1 AND consumed_at IS NULL AND attempts < 5",
+        id
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
+pub async fn confirm_verification(
+    db: &Db,
+    verification_id: Uuid,
+    user_id: Uuid,
+    channel: &str,
+) -> Result<bool, sqlx::Error> {
+    crate::with_actor(db, user_id, async |tx| {
+        let consumed = sqlx::query_scalar!(
+            "UPDATE core.account_verifications
+             SET consumed_at = core.now()
+             WHERE id = $1 AND user_id = $2 AND consumed_at IS NULL
+               AND expires_at >= core.now() AND attempts < 5
+             RETURNING id",
+            verification_id,
+            user_id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+        if consumed.is_none() {
+            return Ok(false);
+        }
+
+        sqlx::query!(
+            "UPDATE core.users
+             SET email_confirmed_at = CASE WHEN $2 = 'email' THEN core.now() ELSE email_confirmed_at END,
+                 phone_confirmed_at = CASE WHEN $2 = 'sms' THEN core.now() ELSE phone_confirmed_at END
+             WHERE id = $1",
+            user_id,
+            channel
+        )
+        .execute(&mut *tx)
+        .await?;
+        Ok(true)
+    })
+    .await
 }
 
 /// Назначение роли админом (FR-1503); изменение фиксирует audit-триггер.

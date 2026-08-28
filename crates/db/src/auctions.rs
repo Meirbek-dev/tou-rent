@@ -7,7 +7,7 @@
 
 use rust_decimal::Decimal;
 use time::OffsetDateTime;
-use tou_domain::auction::{self, Outcome};
+use tou_domain::auction::{self, BidStepPercent, Outcome};
 use tou_domain::ids::ApplicationId;
 use tou_domain::money::Money;
 use tou_domain::obligation::ObligationAction;
@@ -25,6 +25,7 @@ pub struct AuctionRecord {
     /// `scheduled` | `running` | `finished` | `cancelled` (`core.auction_status`)
     pub status: String,
     pub starting_bid: Decimal,
+    pub bid_step_percent: Decimal,
     pub bid_step: Decimal,
     pub started_at: Option<OffsetDateTime>,
     /// Момент окончания по часам сервера (FR-602); клиент только отображает
@@ -49,7 +50,8 @@ macro_rules! auction_query {
         sqlx::query_as!(
             AuctionRecord,
             r#"SELECT a.id, a.lot_id, l.tender_id, l.seq AS lot_seq, l.purpose AS lot_purpose,
-                      a.status::text AS "status!", a.starting_bid, a.bid_step,
+                      a.status::text AS "status!", a.starting_bid,
+                      a.bid_step_percent, a.bid_step,
                       a.started_at, a.ends_at, a.extended_once, a.finished_at, a.finished_early,
                       a.winner_application_id, a.winner_amount,
                       a.runner_up_application_id, a.runner_up_amount,
@@ -103,12 +105,13 @@ pub enum ScheduleError {
 }
 
 /// Комната лота (FR-601): стартовая ставка = максимум первоначальных
-/// предложений допущенных (INV-062, п. 62), шаг = 5 % от нее (п. 63) -
-/// оба значения фиксируются один раз, повторный вызов возвращает готовую.
+/// предложений допущенных (INV-062, п. 62), выбранный шаг не меньше 5 %
+/// фиксируется вместе с ней (Q-019). Повторный вызов возвращает готовую.
 pub async fn schedule_for_lot(
     db: &Db,
     actor: Uuid,
     lot_id: Uuid,
+    step_percent: BidStepPercent,
 ) -> Result<AuctionRecord, ScheduleError> {
     crate::with_actor(db, actor, async |tx| {
         // Гонка двух «открыть торги» по одному лоту сериализуется здесь,
@@ -144,13 +147,15 @@ pub async fn schedule_for_lot(
         .fetch_one(&mut *tx)
         .await?;
         let starting_bid = starting_bid.ok_or(ScheduleError::NoAdmittedBids)?;
-        let step = auction::bid_step(Money::new(starting_bid)).amount();
+        let step = auction::bid_step(Money::new(starting_bid), step_percent).amount();
 
         let id = sqlx::query_scalar!(
-            "INSERT INTO core.auctions (lot_id, starting_bid, bid_step)
-             VALUES ($1, $2, $3) RETURNING id",
+            "INSERT INTO core.auctions
+               (lot_id, starting_bid, bid_step_percent, bid_step)
+             VALUES ($1, $2, $3, $4) RETURNING id",
             lot_id,
             starting_bid,
+            step_percent.value(),
             step
         )
         .fetch_one(&mut *tx)

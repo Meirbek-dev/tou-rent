@@ -39,6 +39,7 @@ pub mod reports;
 pub mod results;
 mod rule;
 pub mod seed;
+pub mod site_announcements;
 pub mod special;
 pub mod tenders;
 pub mod users;

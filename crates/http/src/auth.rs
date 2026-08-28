@@ -1,5 +1,5 @@
 //! Аутентификация контура 1 (FR-1501): email+пароль (Argon2id),
-//! сессии в Redis (tower-sessions), авто-подтверждение email со ссылкой в лог.
+//! сессии в Redis и обязательное подтверждение Email/SMS одноразовым кодом.
 
 use argon2::Argon2;
 use argon2::password_hash::phc::PasswordHash;
@@ -23,6 +23,7 @@ use crate::ratelimit::{
 };
 use crate::request::Json;
 use crate::state::AppState;
+use crate::verification::VerificationChannel;
 
 /// Публичное представление пользователя (без password_hash - NFR-07).
 #[derive(Debug, Serialize, ToSchema)]
@@ -31,6 +32,9 @@ pub struct UserDto {
     pub email: String,
     pub full_name: String,
     pub locale: String,
+    pub applicant_kind: Option<String>,
+    pub id_number: Option<String>,
+    pub phone: Option<String>,
     /// Роли из `core.role_grants` (snake_case, см. enum `Role` домена)
     #[schema(value_type = Vec<String>, example = json!(["participant"]))]
     pub roles: Vec<Role>,
@@ -50,6 +54,9 @@ impl UserDto {
             email: record.email,
             full_name: record.full_name,
             locale: record.locale,
+            applicant_kind: record.applicant_kind,
+            id_number: record.id_number,
+            phone: record.phone,
             roles,
             is_active: record.is_active,
             external_session: false,
@@ -71,10 +78,52 @@ pub struct RegisterRequest {
     pub password: String,
     #[garde(length(chars, min = 1, max = 200))]
     pub full_name: String,
+    #[garde(skip)]
+    pub applicant_kind: crate::dto::ApplicantKindDto,
+    #[garde(custom(valid_id_number))]
+    pub id_number: String,
+    #[garde(custom(valid_phone))]
+    pub phone: String,
+    #[garde(skip)]
+    pub verification_channel: VerificationChannel,
     /// kk / ru / en
     #[garde(custom(known_locale))]
     #[serde(default = "default_locale")]
     pub locale: String,
+}
+
+fn valid_id_number(value: &str, _ctx: &()) -> garde::Result {
+    tou_domain::identity::validate_id_number(value)
+        .map_err(|error| garde::Error::new(error.to_string()))
+}
+
+fn valid_phone(value: &str, _ctx: &()) -> garde::Result {
+    tou_domain::identity::validate_phone(value)
+        .map_err(|error| garde::Error::new(error.to_string()))
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct RegistrationPendingDto {
+    pub email: String,
+    pub verification_channel: VerificationChannel,
+}
+
+#[derive(Debug, Deserialize, garde::Validate, ToSchema)]
+pub struct ConfirmRegistrationRequest {
+    #[garde(email, length(max = 254))]
+    pub email: String,
+    #[garde(skip)]
+    pub verification_channel: VerificationChannel,
+    #[garde(custom(valid_verification_code))]
+    pub code: String,
+}
+
+fn valid_verification_code(value: &str, _ctx: &()) -> garde::Result {
+    if value.len() == 8 && value.bytes().all(|byte| byte.is_ascii_digit()) {
+        Ok(())
+    } else {
+        Err(garde::Error::new("код должен состоять из 8 цифр"))
+    }
 }
 
 fn default_locale() -> String {
@@ -96,15 +145,16 @@ pub struct LoginRequest {
 }
 
 /// Регистрация участника (FR-1401 мастер - контур web; здесь API).
-/// Контур 1: email подтверждается автоматически, ссылка пишется в лог (FR-1501).
+/// Учетная запись создается неподтвержденной. Одноразовый код уходит через
+/// настроенный SMTP или SMS-шлюз; без подтверждения вход закрыт.
 #[utoipa::path(
     post,
     path = "/api/v1/auth/register",
     tag = "auth",
     request_body = RegisterRequest,
     responses(
-        (status = 201, description = "Участник зарегистрирован", body = UserDto),
-        (status = 409, description = "Email занят", body = crate::error::Problem),
+        (status = 201, description = "Код подтверждения отправлен", body = RegistrationPendingDto),
+        (status = 409, description = "Email или ИИН/БИН занят", body = crate::error::Problem),
         (status = 422, description = "Данные не прошли проверку", body = crate::error::Problem),
         (status = 429, description = "Слишком много попыток", body = crate::error::Problem),
     )
@@ -113,7 +163,7 @@ pub async fn register(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<RegisterRequest>,
-) -> Result<(StatusCode, Json<UserDto>), ApiError> {
+) -> Result<(StatusCode, Json<RegistrationPendingDto>), ApiError> {
     // Массовая регистрация с одного адреса (FR-1504). Проверка - до разбора
     // тела, чтобы стоимость отказа не нес сервер; счет - после успеха, иначе
     // ограничение било бы по опечаткам живого человека, а не по боту
@@ -132,17 +182,43 @@ pub async fn register(
     let password_hash = tokio::task::spawn_blocking(move || hash_password(&password))
         .await
         .map_err(ApiError::internal)??;
+    let code = format!("{:08}", rand::random::<u32>() % 100_000_000);
+    let code_for_hash = code.clone();
+    let code_hash = tokio::task::spawn_blocking(move || hash_password(&code_for_hash))
+        .await
+        .map_err(ApiError::internal)??;
+
+    // Сначала убеждаемся, что провайдер действительно принял сообщение.
+    // Иначе при недоступном SMTP/SMS оставалась занятая, но неподтверждаемая
+    // учетная запись, и повтор регистрации завершался конфликтом.
+    let recipient = match body.verification_channel {
+        VerificationChannel::Email => body.email.as_str(),
+        VerificationChannel::Sms => body.phone.as_str(),
+    };
+    state
+        .verification_delivery
+        .send(body.verification_channel, recipient, &code)
+        .await
+        .map_err(|error| ApiError::ProviderUnavailable(error.to_string()))?;
 
     let record = users::insert_participant(
         &state.db,
-        &body.email,
-        &password_hash,
-        &body.full_name,
-        &body.locale,
+        users::NewParticipant {
+            email: &body.email,
+            password_hash: &password_hash,
+            full_name: &body.full_name,
+            locale: &body.locale,
+            applicant_kind: body.applicant_kind.as_db(),
+            id_number: &body.id_number,
+            phone: &body.phone,
+            verification_channel: body.verification_channel.as_db(),
+            code_hash: &code_hash,
+        },
     )
     .await
     .map_err(|err| match err {
         InsertUserError::EmailTaken => ApiError::EmailTaken,
+        InsertUserError::IdNumberTaken => ApiError::IdNumberTaken,
         InsertUserError::Db(db) => db.into(),
     })?;
 
@@ -154,18 +230,59 @@ pub async fn register(
             .await;
     }
 
-    // FR-1501: доказательство подтверждения - ссылка в логе (контур 1)
-    let token: [u8; 16] = rand::random();
-    tracing::info!(
-        user_id = %record.id,
-        link = format!("/auth/confirm-email?token={}", hex(&token)),
-        "email подтвержден автоматически (контур 1); ссылка для будущего канала"
-    );
+    tracing::info!(user_id = %record.id, channel = ?body.verification_channel, "код подтверждения отправлен");
 
     Ok((
         StatusCode::CREATED,
-        Json(UserDto::new(record, vec![Role::Participant])),
+        Json(RegistrationPendingDto {
+            email: record.email,
+            verification_channel: body.verification_channel,
+        }),
     ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/confirm-registration",
+    tag = "auth",
+    request_body = ConfirmRegistrationRequest,
+    responses(
+        (status = 204, description = "Канал подтвержден, вход разрешен"),
+        (status = 422, description = "Код неверен или истек", body = crate::error::Problem),
+    )
+)]
+pub async fn confirm_registration(
+    State(state): State<AppState>,
+    Json(body): Json<ConfirmRegistrationRequest>,
+) -> Result<StatusCode, ApiError> {
+    body.validate()
+        .map_err(|report| ApiError::Validation(report.to_string()))?;
+    let verification =
+        users::active_verification(&state.db, &body.email, body.verification_channel.as_db())
+            .await?
+            .ok_or(ApiError::VerificationFailed)?;
+
+    let hash = verification.code_hash.clone();
+    let code = body.code.clone();
+    let valid = tokio::task::spawn_blocking(move || verify_password(&code, Some(&hash)))
+        .await
+        .map_err(ApiError::internal)?;
+    if !valid {
+        users::record_verification_failure(&state.db, verification.id).await?;
+        return Err(ApiError::VerificationFailed);
+    }
+
+    let confirmed = users::confirm_verification(
+        &state.db,
+        verification.id,
+        verification.user_id,
+        body.verification_channel.as_db(),
+    )
+    .await?;
+    if !confirmed {
+        return Err(ApiError::VerificationFailed);
+    }
+    Ok(StatusCode::NO_CONTENT)
 }
 
 /// Вход по email и паролю. Успех: сессионная cookie (httpOnly, SameSite=Lax)
@@ -262,7 +379,10 @@ pub async fn login(
 /// случая доходят до [`verify_password`] одинаково.
 fn admitted_credentials(user: Option<UserRecord>) -> (Option<UserRecord>, Option<String>) {
     match user {
-        Some(record) if record.is_active => {
+        Some(record)
+            if record.is_active
+                && (record.email_confirmed_at.is_some() || record.phone_confirmed_at.is_some()) =>
+        {
             let hash = record.password_hash.clone();
             (Some(record), hash)
         }
@@ -460,16 +580,6 @@ fn verify_password(password: &str, stored_hash: Option<&str>) -> bool {
         && stored_hash.is_some()
 }
 
-fn hex(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .fold(String::with_capacity(bytes.len() * 2), |mut acc, b| {
-            use std::fmt::Write as _;
-            let _ = write!(acc, "{b:02x}");
-            acc
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -481,6 +591,11 @@ mod tests {
             password_hash: password_hash.map(str::to_owned),
             full_name: "Проверочная запись".to_owned(),
             locale: "ru".to_owned(),
+            applicant_kind: None,
+            id_number: None,
+            phone: None,
+            email_confirmed_at: Some(time::OffsetDateTime::UNIX_EPOCH),
+            phone_confirmed_at: None,
             is_active,
         }
     }

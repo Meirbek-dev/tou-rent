@@ -50,7 +50,11 @@ pub const SESSION_CSRF_KEY: &str = "csrf_token";
 /// который отсекает межсайтовый POST. TODO-ENGINEER: если понадобится закрыть
 /// и его, это отдельная задача с изменением контракта - точка выдачи токена
 /// до входа и обязательный GET перед POST в клиенте.
-const CSRF_EXEMPT: &[&str] = &["/api/v1/auth/login", "/api/v1/auth/register"];
+const CSRF_EXEMPT: &[&str] = &[
+    "/api/v1/auth/login",
+    "/api/v1/auth/register",
+    "/api/v1/auth/confirm-registration",
+];
 
 /// Выдать токен: одно и то же значение уходит и в сессию, и в cookie.
 ///

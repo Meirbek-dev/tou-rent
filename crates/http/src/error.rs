@@ -25,6 +25,8 @@ pub enum ErrorCode {
     Forbidden,
     InvalidCredentials,
     EmailTaken,
+    IdNumberTaken,
+    VerificationFailed,
     ValidationFailed,
     CsrfRejected,
     NotFound,
@@ -103,6 +105,10 @@ pub enum ApiError {
     InvalidCredentials,
     #[error("email уже зарегистрирован")]
     EmailTaken,
+    #[error("ИИН/БИН уже зарегистрирован")]
+    IdNumberTaken,
+    #[error("код подтверждения неверен или истёк")]
+    VerificationFailed,
     #[error("данные не прошли проверку")]
     Validation(String),
     #[error("CSRF-токен отсутствует или не совпадает")]
@@ -158,6 +164,8 @@ impl ApiError {
             ApiError::Forbidden => ErrorCode::Forbidden,
             ApiError::InvalidCredentials => ErrorCode::InvalidCredentials,
             ApiError::EmailTaken => ErrorCode::EmailTaken,
+            ApiError::IdNumberTaken => ErrorCode::IdNumberTaken,
+            ApiError::VerificationFailed => ErrorCode::VerificationFailed,
             ApiError::Validation(_) => ErrorCode::ValidationFailed,
             ApiError::CsrfRejected => ErrorCode::CsrfRejected,
             ApiError::NotFound => ErrorCode::NotFound,
@@ -178,8 +186,12 @@ impl ApiError {
             ApiError::UnsupportedMediaType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ApiError::Unauthorized | ApiError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             ApiError::Forbidden | ApiError::CsrfRejected => StatusCode::FORBIDDEN,
-            ApiError::EmailTaken | ApiError::IdempotencyInFlight => StatusCode::CONFLICT,
-            ApiError::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
+            ApiError::EmailTaken | ApiError::IdNumberTaken | ApiError::IdempotencyInFlight => {
+                StatusCode::CONFLICT
+            }
+            ApiError::Validation(_) | ApiError::VerificationFailed => {
+                StatusCode::UNPROCESSABLE_ENTITY
+            }
             ApiError::NotFound => StatusCode::NOT_FOUND,
             ApiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             ApiError::RuleViolation(_) => StatusCode::CONFLICT,

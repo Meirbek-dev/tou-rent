@@ -6,7 +6,11 @@ import { EmptyState } from "@/components/empty-state"
 import { PublicShell } from "@/components/public-shell"
 import { TenderListItem } from "@/components/tender-list-item"
 import { buttonVariants } from "@/components/ui/button"
-import { objectsPageQuery, tendersPageQuery } from "@/lib/api"
+import {
+  objectsPageQuery,
+  siteAnnouncementQuery,
+  tendersPageQuery,
+} from "@/lib/api"
 import { howToSteps } from "@/lib/how-to-steps"
 import { landPlotsQuery } from "@/lib/land"
 import { cn } from "@/lib/utils"
@@ -16,12 +20,13 @@ export const Route = createFileRoute("/")({
   loader: async ({ context }) => {
     // Цифры витрины считаются из тех же выборок, что и разделы портала:
     // отдельного счетчика в api нет, а выдумывать его ради заголовка нельзя
-    const [tenders, objects, plots] = await Promise.all([
+    const [tenders, objects, plots, announcement] = await Promise.all([
       context.queryClient.ensureQueryData(tendersPageQuery()),
       context.queryClient.ensureQueryData(objectsPageQuery({ status: "free" })),
       context.queryClient.ensureQueryData(landPlotsQuery),
+      context.queryClient.ensureQueryData(siteAnnouncementQuery),
     ])
-    return { tenders, objects, plots }
+    return { tenders, objects, plots, announcement }
   },
   component: Home,
 })
@@ -82,7 +87,7 @@ function EntryTile({
 }
 
 function Home() {
-  const { tenders, objects, plots } = Route.useLoaderData()
+  const { tenders, objects, plots, announcement } = Route.useLoaderData()
   const latest = tenders.items.slice(0, LATEST_COUNT)
   const accepting = tenders.items.filter(
     (tender) => tender.status === "accepting"
@@ -150,6 +155,25 @@ function Home() {
           </section>
         </div>
       </section>
+
+      {announcement !== null && (
+        <section
+          aria-labelledby="home-site-announcement"
+          className={cn(containerClass, "pb-10")}
+        >
+          <article className="flex flex-col gap-4 rounded-xl border bg-card p-6 shadow-xs sm:p-8">
+            <h2
+              id="home-site-announcement"
+              className="text-xl font-semibold tracking-tight"
+            >
+              {announcement.title}
+            </h2>
+            <p className="text-sm leading-7 whitespace-pre-line text-muted-foreground sm:text-base">
+              {announcement.body}
+            </p>
+          </article>
+        </section>
+      )}
 
       {/* 2. Полоса принадлежности: где публикуются юридически значимые факты */}
       <div className="border-y bg-muted py-5">

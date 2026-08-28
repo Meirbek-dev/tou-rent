@@ -10,16 +10,22 @@ use tou_domain::auction::DEFAULT_DURATION_MINUTES;
 use tou_ports::notifications::{NotificationEnvelope, NotificationPublisher};
 use uuid::Uuid;
 
+use crate::file_crypto::FileCipher;
 use crate::idempotency::IdempotencyStore;
 use crate::oidc::OidcProvider;
 use crate::ratelimit::RateLimiter;
 use crate::realtime::{Bus, BusMessage};
 use crate::storage::Storage;
+use crate::verification::VerificationDelivery;
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: Db,
     pub storage: Storage,
+    /// Мастер шифрования не покидает процесс; в состоянии хранится только
+    /// шифратор, выводящий отдельный AES-256 ключ для каждой заявки.
+    pub file_cipher: Arc<FileCipher>,
+    pub verification_delivery: Arc<VerificationDelivery>,
     pub notifier: Notifier,
     pub auction_hub: AuctionHub,
     /// Счетчик попыток входа и обращений к дорогим маршрутам (NFR-07);
@@ -45,10 +51,17 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(db: Db, storage: Storage) -> Self {
+    pub fn new(
+        db: Db,
+        storage: Storage,
+        file_cipher: Arc<FileCipher>,
+        verification_delivery: Arc<VerificationDelivery>,
+    ) -> Self {
         Self {
             db,
             storage,
+            file_cipher,
+            verification_delivery,
             notifier: Notifier::new(),
             auction_hub: AuctionHub::default(),
             rate_limit: RateLimiter::default(),

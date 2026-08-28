@@ -126,7 +126,9 @@ function CreateObjectDialog() {
 
   const [kind, setKind] = useState<ObjectKind>("premises")
   const [name, setName] = useState("")
+  const [nameKk, setNameKk] = useState("")
   const [address, setAddress] = useState("")
+  const [addressKk, setAddressKk] = useState("")
   const [area, setArea] = useState("")
   const [floorPart, setFloorPart] = useState("")
 
@@ -136,7 +138,9 @@ function CreateObjectDialog() {
         body: {
           kind,
           name,
+          name_kk: nameKk,
           address,
+          address_kk: addressKk,
           area_m2: area,
           floor_part: floorPart === "" ? null : floorPart,
         },
@@ -148,7 +152,9 @@ function CreateObjectDialog() {
     },
     onSuccess: async () => {
       setName("")
+      setNameKk("")
       setAddress("")
+      setAddressKk("")
       setArea("")
       setFloorPart("")
       setOpen(false)
@@ -190,7 +196,7 @@ function CreateObjectDialog() {
             </NativeSelect>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="obj-name">{m.object_name_label()}</Label>
+            <Label htmlFor="obj-name">{m.object_name_ru_label()}</Label>
             <Input
               id="obj-name"
               required
@@ -199,12 +205,32 @@ function CreateObjectDialog() {
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="obj-address">{m.object_address_label()}</Label>
+            <Label htmlFor="obj-name-kk">{m.object_name_kk_label()}</Label>
+            <Input
+              id="obj-name-kk"
+              required
+              value={nameKk}
+              onChange={(event) => setNameKk(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="obj-address">{m.object_address_ru_label()}</Label>
             <Input
               id="obj-address"
               required
               value={address}
               onChange={(event) => setAddress(event.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="obj-address-kk">
+              {m.object_address_kk_label()}
+            </Label>
+            <Input
+              id="obj-address-kk"
+              required
+              value={addressKk}
+              onChange={(event) => setAddressKk(event.target.value)}
             />
           </div>
           <div className="flex flex-wrap gap-3">

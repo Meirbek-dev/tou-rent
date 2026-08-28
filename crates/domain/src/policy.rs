@@ -120,6 +120,8 @@ pub enum Action {
     // М15: администрирование
     UserManage,
     RoleGrant,
+    /// Редактирование, публикация и скрытие объявления на главной странице.
+    SiteAnnouncementManage,
     RefdataManage,
     /// Чтение закрытых перечней из Правил (основания отклонения п. 52,
     /// основания возврата п. 26, категории особого порядка п. 87, приложения
@@ -136,7 +138,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 37] = [
+    pub const ALL: [Action; 38] = [
         Action::ObjectRead,
         Action::ObjectManage,
         Action::RateCalculate,
@@ -171,6 +173,7 @@ impl Action {
         Action::NotificationReadOwn,
         Action::UserManage,
         Action::RoleGrant,
+        Action::SiteAnnouncementManage,
         Action::RefdataManage,
         Action::RefdataRead,
         Action::AuditRead,
@@ -382,6 +385,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::TenderRead
                 | A::UserManage
                 | A::RoleGrant
+                | A::SiteAnnouncementManage
                 | A::RefdataManage
                 | A::CommissionManage
                 | A::AuditRead
@@ -475,6 +479,16 @@ mod tests {
     fn only_admin_grants_roles() {
         for role in Role::ALL {
             assert_eq!(is_allowed(role, Action::RoleGrant), role == Role::Admin);
+        }
+    }
+
+    #[test]
+    fn only_admin_manages_site_announcement() {
+        for role in Role::ALL {
+            assert_eq!(
+                is_allowed(role, Action::SiteAnnouncementManage),
+                role == Role::Admin
+            );
         }
     }
 

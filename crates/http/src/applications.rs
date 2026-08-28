@@ -29,7 +29,7 @@ use uuid::Uuid;
 use crate::dto::{ApplicantKindDto, ApplicationStatusDto, JournalEntryKindDto};
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
-use crate::request::{Json, Multipart, Path};
+use crate::request::{Json, Multipart, Path, Query};
 use crate::state::AppState;
 use crate::storage;
 use crate::upload;
@@ -38,6 +38,7 @@ use tou_domain::rule::RuleViolation;
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ApplicationFileDto {
     pub id: Uuid,
+    pub document_kind: ApplicationDocumentKindDto,
     pub filename: String,
     pub content_type: String,
     pub size_bytes: i64,
@@ -46,16 +47,70 @@ pub struct ApplicationFileDto {
     pub uploaded_at: OffsetDateTime,
 }
 
-impl From<FileRecord> for ApplicationFileDto {
-    fn from(r: FileRecord) -> Self {
-        Self {
+impl ApplicationFileDto {
+    fn from_record(r: FileRecord) -> Result<Self, ApiError> {
+        Ok(Self {
             id: r.id,
+            document_kind: ApplicationDocumentKindDto::from_db(&r.document_kind)?,
             filename: r.filename,
             content_type: r.content_type,
             size_bytes: r.size_bytes,
             uploaded_at: r.uploaded_at,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ApplicationDocumentKindDto {
+    ApplicationForm,
+    RegistrationCertificate,
+    TaxClearance,
+    GuaranteePayment,
+    QualificationDocuments,
+    Legacy,
+}
+
+impl ApplicationDocumentKindDto {
+    fn as_db(self) -> &'static str {
+        match self {
+            Self::ApplicationForm => "application_form",
+            Self::RegistrationCertificate => "registration_certificate",
+            Self::TaxClearance => "tax_clearance",
+            Self::GuaranteePayment => "guarantee_payment",
+            Self::QualificationDocuments => "qualification_documents",
+            Self::Legacy => "legacy",
         }
     }
+
+    fn from_db(raw: &str) -> Result<Self, ApiError> {
+        match raw {
+            "application_form" => Ok(Self::ApplicationForm),
+            "registration_certificate" => Ok(Self::RegistrationCertificate),
+            "tax_clearance" => Ok(Self::TaxClearance),
+            "guarantee_payment" => Ok(Self::GuaranteePayment),
+            "qualification_documents" => Ok(Self::QualificationDocuments),
+            "legacy" => Ok(Self::Legacy),
+            other => Err(ApiError::internal(std::io::Error::other(format!(
+                "unknown application_document_kind: {other}"
+            )))),
+        }
+    }
+
+    fn required(self) -> Result<&'static str, ApiError> {
+        match self {
+            Self::Legacy => Err(ApiError::Validation(
+                "тип legacy зарезервирован для файлов, загруженных до введения обязательного пакета"
+                    .to_owned(),
+            )),
+            _ => Ok(self.as_db()),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UploadApplicationFileQuery {
+    pub document_kind: ApplicationDocumentKindDto,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -84,6 +139,8 @@ pub struct ApplicationDto {
     #[schema(value_type = Option<String>, example = "36000.00")]
     pub price_amount: Option<Decimal>,
     pub files: Vec<ApplicationFileDto>,
+    /// Все пять обязательных PDF загружены в AES-256-конвертах.
+    pub package_complete: bool,
 }
 
 impl ApplicationDto {
@@ -110,7 +167,11 @@ impl ApplicationDto {
             withdrawn_at: r.withdrawn_at,
             rejection_reason: r.rejection_reason,
             price_amount: r.price_amount,
-            files: files.into_iter().map(ApplicationFileDto::from).collect(),
+            files: files
+                .into_iter()
+                .map(ApplicationFileDto::from_record)
+                .collect::<Result<Vec<_>, _>>()?,
+            package_complete: r.package_complete,
         })
     }
 }
@@ -296,6 +357,8 @@ pub async fn withdraw_application(
     path = "/api/v1/applications/{id}/files",
     tag = "applications",
     params(("id" = Uuid, Path, description = "Заявка")),
+    params(("document_kind" = ApplicationDocumentKindDto, Query,
+        description = "Тип обязательного документа")),
     request_body(content = Vec<u8>, content_type = "multipart/form-data",
         description = "Часть `file` с вложением"),
     responses(
@@ -308,6 +371,7 @@ pub async fn upload_file(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
+    Query(query): Query<UploadApplicationFileQuery>,
     mut multipart: Multipart,
 ) -> Result<(StatusCode, Json<ApplicationFileDto>), ApiError> {
     user.require(Action::ApplicationSubmit)?;
@@ -322,9 +386,19 @@ pub async fn upload_file(
     // засорить WORM.
     ensure_open_own_application(&state, &user, id).await?;
 
+    let document_kind = query.document_kind.required()?;
     let file =
         upload::take_file(&mut multipart, "file", "attachment", upload::MAX_FILE_BYTES).await?;
+    if file.content_type != "application/pdf" {
+        return Err(ApiError::UnsupportedMediaType(
+            "пакет заявки принимается только в формате PDF".to_owned(),
+        ));
+    }
     let size_bytes = i64::try_from(file.bytes.len()).map_err(ApiError::internal)?;
+    let encrypted = state
+        .file_cipher
+        .encrypt(id, &file.bytes)
+        .map_err(ApiError::internal)?;
 
     // Ключ не зависит от id строки метаданных: объект кладется до вставки.
     // Компенсации при отказе БД нет - бакет досье под Object Lock, и права
@@ -334,23 +408,32 @@ pub async fn upload_file(
 
     state
         .storage
-        .put(&object_path, PutPayload::from_bytes(file.bytes))
+        .put(
+            &object_path,
+            PutPayload::from_bytes(axum::body::Bytes::from(encrypted)),
+        )
         .await
         .map_err(ApiError::internal)?;
 
     let inserted = applications::add_file(
         &state.db,
         user.id(),
-        id,
-        &file_key,
-        &file.filename,
-        file.content_type,
-        size_bytes,
+        applications::NewApplicationFile {
+            application_id: id,
+            file_key: &file_key,
+            filename: &file.filename,
+            document_kind,
+            content_type: file.content_type,
+            size_bytes,
+        },
     )
     .await?;
 
     match inserted {
-        Some(record) => Ok((StatusCode::CREATED, Json(ApplicationFileDto::from(record)))),
+        Some(record) => Ok((
+            StatusCode::CREATED,
+            Json(ApplicationFileDto::from_record(record)?),
+        )),
         None => {
             // Метаданные не записаны - объект остается в бакете сиротой.
             // Это безвредно: файлы выдаются только по строке метаданных,
@@ -410,8 +493,8 @@ async fn ensure_open_own_application(
     Ok(())
 }
 
-/// Скачивание вложения: владелец - всегда; secretary/commission - после
-/// вскрытия (FR-403: состав заявки запечатан до заседания).
+/// Скачивание вложения после вскрытия. До назначенного события AES-ключ не
+/// применяется ни для владельца, ни для администратора или комиссии.
 #[utoipa::path(
     get,
     path = "/api/v1/applications/{id}/files/{file_id}",
@@ -439,16 +522,15 @@ pub async fn download_file(
         .await?
         .ok_or(ApiError::NotFound)?;
 
-    let is_owner = record.participant_id == user.id();
-    if !is_owner {
-        // FR-403: не-владельцу состав заявки доступен только после вскрытия
+    let tender = tenders::get(&state.db, record.tender_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if tender.opened_at.is_none() {
+        return Err(ApiError::NotFound);
+    }
+
+    if record.participant_id != user.id() {
         user.require(Action::ApplicationReadAll)?;
-        let tender = tenders::get(&state.db, record.tender_id)
-            .await?
-            .ok_or(ApiError::NotFound)?;
-        if tender.opened_at.is_none() {
-            return Err(ApiError::NotFound);
-        }
     }
 
     let object = state
@@ -456,7 +538,19 @@ pub async fn download_file(
         .get(&ObjectPath::from(file.file_key.as_str()))
         .await
         .map_err(ApiError::internal)?;
-    let bytes = object.bytes().await.map_err(ApiError::internal)?;
+    let stored = object.bytes().await.map_err(ApiError::internal)?;
+    let bytes = match file.encryption_version {
+        0 => stored.to_vec(),
+        1 => state
+            .file_cipher
+            .decrypt(id, &stored)
+            .map_err(ApiError::internal)?,
+        version => {
+            return Err(ApiError::internal(std::io::Error::other(format!(
+                "unsupported application file encryption version: {version}"
+            ))));
+        }
+    };
 
     Ok((
         [
@@ -469,7 +563,7 @@ pub async fn download_file(
                 ),
             ),
         ],
-        bytes.to_vec(),
+        bytes,
     )
         .into_response())
 }

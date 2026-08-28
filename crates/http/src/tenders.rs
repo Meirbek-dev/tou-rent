@@ -5,12 +5,17 @@
 use std::collections::HashMap;
 
 use axum::extract::State;
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use garde::Validate as _;
+use object_store::path::Path as ObjectPath;
+use object_store::{ObjectStoreExt as _, PutPayload};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
-use tou_db::tenders::{self, DraftFields, LotRecord, NewLot, TenderRecord, TransitionError};
+use tou_db::tenders::{
+    self, DraftFields, LotRecord, NewLot, TenderDocRecord, TenderRecord, TransitionError,
+};
 use tou_domain::policy::Action;
 use tou_domain::rates::RateUnit;
 use tou_domain::tender::TenderStatus;
@@ -21,8 +26,9 @@ use crate::dto::TenderStatusDto;
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::rates::{RateOptionsDto, build_calculation, build_hourly_calculation};
-use crate::request::{Json, Path, Query};
+use crate::request::{Json, Multipart, Path, Query};
 use crate::state::AppState;
+use crate::upload;
 use tou_domain::rule::RuleViolation;
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -32,6 +38,7 @@ pub struct LotDto {
     pub object_id: Uuid,
     /// Целевое назначение (Прил. 1 табл. 2)
     pub purpose: String,
+    pub purpose_kk: String,
     pub lease_months: i32,
     /// Месячная базовая ставка - снимок FR-202
     #[schema(value_type = String, example = "21000")]
@@ -61,6 +68,7 @@ impl From<LotRecord> for LotDto {
             seq: r.seq,
             object_id: r.object_id,
             purpose: r.purpose,
+            purpose_kk: r.purpose_kk,
             lease_months: r.lease_months,
             base_rate_monthly: r.base_rate_monthly,
             guarantee_fee: r.guarantee_fee,
@@ -138,6 +146,8 @@ pub struct CreateLotRequest {
     pub object_id: Uuid,
     #[garde(length(chars, min = 1, max = 500))]
     pub purpose: String,
+    #[garde(length(chars, min = 1, max = 500))]
+    pub purpose_kk: String,
     #[garde(range(min = 1, max = 240))]
     pub lease_months: i32,
     /// Опции коэффициентов Прил. 4; снимок ставки считает сервер (FR-202)
@@ -363,6 +373,7 @@ pub async fn create_tender(
         .map(|(lot, unit, base_rate, fee, calc_json)| NewLot {
             object_id: lot.object_id,
             purpose: &lot.purpose,
+            purpose_kk: &lot.purpose_kk,
             lease_months: lot.lease_months,
             base_rate_monthly: *base_rate,
             guarantee_fee: *fee, // FR-206; для почасового лота пересчитает БД
@@ -381,6 +392,169 @@ pub async fn create_tender(
         StatusCode::CREATED,
         Json(TenderDto::from_record(record, lots)?),
     ))
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TenderDocumentDto {
+    pub id: Uuid,
+    pub tender_id: Uuid,
+    pub version: i32,
+    pub title: String,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub published_at: OffsetDateTime,
+}
+
+impl From<TenderDocRecord> for TenderDocumentDto {
+    fn from(record: TenderDocRecord) -> Self {
+        Self {
+            id: record.id,
+            tender_id: record.tender_id,
+            version: record.version,
+            title: record.title,
+            published_at: record.published_at,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct UploadTenderDocumentQuery {
+    pub title: String,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenders/{id}/documents",
+    tag = "tenders",
+    params(("id" = Uuid, Path, description = "Тендер")),
+    responses((status = 200, description = "Опубликованные PDF-документы", body = [TenderDocumentDto]))
+)]
+pub async fn list_documents(
+    user: Option<CurrentUser>,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<TenderDocumentDto>>, ApiError> {
+    let tender = tenders::get(&state.db, id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if tender.status == TenderStatus::Draft.as_str()
+        && !user
+            .as_ref()
+            .is_some_and(|current| current.require(Action::TenderManage).is_ok())
+    {
+        return Err(ApiError::NotFound);
+    }
+    Ok(Json(
+        tenders::documents(&state.db, id)
+            .await?
+            .into_iter()
+            .map(TenderDocumentDto::from)
+            .collect(),
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenders/{id}/documents",
+    tag = "tenders",
+    params(("id" = Uuid, Path, description = "Тендер"), UploadTenderDocumentQuery),
+    request_body(content = Vec<u8>, content_type = "multipart/form-data"),
+    responses((status = 201, description = "Документ добавлен", body = TenderDocumentDto))
+)]
+pub async fn upload_document(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<UploadTenderDocumentQuery>,
+    mut multipart: Multipart,
+) -> Result<(StatusCode, Json<TenderDocumentDto>), ApiError> {
+    user.require(Action::TenderManage)?;
+    let title = query.title.trim();
+    if title.is_empty() || title.chars().count() > 300 {
+        return Err(ApiError::Validation(
+            "название документа должно содержать от 1 до 300 символов".to_owned(),
+        ));
+    }
+    let tender = tenders::get(&state.db, id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if tender.status != TenderStatus::Draft.as_str() {
+        return Err(ApiError::rule(
+            RuleViolation::TenderDocumentationChange,
+            "документацию можно загрузить только до публикации тендера",
+        ));
+    }
+    let file = upload::take_file(
+        &mut multipart,
+        "file",
+        "tender-document.pdf",
+        upload::MAX_FILE_BYTES,
+    )
+    .await?;
+    if file.content_type != "application/pdf" {
+        return Err(ApiError::UnsupportedMediaType(
+            "тендерная документация принимается только в формате PDF".to_owned(),
+        ));
+    }
+    let file_key = format!("tenders/{id}/documents/{}.pdf", Uuid::now_v7());
+    state
+        .storage
+        .put(
+            &ObjectPath::from(file_key.as_str()),
+            PutPayload::from_bytes(file.bytes),
+        )
+        .await
+        .map_err(ApiError::internal)?;
+    let record = tenders::add_document(&state.db, user.id(), id, title, &file_key)
+        .await?
+        .ok_or_else(|| {
+            ApiError::rule(
+                RuleViolation::TenderDocumentationChange,
+                "тендер уже опубликован; состав документации зафиксирован",
+            )
+        })?;
+    Ok((StatusCode::CREATED, Json(record.into())))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenders/{id}/documents/{document_id}",
+    tag = "tenders",
+    params(("id" = Uuid, Path, description = "Тендер"), ("document_id" = Uuid, Path, description = "Документ")),
+    responses((status = 200, description = "Тендерный PDF", content_type = "application/pdf"))
+)]
+pub async fn download_document(
+    State(state): State<AppState>,
+    Path((id, document_id)): Path<(Uuid, Uuid)>,
+) -> Result<Response, ApiError> {
+    tenders::get(&state.db, id)
+        .await?
+        .filter(|record| record.status != TenderStatus::Draft.as_str())
+        .ok_or(ApiError::NotFound)?;
+    let record = tenders::document(&state.db, document_id)
+        .await?
+        .filter(|record| record.tender_id == id)
+        .ok_or(ApiError::NotFound)?;
+    let object = state
+        .storage
+        .get(&ObjectPath::from(record.file_key.as_str()))
+        .await
+        .map_err(ApiError::internal)?;
+    let bytes = object.bytes().await.map_err(ApiError::internal)?;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/pdf".to_owned()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!(
+                    "inline; filename=\"tender-document-v{}.pdf\"",
+                    record.version
+                ),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 
 /// Правка черновика (даты, Zoom-ссылка).

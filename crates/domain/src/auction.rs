@@ -16,8 +16,29 @@ use thiserror::Error;
 use crate::ids::ApplicationId;
 use crate::money::Money;
 
-/// Шаг торгов - 5 % от стартовой ставки (п. 63).
-pub const BID_STEP_PERCENT: Decimal = dec!(5);
+/// Минимальный шаг торгов по решению заказчика Q-019.
+pub const MIN_BID_STEP_PERCENT: Decimal = dec!(5);
+
+/// Процент шага, который секретарь фиксирует до открытия комнаты.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BidStepPercent(Decimal);
+
+impl BidStepPercent {
+    pub fn new(value: Decimal) -> Result<Self, InvalidBidStepPercent> {
+        if value < MIN_BID_STEP_PERCENT {
+            return Err(InvalidBidStepPercent);
+        }
+        Ok(Self(value))
+    }
+
+    pub const fn value(self) -> Decimal {
+        self.0
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[error("шаг торгов должен быть не меньше 5 %")]
+pub struct InvalidBidStepPercent;
 
 /// Длительность торгов по умолчанию - 60 минут от объявления старта (п. 66).
 pub const DEFAULT_DURATION_MINUTES: i64 = 60;
@@ -25,11 +46,11 @@ pub const DEFAULT_DURATION_MINUTES: i64 = 60;
 /// Единственное продление - ровно 15 минут (п. 68, INV-066).
 pub const EXTENSION_MINUTES: i64 = 15;
 
-/// Шаг торгов: 5 % от стартовой ставки, округленные по FR-204 (п. 140–143),
+/// Шаг торгов: выбранный процент от стартовой ставки, округленный по FR-204,
 /// но не меньше 1 тенге - иначе на копеечном старте шаг выродится в ноль
 /// и `core.auctions.bid_step > 0` отклонит аукцион.
-pub fn bid_step(starting_bid: Money) -> Money {
-    let raw = Money::new(starting_bid.amount() * BID_STEP_PERCENT / dec!(100)).round_to_tenge();
+pub fn bid_step(starting_bid: Money, percent: BidStepPercent) -> Money {
+    let raw = Money::new(starting_bid.amount() * percent.value() / dec!(100)).round_to_tenge();
     if raw.amount() < dec!(1) {
         Money::new(dec!(1))
     } else {
@@ -151,27 +172,34 @@ mod tests {
     }
 
     #[test]
-    fn step_is_five_percent_of_start() {
-        // п. 63: 55 000 → 2 750
-        assert_eq!(bid_step(money("55000")), money("2750"));
+    fn step_accepts_configured_percent() {
+        let percent = BidStepPercent::new(dec!(7.5)).unwrap();
+        assert_eq!(bid_step(money("55000"), percent), money("4125"));
+    }
+
+    #[test]
+    fn step_rejects_percent_below_five() {
+        assert_eq!(BidStepPercent::new(dec!(4.99)), Err(InvalidBidStepPercent));
     }
 
     #[test]
     fn step_rounds_to_whole_tenge_by_fr204() {
         // 5 % от 40 009 = 2 000,45 → 2 000; от 40 011 = 2 000,55 → 2 001
-        assert_eq!(bid_step(money("40009")), money("2000"));
-        assert_eq!(bid_step(money("40011")), money("2001"));
+        let percent = BidStepPercent::new(dec!(5)).unwrap();
+        assert_eq!(bid_step(money("40009"), percent), money("2000"));
+        assert_eq!(bid_step(money("40011"), percent), money("2001"));
     }
 
     #[test]
     fn step_never_degenerates_to_zero() {
-        assert_eq!(bid_step(money("5")), money("1"));
+        let percent = BidStepPercent::new(dec!(5)).unwrap();
+        assert_eq!(bid_step(money("5"), percent), money("1"));
     }
 
     #[test]
     fn first_bid_must_exceed_start_by_step() {
         let start = money("55000");
-        let step = bid_step(start);
+        let step = bid_step(start, BidStepPercent::new(dec!(5)).unwrap());
         assert_eq!(min_next_bid(start, None, step), money("57750"));
         assert_eq!(
             accepts(start, None, step, money("57749")),
@@ -183,7 +211,7 @@ mod tests {
     #[test]
     fn next_bid_counts_from_current_maximum() {
         let start = money("55000");
-        let step = bid_step(start);
+        let step = bid_step(start, BidStepPercent::new(dec!(5)).unwrap());
         assert_eq!(
             min_next_bid(start, Some(money("57750")), step),
             money("60500")
@@ -233,7 +261,7 @@ mod tests {
         let mut rng = Xorshift::new(0x2545_F491_4F6C_DD1D_u64);
         for case in 0..2_000_u32 {
             let start = money(&format!("{}", 1_000 + u64::from(case) * 37));
-            let step = bid_step(start);
+            let step = bid_step(start, BidStepPercent::new(dec!(5)).unwrap());
             let participants = 1 + rng.next_below(4); // 1..4 заявок
             let mut ledger: Vec<Bid> = Vec::new();
             let mut current_max: Option<Money> = None;

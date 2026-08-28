@@ -2,6 +2,7 @@ import { SearchXIcon } from "lucide-react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 
 import { m } from "#/paraglide/messages"
+import { getLocale } from "#/paraglide/runtime"
 import { EmptyState } from "@/components/empty-state"
 import {
   ObjectStatusBadge,
@@ -64,11 +65,14 @@ function Fact({
 }
 
 function ObjectCard({ object }: { object: ObjectDto }) {
+  const kazakh = getLocale() === "kk"
   return (
     <li className="grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card shadow-xs">
       <div className="flex flex-col gap-3 p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-base font-semibold">{object.name}</h2>
+          <h2 className="text-base font-semibold">
+            {kazakh ? object.name_kk : object.name}
+          </h2>
           <ObjectStatusBadge status={object.status} />
         </div>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
@@ -81,7 +85,11 @@ function ObjectCard({ object }: { object: ObjectDto }) {
             value={m.object_area_value({ area: trimZeros(object.area_m2) })}
             numeric
           />
-          <Fact label={m.object_address_label()} value={object.address} wide />
+          <Fact
+            label={m.object_address_label()}
+            value={kazakh ? object.address_kk : object.address}
+            wide
+          />
           {object.floor_part != null && object.floor_part !== "" && (
             <Fact label={m.object_floor_label()} value={object.floor_part} />
           )}

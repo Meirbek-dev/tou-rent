@@ -56,10 +56,13 @@ async function mutate<T>(
   return data
 }
 
-/** Открытие комнаты лота секретарем (INV-062: старт = max предложений). */
-export const scheduleAuction = (lotId: string) =>
+/** Открытие комнаты: старт = max предложений, процент шага не меньше 5. */
+export const scheduleAuction = (lotId: string, bidStepPercent: string) =>
   mutate(
-    api.POST("/api/v1/lots/{id}/auction", { params: { path: { id: lotId } } })
+    api.POST("/api/v1/lots/{id}/auction", {
+      params: { path: { id: lotId } },
+      body: { bid_step_percent: bidStepPercent },
+    })
   )
 
 /** Объявление старта председателем - сервер включает таймер (FR-602). */

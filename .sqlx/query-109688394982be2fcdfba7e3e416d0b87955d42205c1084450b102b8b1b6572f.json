@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.account_verifications (user_id, channel, code_hash, expires_at)\n         VALUES ($1, $2::text::core.verification_channel, $3, core.now() + interval '15 minutes')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "109688394982be2fcdfba7e3e416d0b87955d42205c1084450b102b8b1b6572f"
+}

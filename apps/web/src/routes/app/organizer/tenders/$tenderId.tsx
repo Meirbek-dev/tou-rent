@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { createFileRoute, notFound } from "@tanstack/react-router"
 import {
   useMutation,
@@ -28,7 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { api, tenderQuery } from "@/lib/api"
+import { api, tenderDocumentsQuery, tenderQuery } from "@/lib/api"
 import { cancelLot } from "@/lib/amendments"
 
 import type { TenderDto } from "@/lib/api"
@@ -60,6 +60,9 @@ export const Route = createFileRoute("/app/organizer/tenders/$tenderId")({
       tenderQuery(params.tenderId)
     )
     if (tender === null) throw notFound()
+    await context.queryClient.ensureQueryData(
+      tenderDocumentsQuery(params.tenderId)
+    )
   },
   head: () => ({
     meta: [{ title: `${m.page_title_org_tender()} - ToU Rent` }],
@@ -70,12 +73,19 @@ export const Route = createFileRoute("/app/organizer/tenders/$tenderId")({
 function ManageTenderPage() {
   const { tenderId } = Route.useParams()
   const { data: tender } = useSuspenseQuery(tenderQuery(tenderId))
+  const { data: documents } = useSuspenseQuery(tenderDocumentsQuery(tenderId))
 
   if (tender === null) throw notFound()
-  return <ManageTender tender={tender} />
+  return <ManageTender tender={tender} documents={documents} />
 }
 
-function ManageTender({ tender }: { tender: NonNullable<TenderData> }) {
+function ManageTender({
+  tender,
+  documents,
+}: {
+  tender: NonNullable<TenderData>
+  documents: Array<{ id: string; title: string; version: number }>
+}) {
   const tenderId = tender.id
   const tab = Route.useSearch().tab ?? "overview"
   const navigate = Route.useNavigate()
@@ -87,6 +97,8 @@ function ManageTender({ tender }: { tender: NonNullable<TenderData> }) {
   const [opening, setOpening] = useState(() => toAlmatyInput(tender.opening_at))
   const [trading, setTrading] = useState(() => toAlmatyInput(tender.trading_at))
   const [zoomUrl, setZoomUrl] = useState(tender.zoom_url ?? "")
+  const [documentTitle, setDocumentTitle] = useState("")
+  const documentInput = useRef<HTMLInputElement>(null)
 
   const refresh = async () => {
     await Promise.all([
@@ -95,6 +107,9 @@ function ManageTender({ tender }: { tender: NonNullable<TenderData> }) {
       }),
       queryClient.invalidateQueries({
         queryKey: organizerTendersQuery.queryKey,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: tenderDocumentsQuery(tenderId).queryKey,
       }),
     ])
   }
@@ -132,6 +147,32 @@ function ManageTender({ tender }: { tender: NonNullable<TenderData> }) {
       return data
     },
     onSuccess: refresh,
+  })
+
+  const uploadDocument = useMutation({
+    mutationFn: async () => {
+      const file = documentInput.current?.files?.[0]
+      if (file === undefined) throw new Error(m.file_not_selected())
+      const form = new FormData()
+      form.append("file", file)
+      const { data, error } = await api.POST("/api/v1/tenders/{id}/documents", {
+        params: {
+          path: { id: tenderId },
+          query: { title: documentTitle.trim() },
+        },
+        body: form as unknown as number[],
+        bodySerializer: (body: unknown) => body as FormData,
+      })
+      if (error !== undefined || data === undefined) {
+        throw error ?? new Error("document upload failed")
+      }
+      return data
+    },
+    onSuccess: async () => {
+      setDocumentTitle("")
+      if (documentInput.current) documentInput.current.value = ""
+      await refresh()
+    },
   })
 
   const isDraft = tender.status === "draft"
@@ -218,7 +259,7 @@ function ManageTender({ tender }: { tender: NonNullable<TenderData> }) {
             сейчас не смотрят, незачем */}
         <TabsContent value={tab}>
           {tab === "overview" && (
-            <div>
+            <div className="flex flex-col gap-4">
               <Panel title={m.tender_facts_title()} titleAs="h3">
                 <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <DateView
@@ -238,6 +279,75 @@ function ManageTender({ tender }: { tender: NonNullable<TenderData> }) {
                     value={tender.trading_at}
                   />
                 </dl>
+              </Panel>
+              <Panel title={m.tender_docs_title()} titleAs="h3">
+                {isDraft && (
+                  <form
+                    className="mb-4 flex flex-wrap items-end gap-3"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      uploadDocument.mutate()
+                    }}
+                  >
+                    <div className="flex min-w-56 flex-1 flex-col gap-1.5">
+                      <Label htmlFor="tender-document-title">
+                        {m.tender_document_title_label()}
+                      </Label>
+                      <Input
+                        id="tender-document-title"
+                        required
+                        maxLength={300}
+                        value={documentTitle}
+                        onChange={(event) =>
+                          setDocumentTitle(event.target.value)
+                        }
+                      />
+                    </div>
+                    <div className="flex min-w-56 flex-1 flex-col gap-1.5">
+                      <Label htmlFor="tender-document-file">
+                        {m.tender_document_pdf_label()}
+                      </Label>
+                      <Input
+                        ref={documentInput}
+                        id="tender-document-file"
+                        type="file"
+                        accept="application/pdf,.pdf"
+                        required
+                      />
+                    </div>
+                    <Button type="submit" disabled={uploadDocument.isPending}>
+                      {m.tender_document_upload()}
+                    </Button>
+                    {uploadDocument.isError && (
+                      <p
+                        role="alert"
+                        className="w-full text-sm text-destructive"
+                      >
+                        {problemMessage(uploadDocument.error)}
+                      </p>
+                    )}
+                  </form>
+                )}
+                {documents.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    {m.tender_docs_empty()}
+                  </p>
+                ) : (
+                  <ul className="grid gap-2">
+                    {documents.map((document) => (
+                      <li key={document.id}>
+                        <a
+                          href={`/api/v1/tenders/${tenderId}/documents/${document.id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-primary underline underline-offset-4"
+                        >
+                          {document.title} · v{document.version}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </Panel>
             </div>
           )}

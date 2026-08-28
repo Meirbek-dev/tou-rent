@@ -187,7 +187,7 @@ function AuctionRoomPage() {
           {formatTenge(auction.starting_bid)}
         </Figure>
         <Figure label={m.auction_step()}>
-          {formatTenge(auction.bid_step)}
+          {auction.bid_step_percent}% · {formatTenge(auction.bid_step)}
         </Figure>
         <Figure label={m.auction_current_max()} testId="current-max">
           {auction.current_max == null
