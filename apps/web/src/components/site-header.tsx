@@ -1,10 +1,13 @@
 import { MenuIcon } from "lucide-react"
 import { Link } from "@tanstack/react-router"
+import { useQuery } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
 import { AppLogo } from "@/components/app-logo"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { meQuery } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import LocaleSwitcher from "@/components/locale-switcher"
 
@@ -55,12 +58,7 @@ export function SiteHeader() {
         <div className="ml-auto flex shrink-0 items-center gap-1">
           <ThemeToggle />
           <LocaleSwitcher />
-          <Link
-            to="/auth/login"
-            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-          >
-            {m.sign_in()}
-          </Link>
+          <SessionLink />
 
           <details className="group xl:hidden">
             <summary
@@ -100,5 +98,32 @@ export function SiteHeader() {
         </div>
       </div>
     </header>
+  )
+}
+
+/**
+ * Публичные страницы рендерятся на сервере без cookie браузера, поэтому
+ * сессию проверяем только после гидрации. При переходе из кабинета meQuery
+ * уже находится в кеше и ссылка появляется сразу без повторного запроса.
+ */
+function SessionLink() {
+  const { data: user, isPending } = useQuery({
+    ...meQuery,
+    enabled: !import.meta.env.SSR,
+  })
+
+  if (isPending) {
+    return <Skeleton aria-hidden="true" className="h-7 w-24" />
+  }
+
+  const authenticated = user !== null && user !== undefined
+
+  return (
+    <Link
+      to={authenticated ? "/app" : "/auth/login"}
+      className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+    >
+      {authenticated ? m.app_dashboard_title() : m.sign_in()}
+    </Link>
   )
 }

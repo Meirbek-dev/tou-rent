@@ -6,6 +6,7 @@
 //! (критерий Т10). Типы событий - enum `tou_domain::notification`.
 
 use std::convert::Infallible;
+use std::time::Duration;
 
 use axum::extract::State;
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -173,5 +174,8 @@ pub async fn stream(
         }
     });
 
-    Ok(Sse::new(events).keep_alive(KeepAlive::default()))
+    // Axum's default heartbeat is 15 s, while Bun closes an idle request after
+    // 10 s in the local dev proxy. Keep the stream active before that limit so
+    // EventSource is not continuously disconnected and reconnected.
+    Ok(Sse::new(events).keep_alive(KeepAlive::new().interval(Duration::from_secs(5))))
 }
