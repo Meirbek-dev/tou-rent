@@ -61,6 +61,14 @@ x-api-image: &api-image
     # Мастер-ключ шифрования ценовых предложений (INV-040, п. 40): в базе
     # не хранится, потеря делает цены нечитаемыми - бэкап ключа обязателен
     PRICE_ENCRYPTION_KEY: ${PRICE_ENCRYPTION_KEY:?PRICE_ENCRYPTION_KEY}
+    SMTP_HOST: ${SMTP_HOST:-}
+    SMTP_PORT: ${SMTP_PORT:-587}
+    SMTP_USERNAME: ${SMTP_USERNAME:-}
+    SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+    SMTP_FROM: ${SMTP_FROM:-noreply@rent.tou.edu.kz}
+    SMTP_STARTTLS: ${SMTP_STARTTLS:-1}
+    SMS_GATEWAY_URL: ${SMS_GATEWAY_URL:-}
+    SMS_GATEWAY_TOKEN: ${SMS_GATEWAY_TOKEN:-}
     # Провайдер идентичности (FR-1502, ADR-0003). Пусто - вход только
     # локальный (FR-1501); сам Zitadel разворачивается отдельно от этого
     # стенда, здесь фиксируются только реквизиты клиента (NFR-09)
