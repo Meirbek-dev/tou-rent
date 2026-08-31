@@ -171,6 +171,8 @@ services:
   api:
     <<: [*api-image, *logging, *hardening]
     restart: unless-stopped
+    extra_hosts:
+      - "mail.tou.edu.kz:192.168.1.60"
     mem_limit: 2g
     # Проверка здоровья описана здесь, а не только в образе: podman собирает
     # OCI-формат, в котором инструкция HEALTHCHECK игнорируется
