@@ -214,6 +214,7 @@ mod tests {
             id: tender_id,
             status: "announced".to_owned(),
             title: "Аренда помещений учебного корпуса - спецсимволы *#_$@«»".to_owned(),
+            title_kk: "Оқу корпусы үй-жайларын жалға беру".to_owned(),
             organizer_id: Uuid::from_u128(1),
             announced_at: Some(datetime!(2026-08-06 08:52 UTC)),
             submission_deadline: Some(datetime!(2026-08-17 08:52 UTC)),

@@ -6,6 +6,7 @@ import { QueueCard } from "@/components/queue-card"
 import { StatCard } from "@/components/stat-card"
 import { buttonVariants } from "@/components/ui/button"
 import { useNowMs } from "@/hooks/use-now"
+import { localizedTenderTitle } from "@/lib/api"
 import { objectsQuery, organizerTendersQuery } from "@/lib/organizer"
 import { deadlineUrgency } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
@@ -71,7 +72,7 @@ function OrganizerHome() {
 
   const closingItems: QueueItem[] = closing.map((tender) => ({
     id: tender.id,
-    label: tender.title,
+    label: localizedTenderTitle(tender),
     to: `/app/organizer/tenders/${tender.id}`,
     at: tender.submission_deadline,
   }))

@@ -16,6 +16,7 @@ pub struct TenderRecord {
     pub id: Uuid,
     pub status: String,
     pub title: String,
+    pub title_kk: String,
     pub organizer_id: Uuid,
     pub announced_at: Option<OffsetDateTime>,
     pub submission_deadline: Option<OffsetDateTime>,
@@ -59,7 +60,7 @@ macro_rules! tender_query {
     ($tail:literal $(, $arg:expr)*) => {
         sqlx::query_as!(
             TenderRecord,
-            r#"SELECT id, status::text AS "status!", title, organizer_id,
+            r#"SELECT id, status::text AS "status!", title, title_kk, organizer_id,
                       announced_at, submission_deadline, opening_at, opened_at,
                       trading_at, zoom_url, zoom_recording_url, repeat_of,
                       created_at, updated_at
@@ -74,7 +75,7 @@ macro_rules! tender_query_returning {
     ($head:literal $(, $arg:expr)*) => {
         sqlx::query_as!(
             TenderRecord,
-            $head + r#" RETURNING id, status::text AS "status!", title, organizer_id,
+            $head + r#" RETURNING id, status::text AS "status!", title, title_kk, organizer_id,
                                   announced_at, submission_deadline, opening_at, opened_at,
                                   trading_at, zoom_url, zoom_recording_url, repeat_of,
                                   created_at, updated_at"#
@@ -221,13 +222,15 @@ pub async fn create(
     db: &Db,
     actor: Uuid,
     title: &str,
+    title_kk: &str,
     organizer_id: Uuid,
     lots: &[NewLot<'_>],
 ) -> Result<(TenderRecord, Vec<LotRecord>), sqlx::Error> {
     crate::with_actor(db, actor, async |tx| {
         let tender = tender_query_returning!(
-            "INSERT INTO core.tenders (title, organizer_id) VALUES ($1, $2)",
+            "INSERT INTO core.tenders (title, title_kk, organizer_id) VALUES ($1, $2, $3)",
             title,
+            title_kk,
             organizer_id
         )
         .fetch_one(&mut *tx)
@@ -350,6 +353,7 @@ pub async fn add_document(
 /// Возвращает None, если тендер не найден или уже не черновик.
 pub struct DraftFields<'a> {
     pub title: &'a str,
+    pub title_kk: &'a str,
     pub submission_deadline: Option<OffsetDateTime>,
     pub opening_at: Option<OffsetDateTime>,
     pub trading_at: Option<OffsetDateTime>,
@@ -365,10 +369,12 @@ pub async fn update_draft(
     crate::with_actor(db, actor, async |tx| {
         tender_query_returning!(
             "UPDATE core.tenders
-             SET title = $2, submission_deadline = $3, opening_at = $4, trading_at = $5, zoom_url = $6
+             SET title = $2, title_kk = $3, submission_deadline = $4, opening_at = $5,
+                 trading_at = $6, zoom_url = $7
              WHERE id = $1 AND status = 'draft'",
             id,
             f.title,
+            f.title_kk,
             f.submission_deadline,
             f.opening_at,
             f.trading_at,

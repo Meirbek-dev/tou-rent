@@ -14,6 +14,11 @@
   \set tender_title 'Перечень лотов, выставляемых на тендер'
 \endif
 
+\if :{?tender_title_kk}
+\else
+  \set tender_title_kk 'Тендерге шығарылатын лоттар тізбесі'
+\endif
+
 BEGIN;
 
 SELECT u.id AS actor_id
@@ -152,14 +157,20 @@ WHERE NOT EXISTS (
     AND o.area_m2 = i.area_m2
 );
 
-INSERT INTO core.tenders (title, organizer_id)
-SELECT :'tender_title', :'actor_id'::uuid
+INSERT INTO core.tenders (title, title_kk, organizer_id)
+SELECT :'tender_title', :'tender_title_kk', :'actor_id'::uuid
 WHERE NOT EXISTS (
   SELECT 1
   FROM core.tenders t
   WHERE t.title = :'tender_title'
     AND t.organizer_id = :'actor_id'::uuid
 );
+
+UPDATE core.tenders
+SET title_kk = :'tender_title_kk'
+WHERE title = :'tender_title'
+  AND organizer_id = :'actor_id'::uuid
+  AND title_kk IS DISTINCT FROM :'tender_title_kk';
 
 SELECT t.id AS tender_id
 FROM core.tenders t

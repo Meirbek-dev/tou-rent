@@ -70,6 +70,7 @@ function NewTenderPage() {
   const firstObjectId = objectsPage.items[0]?.id ?? ""
 
   const [title, setTitle] = useState("")
+  const [titleKk, setTitleKk] = useState("")
   const [lots, setLots] = useState<LotDraft[]>([emptyLot(firstObjectId)])
 
   const patchLot = (index: number, patch: Partial<LotDraft>) => {
@@ -83,6 +84,7 @@ function NewTenderPage() {
       const { data, error } = await api.POST("/api/v1/tenders", {
         body: {
           title,
+          title_kk: titleKk,
           lots: lots.map((lot) => ({
             object_id: lot.object_id,
             purpose: lot.purpose,
@@ -142,14 +144,25 @@ function NewTenderPage() {
         {m.tender_create_title()}
       </h1>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="tender-title">{m.tender_title_label()}</Label>
-        <Input
-          id="tender-title"
-          required
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-        />
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tender-title">{m.tender_title_ru_label()}</Label>
+          <Input
+            id="tender-title"
+            required
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="tender-title-kk">{m.tender_title_kk_label()}</Label>
+          <Input
+            id="tender-title-kk"
+            required
+            value={titleKk}
+            onChange={(event) => setTitleKk(event.target.value)}
+          />
+        </div>
       </div>
 
       {lots.map((lot, index) => (

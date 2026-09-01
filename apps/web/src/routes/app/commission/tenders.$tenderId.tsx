@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import { api, tenderQuery } from "@/lib/api"
+import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
 import { applicationVotesQuery } from "@/lib/commission"
 import { formatDateTime, formatTenge } from "@/lib/format"
@@ -110,7 +110,7 @@ function CommissionTenderPage() {
             {m.back_to_cabinet()}
           </Link>
         }
-        title={tender.title}
+        title={localizedTenderTitle(tender)}
         description={m.tender_card_title({ id: tender.id.slice(0, 8) })}
         badge={<TenderStatusBadge status={tender.status} />}
       />

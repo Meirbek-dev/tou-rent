@@ -87,6 +87,7 @@ pub struct TenderDto {
     pub id: Uuid,
     pub status: TenderStatusDto,
     pub title: String,
+    pub title_kk: String,
     pub organizer_id: Uuid,
     #[serde(with = "time::serde::rfc3339::option")]
     #[schema(value_type = Option<String>, format = DateTime)]
@@ -116,6 +117,7 @@ impl TenderDto {
             id: r.id,
             status: TenderStatusDto::from_db(&r.status)?,
             title: r.title,
+            title_kk: r.title_kk,
             organizer_id: r.organizer_id,
             announced_at: r.announced_at,
             submission_deadline: r.submission_deadline,
@@ -181,6 +183,8 @@ impl CreateLotRequest {
 pub struct CreateTenderRequest {
     #[garde(length(chars, min = 1, max = 300))]
     pub title: String,
+    #[garde(length(chars, min = 1, max = 300))]
+    pub title_kk: String,
     #[garde(length(min = 1, max = 50), dive)]
     pub lots: Vec<CreateLotRequest>,
 }
@@ -190,6 +194,8 @@ pub struct CreateTenderRequest {
 pub struct UpdateTenderRequest {
     #[garde(length(chars, min = 1, max = 300))]
     pub title: String,
+    #[garde(length(chars, min = 1, max = 300))]
+    pub title_kk: String,
     #[garde(skip)]
     #[serde(default, with = "time::serde::rfc3339::option")]
     #[schema(value_type = Option<String>, format = DateTime)]
@@ -385,8 +391,15 @@ pub async fn create_tender(
         .collect();
 
     // Тендер и лоты - одна транзакция: частично созданных тендеров не бывает
-    let (record, lots) =
-        tenders::create(&state.db, user.id(), &body.title, user.id(), &new_lots).await?;
+    let (record, lots) = tenders::create(
+        &state.db,
+        user.id(),
+        &body.title,
+        &body.title_kk,
+        user.id(),
+        &new_lots,
+    )
+    .await?;
 
     Ok((
         StatusCode::CREATED,
@@ -586,6 +599,7 @@ pub async fn update_tender(
         id,
         DraftFields {
             title: &body.title,
+            title_kk: &body.title_kk,
             submission_deadline: body.submission_deadline,
             opening_at: body.opening_at,
             trading_at: body.trading_at,

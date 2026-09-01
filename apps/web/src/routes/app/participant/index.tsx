@@ -10,7 +10,7 @@ import { MyProtocols } from "@/components/my-protocols"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import { DeadlineBlock } from "@/components/deadline-block"
-import { tendersPageQuery } from "@/lib/api"
+import { localizedTenderTitle, tendersPageQuery } from "@/lib/api"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { myApplicationsQuery } from "@/lib/participant"
 import { mySpecialRequestsQuery, specialStatusLabel } from "@/lib/special"
@@ -214,7 +214,7 @@ function ParticipantHome() {
                 <div className="flex min-w-0 flex-col gap-1.5">
                   <TenderStatusBadge status={tender.status} />
                   <p className="font-heading text-lg font-semibold">
-                    {tender.title}
+                    {localizedTenderTitle(tender)}
                   </p>
                 </div>
                 <DeadlineBlock value={tender.submission_deadline} />

@@ -141,7 +141,7 @@ pub async fn open_tender(
             r#"UPDATE core.tenders
                SET status = 'qualification', opened_at = core.now()
                WHERE id = $1 AND status = 'accepting'
-               RETURNING id, status::text AS "status!", title, organizer_id,
+               RETURNING id, status::text AS "status!", title, title_kk, organizer_id,
                          announced_at, submission_deadline, opening_at, opened_at,
                          trading_at, zoom_url, zoom_recording_url, repeat_of,
                          created_at, updated_at"#,

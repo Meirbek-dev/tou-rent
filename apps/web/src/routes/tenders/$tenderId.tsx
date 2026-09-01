@@ -1,6 +1,6 @@
 import { FileQuestionIcon, FileTextIcon, SearchXIcon } from "lucide-react"
 import { Link, createFileRoute, notFound } from "@tanstack/react-router"
-import { useSuspenseQuery } from "@tanstack/react-query"
+import { useSuspenseQueries, useSuspenseQuery } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
 import { getLocale } from "#/paraglide/runtime"
@@ -20,12 +20,17 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { tenderAmendmentsQuery } from "@/lib/amendments"
-import { tenderDocumentsQuery, tenderQuery } from "@/lib/api"
-import { formatDateTime, formatTenge } from "@/lib/format"
+import {
+  localizedTenderTitle,
+  objectQuery,
+  tenderDocumentsQuery,
+  tenderQuery,
+} from "@/lib/api"
+import { formatDateTime, formatTenge, trimZeros } from "@/lib/format"
 import { tenderProtocolsQuery } from "@/lib/publications"
 import { cn } from "@/lib/utils"
 
-import type { LotDto } from "@/lib/api"
+import type { LotDto, ObjectDto } from "@/lib/api"
 
 // FR-1401: карточка тендера - лоты, сроки, документация; SSR, работает без JS.
 export const Route = createFileRoute("/tenders/$tenderId")({
@@ -49,13 +54,20 @@ export const Route = createFileRoute("/tenders/$tenderId")({
       context.queryClient.ensureQueryData(
         tenderDocumentsQuery(params.tenderId)
       ),
+      ...tender.lots.map((lot) =>
+        context.queryClient.ensureQueryData(objectQuery(lot.object_id))
+      ),
     ])
 
     return tender
   },
   head: ({ loaderData }) => ({
     meta: [
-      { title: loaderData ? `${loaderData.title} - ToU Rent` : "ToU Rent" },
+      {
+        title: loaderData
+          ? `${localizedTenderTitle(loaderData)} - ToU Rent`
+          : "ToU Rent",
+      },
     ],
   }),
   component: TenderPage,
@@ -105,7 +117,32 @@ function LotFact({
   )
 }
 
-function LotCard({ lot }: { lot: LotDto }) {
+function LotObjectDetails({ object }: { object: ObjectDto | undefined }) {
+  if (object === undefined) return <span aria-hidden="true">—</span>
+
+  const kazakh = getLocale() === "kk"
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-medium">
+        {kazakh ? object.name_kk : object.name}
+      </span>
+      <span className="text-sm text-muted-foreground">
+        {kazakh ? object.address_kk : object.address}
+      </span>
+      <span className="text-sm text-muted-foreground tabular-nums">
+        {m.object_area_value({ area: trimZeros(object.area_m2) })}
+      </span>
+    </div>
+  )
+}
+
+function LotCard({
+  lot,
+  object,
+}: {
+  lot: LotDto
+  object: ObjectDto | undefined
+}) {
   const kazakh = getLocale() === "kk"
   return (
     <li className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-xs">
@@ -119,6 +156,25 @@ function LotCard({ lot }: { lot: LotDto }) {
         </h3>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+        {object !== undefined && (
+          <>
+            <LotFact
+              label={m.object_name_label()}
+              value={kazakh ? object.name_kk : object.name}
+            />
+            <LotFact
+              label={m.object_area_label()}
+              value={m.object_area_value({ area: trimZeros(object.area_m2) })}
+              numeric
+            />
+            <div className="col-span-2">
+              <LotFact
+                label={m.object_address_label()}
+                value={kazakh ? object.address_kk : object.address}
+              />
+            </div>
+          </>
+        )}
         <LotFact
           label={m.lot_lease_months()}
           value={m.lot_months({ months: lot.lease_months })}
@@ -148,6 +204,13 @@ function LotCard({ lot }: { lot: LotDto }) {
 function TenderPage() {
   const tender = Route.useLoaderData()
   const { data: documents } = useSuspenseQuery(tenderDocumentsQuery(tender.id))
+  const objectResults = useSuspenseQueries({
+    queries: tender.lots.map((lot) => objectQuery(lot.object_id)),
+  })
+  const objectsById = new Map<string, ObjectDto>()
+  for (const result of objectResults) {
+    if (result.data !== null) objectsById.set(result.data.id, result.data)
+  }
 
   const kazakh = getLocale() === "kk"
   return (
@@ -172,7 +235,7 @@ function TenderPage() {
               </span>
             </div>
             <h1 className="text-3xl font-semibold tracking-tight text-balance">
-              {tender.title}
+              {localizedTenderTitle(tender)}
             </h1>
           </div>
           <div className="border-t px-5 pt-4 pb-5 md:col-start-2 md:border-t-0 md:border-l md:px-6 md:py-6 md:text-right">
@@ -219,6 +282,7 @@ function TenderPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead scope="col">{m.lot_seq()}</TableHead>
+                  <TableHead scope="col">{m.object_name_label()}</TableHead>
                   <TableHead scope="col">{m.lot_purpose()}</TableHead>
                   <TableHead scope="col">{m.lot_lease_months()}</TableHead>
                   <TableHead scope="col" className="text-right">
@@ -234,6 +298,11 @@ function TenderPage() {
                 {tender.lots.map((lot) => (
                   <TableRow key={lot.id}>
                     <TableCell className="tabular-nums">{lot.seq}</TableCell>
+                    <TableCell className="min-w-64 whitespace-normal">
+                      <LotObjectDetails
+                        object={objectsById.get(lot.object_id)}
+                      />
+                    </TableCell>
                     <TableCell className="max-w-md whitespace-normal">
                       {kazakh ? lot.purpose_kk : lot.purpose}
                     </TableCell>
@@ -262,7 +331,11 @@ function TenderPage() {
           </div>
           <ul className="flex flex-col gap-3 md:hidden">
             {tender.lots.map((lot) => (
-              <LotCard key={lot.id} lot={lot} />
+              <LotCard
+                key={lot.id}
+                lot={lot}
+                object={objectsById.get(lot.object_id)}
+              />
             ))}
           </ul>
         </section>

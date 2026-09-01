@@ -11,7 +11,7 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
-import { tendersPageQuery } from "@/lib/api"
+import { localizedTenderTitle, tendersPageQuery } from "@/lib/api"
 import { PUBLIC_STATUSES, validateTendersSearch } from "@/lib/tenders-search"
 import { cn } from "@/lib/utils"
 
@@ -37,7 +37,8 @@ function TendersPage() {
   const items = page.items.filter(
     (tender) =>
       (search.status === undefined || tender.status === search.status) &&
-      (q === undefined || tender.title.toLowerCase().includes(q))
+      (q === undefined ||
+        localizedTenderTitle(tender).toLowerCase().includes(q))
   )
 
   return (

@@ -1,5 +1,6 @@
 import { queryOptions } from "@tanstack/react-query"
 import { createApiClient } from "@tou/api-client"
+import { getLocale } from "#/paraglide/runtime"
 
 import type { components } from "@tou/api-client"
 
@@ -19,6 +20,13 @@ const baseUrl = import.meta.env.SSR
   : ""
 
 export const api = createApiClient(baseUrl)
+
+/** Выбирает сохраненную локализованную строку без машинного перевода. */
+export function localizedTenderTitle(
+  tender: Pick<TenderDto, "title" | "title_kk">
+): string {
+  return getLocale() === "kk" ? tender.title_kk : tender.title
+}
 
 /** Объявление на главной: 404 означает, что администратор его еще не опубликовал. */
 export const siteAnnouncementQuery = queryOptions({
@@ -90,6 +98,22 @@ export const objectsPageQuery = (params: {
       })
       if (error !== undefined || data === undefined) {
         throw new Error("failed to load objects")
+      }
+      return data
+    },
+  })
+
+/** Объект, к которому привязан лот: название, адрес и площадь. */
+export const objectQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["object", id],
+    queryFn: async () => {
+      const { data, error, response } = await api.GET("/api/v1/objects/{id}", {
+        params: { path: { id } },
+      })
+      if (response.status === 404) return null
+      if (error !== undefined || data === undefined) {
+        throw new Error("failed to load object")
       }
       return data
     },

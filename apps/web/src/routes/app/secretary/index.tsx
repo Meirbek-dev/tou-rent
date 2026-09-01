@@ -8,6 +8,7 @@ import { InvestmentContracts } from "@/components/investment-contracts"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
+import { localizedTenderTitle } from "@/lib/api"
 import { formatDateTime } from "@/lib/format"
 import {
   investmentAttachmentsQuery,
@@ -86,7 +87,7 @@ function SecretaryHome() {
                       params={{ tenderId: tender.id }}
                       className="underline-offset-4 hover:underline"
                     >
-                      {tender.title}
+                      {localizedTenderTitle(tender)}
                     </Link>
                   </h3>
                   <DateFact

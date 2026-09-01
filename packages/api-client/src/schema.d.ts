@@ -3578,6 +3578,7 @@ export interface components {
         CreateTenderRequest: {
             lots: components["schemas"]["CreateLotRequest"][];
             title: string;
+            title_kk: string;
         };
         DecideRequest: {
             /**
@@ -4893,6 +4894,7 @@ export interface components {
             /** Format: date-time */
             submission_deadline?: string | null;
             title: string;
+            title_kk: string;
             /** Format: date-time */
             trading_at?: string | null;
             zoom_recording_url?: string | null;
@@ -4921,6 +4923,7 @@ export interface components {
             /** Format: date-time */
             submission_deadline?: string | null;
             title: string;
+            title_kk: string;
             /** Format: date-time */
             trading_at?: string | null;
             zoom_url?: string | null;

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router"
 import { m } from "#/paraglide/messages"
 import { DeadlineBlock } from "@/components/deadline-block"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
+import { localizedTenderTitle } from "@/lib/api"
 
 import type { TenderDto } from "@/lib/api"
 
@@ -42,7 +43,7 @@ export function TenderListItem({
               params={{ tenderId: tender.id }}
               className="underline-offset-4 outline-none after:absolute after:inset-0 hover:underline"
             >
-              {tender.title}
+              {localizedTenderTitle(tender)}
             </Link>
           </Heading>
         </div>

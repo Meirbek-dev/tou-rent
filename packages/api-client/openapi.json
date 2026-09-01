@@ -9985,6 +9985,7 @@
         "type": "object",
         "required": [
           "title",
+          "title_kk",
           "lots"
         ],
         "properties": {
@@ -9995,6 +9996,9 @@
             }
           },
           "title": {
+            "type": "string"
+          },
+          "title_kk": {
             "type": "string"
           }
         }
@@ -13601,6 +13605,7 @@
           "id",
           "status",
           "title",
+          "title_kk",
           "organizer_id",
           "lots"
         ],
@@ -13658,6 +13663,9 @@
             "format": "date-time"
           },
           "title": {
+            "type": "string"
+          },
+          "title_kk": {
             "type": "string"
           },
           "trading_at": {
@@ -13735,7 +13743,8 @@
         "type": "object",
         "description": "Правка черновика: даты процесса и ссылка Zoom (FR-301, FR-303, FR-306).",
         "required": [
-          "title"
+          "title",
+          "title_kk"
         ],
         "properties": {
           "opening_at": {
@@ -13753,6 +13762,9 @@
             "format": "date-time"
           },
           "title": {
+            "type": "string"
+          },
+          "title_kk": {
             "type": "string"
           },
           "trading_at": {

@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import { formatDateTime } from "@/lib/format"
+import { localizedTenderTitle } from "@/lib/api"
 import { organizerTendersQuery } from "@/lib/organizer"
 import { cn } from "@/lib/utils"
 
@@ -56,7 +57,7 @@ function OrganizerTendersPage() {
                   params={{ tenderId: tender.id }}
                   className="underline-offset-4 hover:underline"
                 >
-                  {tender.title}
+                  {localizedTenderTitle(tender)}
                 </Link>
               </h3>
               {tender.submission_deadline != null && (

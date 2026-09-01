@@ -3,9 +3,11 @@ import { createFileRoute, notFound } from "@tanstack/react-router"
 import {
   useMutation,
   useQueryClient,
+  useSuspenseQueries,
   useSuspenseQuery,
 } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
+import { getLocale } from "#/paraglide/runtime"
 import { AmendmentsBanner } from "@/components/amendments-banner"
 import { ContractPanel } from "@/components/contract-panel"
 import { DossierPanel } from "@/components/dossier-panel"
@@ -28,14 +30,20 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { api, tenderDocumentsQuery, tenderQuery } from "@/lib/api"
+import {
+  api,
+  localizedTenderTitle,
+  objectQuery,
+  tenderDocumentsQuery,
+  tenderQuery,
+} from "@/lib/api"
 import { cancelLot } from "@/lib/amendments"
 
-import type { TenderDto } from "@/lib/api"
+import type { ObjectDto, TenderDto } from "@/lib/api"
 
 type TenderData = TenderDto | null
 import { problemMessage } from "@/lib/auth"
-import { formatDateTime, formatTenge } from "@/lib/format"
+import { formatDateTime, formatTenge, trimZeros } from "@/lib/format"
 import {
   fromAlmatyInput,
   organizerTendersQuery,
@@ -60,9 +68,14 @@ export const Route = createFileRoute("/app/organizer/tenders/$tenderId")({
       tenderQuery(params.tenderId)
     )
     if (tender === null) throw notFound()
-    await context.queryClient.ensureQueryData(
-      tenderDocumentsQuery(params.tenderId)
-    )
+    await Promise.all([
+      context.queryClient.ensureQueryData(
+        tenderDocumentsQuery(params.tenderId)
+      ),
+      ...tender.lots.map((lot) =>
+        context.queryClient.ensureQueryData(objectQuery(lot.object_id))
+      ),
+    ])
   },
   head: () => ({
     meta: [{ title: `${m.page_title_org_tender()} - ToU Rent` }],
@@ -76,15 +89,41 @@ function ManageTenderPage() {
   const { data: documents } = useSuspenseQuery(tenderDocumentsQuery(tenderId))
 
   if (tender === null) throw notFound()
-  return <ManageTender tender={tender} documents={documents} />
+  return <ManageTenderData tender={tender} documents={documents} />
 }
 
-function ManageTender({
+function ManageTenderData({
   tender,
   documents,
 }: {
   tender: NonNullable<TenderData>
   documents: Array<{ id: string; title: string; version: number }>
+}) {
+  const objectResults = useSuspenseQueries({
+    queries: tender.lots.map((lot) => objectQuery(lot.object_id)),
+  })
+  const objectsById = new Map<string, ObjectDto>()
+  for (const result of objectResults) {
+    if (result.data !== null) objectsById.set(result.data.id, result.data)
+  }
+
+  return (
+    <ManageTender
+      tender={tender}
+      documents={documents}
+      objectsById={objectsById}
+    />
+  )
+}
+
+function ManageTender({
+  tender,
+  documents,
+  objectsById,
+}: {
+  tender: NonNullable<TenderData>
+  documents: Array<{ id: string; title: string; version: number }>
+  objectsById: ReadonlyMap<string, ObjectDto>
 }) {
   const tenderId = tender.id
   const tab = Route.useSearch().tab ?? "overview"
@@ -120,6 +159,7 @@ function ManageTender({
         params: { path: { id: tenderId } },
         body: {
           title: tender.title,
+          title_kk: tender.title_kk,
           submission_deadline: fromAlmatyInput(deadline),
           opening_at: fromAlmatyInput(opening),
           trading_at: fromAlmatyInput(trading),
@@ -180,7 +220,8 @@ function ManageTender({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={tender.title}
+        title={localizedTenderTitle(tender)}
+        description={isDraft ? m.tender_draft_visibility_hint() : undefined}
         badge={<TenderStatusBadge status={tender.status} />}
         facts={
           <>
@@ -439,6 +480,9 @@ function ManageTender({
                     <TableHeader>
                       <TableRow>
                         <TableHead scope="col">{m.lot_seq()}</TableHead>
+                        <TableHead scope="col">
+                          {m.object_name_label()}
+                        </TableHead>
                         <TableHead scope="col">{m.lot_purpose()}</TableHead>
                         <TableHead scope="col">
                           {m.lot_lease_months()}
@@ -460,8 +504,15 @@ function ManageTender({
                           <TableCell className="tabular-nums">
                             {lot.seq}
                           </TableCell>
+                          <TableCell className="min-w-64 whitespace-normal">
+                            <LotObjectDetails
+                              object={objectsById.get(lot.object_id)}
+                            />
+                          </TableCell>
                           <TableCell className="max-w-md whitespace-normal">
-                            {lot.purpose}
+                            {getLocale() === "kk"
+                              ? lot.purpose_kk
+                              : lot.purpose}
                           </TableCell>
                           <TableCell>
                             {m.lot_months({ months: lot.lease_months })}
@@ -596,6 +647,25 @@ function Fact({ label, value }: { label: string; value: string }) {
         {value}
       </span>
     </span>
+  )
+}
+
+function LotObjectDetails({ object }: { object: ObjectDto | undefined }) {
+  if (object === undefined) return <span aria-hidden="true">—</span>
+
+  const kazakh = getLocale() === "kk"
+  return (
+    <div className="flex flex-col gap-0.5">
+      <span className="font-medium">
+        {kazakh ? object.name_kk : object.name}
+      </span>
+      <span className="text-sm text-muted-foreground">
+        {kazakh ? object.address_kk : object.address}
+      </span>
+      <span className="text-sm text-muted-foreground tabular-nums">
+        {m.object_area_value({ area: trimZeros(object.area_m2) })}
+      </span>
+    </div>
   )
 }
 

@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
-import { api, tenderQuery } from "@/lib/api"
+import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { myApplicationsQuery } from "@/lib/participant"
@@ -140,7 +140,10 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title={m.apply_title()} description={tender.title} />
+      <PageHeader
+        title={m.apply_title()}
+        description={localizedTenderTitle(tender)}
+      />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <form

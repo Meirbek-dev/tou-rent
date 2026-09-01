@@ -26,7 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { api, tenderQuery } from "@/lib/api"
+import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import {
@@ -179,7 +179,7 @@ function SecretaryTenderPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        title={tender.title}
+        title={localizedTenderTitle(tender)}
         badge={<TenderStatusBadge status={tender.status} />}
         breadcrumb={
           <nav>

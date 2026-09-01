@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { StatCard } from "@/components/stat-card"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
+import { localizedTenderTitle } from "@/lib/api"
 import { memberRoleLabel } from "@/lib/commission"
 import { activeCommissionQuery } from "@/lib/commission"
 import { formatDateTime } from "@/lib/format"
@@ -89,7 +90,7 @@ function CommissionHome() {
                       className="underline-offset-4 hover:underline"
                       data-testid={`commission-tender-${tender.id}`}
                     >
-                      {tender.title}
+                      {localizedTenderTitle(tender)}
                     </Link>
                   </h3>
                   <span className="flex shrink-0 flex-col gap-0.5">

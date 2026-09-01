@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO core.tenders (title, organizer_id) VALUES ($1, $2) RETURNING id, status::text AS \"status!\", title, organizer_id,\n                                  announced_at, submission_deadline, opening_at, opened_at,\n                                  trading_at, zoom_url, zoom_recording_url, repeat_of,\n                                  created_at, updated_at",
+  "query": "INSERT INTO core.tenders (title, title_kk, organizer_id) VALUES ($1, $2, $3) RETURNING id, status::text AS \"status!\", title, title_kk, organizer_id,\n                                  announced_at, submission_deadline, opening_at, opened_at,\n                                  trading_at, zoom_url, zoom_recording_url, repeat_of,\n                                  created_at, updated_at",
   "describe": {
     "columns": [
       {
@@ -20,56 +20,61 @@
       },
       {
         "ordinal": 3,
+        "name": "title_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
         "name": "organizer_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "announced_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "submission_deadline",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "opening_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "opened_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "trading_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "zoom_url",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "zoom_recording_url",
         "type_info": "Text"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "repeat_of",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -77,12 +82,14 @@
     "parameters": {
       "Left": [
         "Text",
+        "Text",
         "Uuid"
       ]
     },
     "nullable": [
       false,
       null,
+      false,
       false,
       false,
       true,
@@ -97,5 +104,5 @@
       false
     ]
   },
-  "hash": "94c84dae9c243a0e236f5c4f8175fda6adab62d7db0c5634389e3c58c9509794"
+  "hash": "ab5263ab5d8d9cba7bbece29104de1b5e5ee6af334312ff736d0108ac46d9de9"
 }
