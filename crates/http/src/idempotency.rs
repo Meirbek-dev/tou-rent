@@ -14,6 +14,27 @@
 //! возвращать чужой ответ - в нем персональные данные заявителя (NFR-07).
 //! В Redis уходит отпечаток этой тройки, а не ее части (NFR-16).
 //!
+//! # Повтор - это тот же запрос, а не тот же ключ
+//!
+//! Ключ журнала отвечает на вопрос «куда положить ответ», но не на вопрос
+//! «тот ли это запрос». Пока хранился только ответ, второй запрос с тем же
+//! ключом, но другим телом получал ответ первого и не выполнялся сам:
+//! загрузка `tax_clearance` и следом `registration_certificate` под одним
+//! ключом давала 201 с телом первой, а второго документа не появлялось
+//! вовсе. Идемпотентность обещает «повторить безопасно», а не «второе
+//! действие молча отменяется».
+//!
+//! Поэтому вместе с ответом записывается отпечаток самого запроса - строка
+//! запроса и SHA-256 тела. Совпал - это повтор, отдается записанный ответ;
+//! не совпал - клиент переиспользовал ключ, и это его ошибка: 422
+//! `idempotency_key_reuse`, ни выполнения, ни чужого ответа.
+//!
+//! Тело ради отпечатка читается целиком до передачи дальше - тем же потолком,
+//! что и у роутера ([`crate::MAX_BODY_BYTES`]): то, что не помещается в него,
+//! до обработчика не дошло бы и раньше. Читается только там, где слой
+//! работает, - у мутации вошедшего пользователя с заголовком; загрузка скана
+//! без `Idempotency-Key` тела не буферизует.
+//!
 //! # Что под слоем, а что нет
 //!
 //! Только мутации: GET, HEAD и OPTIONS повторяются по своей природе, а
@@ -91,6 +112,11 @@ const STORED_TTL_SECONDS: i64 = 24 * 60 * 60;
 /// заново.
 const MAX_STORED_BODY_BYTES: usize = 64 * 1024;
 
+/// Потолок тела, читаемого ради отпечатка запроса. Тот же, что у роутера:
+/// тело крупнее до обработчика все равно не доходит (`DefaultBodyLimit`),
+/// и отдельное число здесь только разошлось бы с ним.
+const MAX_FINGERPRINTED_BODY_BYTES: usize = crate::MAX_BODY_BYTES;
+
 /// Потолок длины клиентского ключа. Ключ все равно сворачивается в отпечаток,
 /// поэтому предел - не про Redis, а про то, что килобайтный «ключ» означает
 /// ошибку клиента, а не намерение.
@@ -117,6 +143,11 @@ struct StoredResponse {
     status: u16,
     content_type: Option<String>,
     body: String,
+    /// Отпечаток запроса, которому этот ответ принадлежит (см. заголовок
+    /// модуля). Поле обязательное: запись прежнего формата не разберется, и
+    /// операция выполнится заново - это безопаснее, чем считать отпечаток
+    /// пустым и признать своим первый же чужой запрос.
+    fingerprint: String,
 }
 
 /// Состояние ключа на момент прихода запроса.
@@ -255,14 +286,34 @@ pub async fn enforce(
 
     let key = key_of(user_id, request.method(), request.uri().path(), &client_key);
 
+    // Тело нужно целиком до передачи дальше: без него отпечаток запроса
+    // не посчитать, а без отпечатка ключ отвечает за «куда положить ответ»,
+    // но не за «тот ли это запрос» (см. заголовок модуля). Разбор multipart
+    // от буферизации не страдает - он читает тот же поток байтов.
+    let (parts, body) = request.into_parts();
+    let bytes = match to_bytes(body, MAX_FINGERPRINTED_BODY_BYTES).await {
+        Ok(bytes) => bytes,
+        Err(error) => {
+            tracing::debug!(%error, "тело запроса не прочитано для отпечатка идемпотентности");
+            return Err(ApiError::PayloadTooLarge(
+                "request_body_too_large".to_owned(),
+            ));
+        }
+    };
+    let fingerprint = fingerprint_of(parts.uri.query(), &bytes);
+    let request = Request::from_parts(parts, Body::from(bytes));
+
     match store.begin(&key).await {
-        Slot::Answered(stored) => return Ok(replay(*stored)),
+        Slot::Answered(stored) if stored.fingerprint == fingerprint => return Ok(replay(*stored)),
+        // Ключ занят другой операцией: отдать ее ответ - соврать, что
+        // выполнена эта; выполнить - потерять смысл ключа
+        Slot::Answered(_) => return Err(ApiError::IdempotencyKeyReuse),
         Slot::InFlight => return Err(ApiError::IdempotencyInFlight),
         Slot::Disabled => return Ok(next.run(request).await),
         Slot::Taken => {}
     }
 
-    Ok(finish(&store, &key, next.run(request).await).await)
+    Ok(finish(&store, &key, &fingerprint, next.run(request).await).await)
 }
 
 /// Мутации - и только они (см. заголовок модуля).
@@ -329,14 +380,35 @@ fn key_of(user_id: Uuid, method: &Method, path: &str, client_key: &str) -> Strin
         digest.update(b"\0");
     }
 
-    digest
-        .finalize()
-        .iter()
-        .fold(String::from("tou:idem:"), |mut acc, byte| {
-            use std::fmt::Write as _;
-            let _ = write!(acc, "{byte:02x}");
-            acc
-        })
+    hex_of(digest.finalize().as_slice(), String::from("tou:idem:"))
+}
+
+/// Отпечаток самой просьбы: строка запроса и тело.
+///
+/// Метод и путь сюда не входят - они уже в ключе журнала ([`key_of`]), и
+/// разные маршруты с одним клиентским ключом остаются разными операциями,
+/// а не переиспользованием ключа. А вот `?area=42` против `?area=1000` и два
+/// разных тела - это разные просьбы по одному адресу, и различать их обязан
+/// именно отпечаток.
+///
+/// Тело сворачивается в SHA-256, а не хранится: иначе в Redis попадала бы
+/// копия скана заявки (NFR-07, NFR-16), а для сравнения достаточно свертки.
+fn fingerprint_of(query: Option<&str>, body: &[u8]) -> String {
+    let mut digest = Sha256::new();
+    digest.update(query.unwrap_or_default().as_bytes());
+    digest.update(b"\0");
+    digest.update(body);
+
+    hex_of(digest.finalize().as_slice(), String::new())
+}
+
+/// Шестнадцатеричная запись свертки поверх заданного начала строки.
+fn hex_of(bytes: &[u8], prefix: String) -> String {
+    bytes.iter().fold(prefix, |mut acc, byte| {
+        use std::fmt::Write as _;
+        let _ = write!(acc, "{byte:02x}");
+        acc
+    })
 }
 
 /// Ответ первой попытки как его увидит повтор.
@@ -359,7 +431,12 @@ fn replay(stored: StoredResponse) -> Response {
 }
 
 /// Записать ответ в журнал и вернуть его клиенту без изменений.
-async fn finish(store: &IdempotencyStore, key: &str, response: Response) -> Response {
+async fn finish(
+    store: &IdempotencyStore,
+    key: &str,
+    fingerprint: &str,
+    response: Response,
+) -> Response {
     let (parts, body) = response.into_parts();
 
     if !is_final(parts.status) || !is_json(&parts.headers) {
@@ -391,6 +468,7 @@ async fn finish(store: &IdempotencyStore, key: &str, response: Response) -> Resp
                         status: parts.status.as_u16(),
                         content_type: content_type(&parts.headers),
                         body: text.to_owned(),
+                        fingerprint: fingerprint.to_owned(),
                     },
                 )
                 .await;
@@ -541,6 +619,16 @@ mod tests {
     }
 
     async fn send(app: &Router, uri: &str, cookies: &str, key: Option<&str>) -> Response {
+        send_body(app, uri, cookies, key, "").await
+    }
+
+    async fn send_body(
+        app: &Router,
+        uri: &str,
+        cookies: &str,
+        key: Option<&str>,
+        body: &str,
+    ) -> Response {
         let mut builder = HttpRequest::builder().method("POST").uri(uri);
         if !cookies.is_empty() {
             builder = builder.header(header::COOKIE, cookies);
@@ -548,8 +636,11 @@ mod tests {
         if let Some(key) = key {
             builder = builder.header(IDEMPOTENCY_HEADER, key);
         }
+        if !body.is_empty() {
+            builder = builder.header(header::CONTENT_TYPE, "application/json");
+        }
         app.clone()
-            .oneshot(builder.body(Body::empty()).expect("запрос"))
+            .oneshot(builder.body(Body::from(body.to_owned())).expect("запрос"))
             .await
             .expect("ответ")
     }
@@ -664,6 +755,93 @@ mod tests {
         assert!(!other_route.headers().contains_key(REPLAY_HEADER));
 
         assert_eq!(runs.count(), 2, "оба выполнения обязаны состояться");
+    }
+
+    /// Рубеж AC-4: ключ закрепляется за запросом, а не только за маршрутом.
+    /// Второй запрос с тем же ключом, но другим телом - не повтор: отдать
+    /// ему ответ первого значит соврать, что выполнена его операция (так
+    /// загрузка `registration_certificate` получала 201 от `tax_clearance`
+    /// и не сохранялась вовсе).
+    #[tokio::test]
+    async fn a_key_reused_by_another_request_is_refused() {
+        let Some(store) = live_store().await else {
+            return;
+        };
+        let runs = Runs::default();
+        let app = stand(store, runs.clone(), None);
+        let cookies = login(&app, Uuid::now_v7()).await;
+        let key = fresh_key();
+        let uri = "/api/v1/tenders/0198f0d5-0000-7000-8000-000000000000/applications";
+
+        let first = send_body(&app, uri, &cookies, Some(&key), r#"{"kind":"tax"}"#).await;
+        assert_eq!(first.status(), StatusCode::CREATED);
+        let first_body = body_of(first).await;
+
+        // Другое тело под тем же ключом - отказ, а не чужой ответ
+        let other = send_body(
+            &app,
+            uri,
+            &cookies,
+            Some(&key),
+            r#"{"kind":"registration"}"#,
+        )
+        .await;
+        assert_eq!(
+            other.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "чужой запрос принят за повтор"
+        );
+        assert!(!other.headers().contains_key(REPLAY_HEADER));
+        let problem = body_of(other).await;
+        assert!(
+            problem.contains("idempotency_key_reuse"),
+            "у отказа обязан быть свой код: {problem}"
+        );
+
+        // Строка запроса - такая же часть просьбы, как и тело
+        let other_query = send_body(
+            &app,
+            &format!("{uri}?area=1000"),
+            &cookies,
+            Some(&key),
+            r#"{"kind":"tax"}"#,
+        )
+        .await;
+        assert_eq!(
+            other_query.status(),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "другая строка запроса - другая просьба"
+        );
+
+        // А настоящий повтор по-прежнему повторяется
+        let again = send_body(&app, uri, &cookies, Some(&key), r#"{"kind":"tax"}"#).await;
+        assert_eq!(again.status(), StatusCode::CREATED);
+        assert_eq!(
+            again
+                .headers()
+                .get(REPLAY_HEADER)
+                .and_then(|v| v.to_str().ok()),
+            Some("true")
+        );
+        assert_eq!(body_of(again).await, first_body);
+
+        assert_eq!(runs.count(), 1, "выполниться должна была одна операция");
+    }
+
+    /// Отпечаток обязан меняться от тела и от строки запроса и не меняться
+    /// ни от чего другого. Проверяется без Redis - это чистая функция.
+    #[test]
+    fn the_fingerprint_covers_the_query_and_the_body() {
+        let base = fingerprint_of(None, b"{}");
+
+        assert_eq!(base, fingerprint_of(None, b"{}"));
+        assert_ne!(base, fingerprint_of(Some("area=42"), b"{}"));
+        assert_ne!(base, fingerprint_of(None, b"{\"a\":1}"));
+        assert_ne!(
+            fingerprint_of(Some("a=1"), b"2"),
+            fingerprint_of(Some("a"), b"12"),
+            "части отпечатка нельзя сдвинуть друг в друга"
+        );
     }
 
     /// Без заголовка поведение прежнее: каждый запрос выполняется.

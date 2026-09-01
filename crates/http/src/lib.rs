@@ -313,6 +313,12 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     OPENAPI.clone()
 }
 
+/// Потолок тела запроса (FR-401, сканы заявок): по умолчанию axum режет его
+/// на 2 МБ. Константа, а не литерал по месту: тот же предел применяет слой
+/// идемпотентности, когда буферизует тело ради отпечатка запроса, и разойтись
+/// эти два числа не должны.
+pub const MAX_BODY_BYTES: usize = 20 * 1024 * 1024;
+
 /// Роутер API. Сессионный layer накладывается в композиции (`apps/api`),
 /// т.к. ему нужен Redis.
 pub fn router(state: AppState) -> Router {
@@ -342,7 +348,7 @@ pub fn router(state: AppState) -> Router {
         // не мог и он, но внутри метрик - отказ по таймауту должен быть виден
         .layer(middleware::from_fn(timeout::enforce))
         // Сканы заявок (FR-401): по умолчанию axum режет тело на 2 МБ
-        .layer(axum::extract::DefaultBodyLimit::max(20 * 1024 * 1024))
+        .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
 }
 
