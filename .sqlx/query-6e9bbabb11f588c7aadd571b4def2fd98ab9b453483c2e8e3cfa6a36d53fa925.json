@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT n.nspname || '.' || c.relname AS \"qualified!\"\n           FROM pg_trigger t\n           JOIN pg_class c     ON c.oid = t.tgrelid\n           JOIN pg_namespace n ON n.oid = c.relnamespace\n           JOIN pg_proc p      ON p.oid = t.tgfoid\n           WHERE NOT t.tgisinternal\n             AND p.proname = 'forbid_mutation'\n             AND (t.tgtype & 32) = 0\n             AND NOT EXISTS (\n               SELECT 1\n               FROM pg_trigger tt\n               JOIN pg_class ct ON ct.oid = tt.tgrelid\n               JOIN pg_proc pt  ON pt.oid = tt.tgfoid\n               WHERE ct.oid = c.oid\n                 AND NOT tt.tgisinternal\n                 AND pt.proname = 'forbid_mutation'\n                 AND (tt.tgtype & 32) <> 0\n             )",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "qualified!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "6e9bbabb11f588c7aadd571b4def2fd98ab9b453483c2e8e3cfa6a36d53fa925"
+}

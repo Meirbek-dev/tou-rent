@@ -40,6 +40,7 @@ BEGIN
   FOR guarded IN
     SELECT n.nspname AS schema_name,
            c.relname AS table_name,
+           t.tgname  AS trigger_name,
            encode(t.tgargs, 'escape') AS raw_args
     FROM pg_trigger t
     JOIN pg_class c     ON c.oid = t.tgrelid
@@ -73,6 +74,26 @@ BEGIN
         coalesce(nullif(code, ''), 'append-only')
       );
     END IF;
+
+    -- Оба сторожа переводятся в ALWAYS. Триггер по умолчанию создается
+    -- с tgenabled='O' (origin), а такой не срабатывает при
+    -- `session_replication_role = 'replica'` - двух обычных операторов
+    -- без всякого DDL хватало, чтобы обойти и новый запрет, и прежний
+    -- построчный. Именно этот режим ставит `pg_restore --disable-triggers`,
+    -- то есть обойти рубеж можно было и не желая того.
+    --
+    -- Для append-only таблиц это безопасно: запрещаются только UPDATE,
+    -- DELETE и TRUNCATE, а восстановление дампа вставляет строки, и INSERT
+    -- ни один из сторожей не трогает.
+    EXECUTE format(
+      'ALTER TABLE %I.%I ENABLE ALWAYS TRIGGER %I',
+      guarded.schema_name, guarded.table_name,
+      guarded.table_name || '_no_truncate'
+    );
+    EXECUTE format(
+      'ALTER TABLE %I.%I ENABLE ALWAYS TRIGGER %I',
+      guarded.schema_name, guarded.table_name, guarded.trigger_name
+    );
   END LOOP;
 END $$;
 
