@@ -300,7 +300,11 @@ pub async fn enforce(
             ));
         }
     };
-    let fingerprint = fingerprint_of(parts.uri.query(), &bytes);
+    let content_type = parts
+        .headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok());
+    let fingerprint = fingerprint_of(parts.uri.query(), &bytes, content_type);
     let request = Request::from_parts(parts, Body::from(bytes));
 
     match store.begin(&key).await {
@@ -393,11 +397,33 @@ fn key_of(user_id: Uuid, method: &Method, path: &str, client_key: &str) -> Strin
 ///
 /// Тело сворачивается в SHA-256, а не хранится: иначе в Redis попадала бы
 /// копия скана заявки (NFR-07, NFR-16), а для сравнения достаточно свертки.
-fn fingerprint_of(query: Option<&str>, body: &[u8]) -> String {
+fn fingerprint_of(query: Option<&str>, body: &[u8], content_type: Option<&str>) -> String {
+    // `multipart/form-data` несет случайную границу частей, и клиент создает
+    // ее заново на каждый запрос: две одинаковые по смыслу загрузки одного и
+    // того же файла дают разные тела всегда. Считать по ним отпечаток -
+    // значит объявлять переиспользованием ключа обычный повтор прерванной
+    // загрузки (перепроверка круга 2: 201, затем 422 на том же файле с тем
+    // же ключом). У вложения заявки различающий признак лежит в строке
+    // запроса - `?document_kind=...`, - именно из-за него и была заведена
+    // находка AC-4, когда в ленте оставался чужой документ. Поэтому для
+    // multipart отпечаток считается по строке запроса, а тело в него не
+    // входит: разные файлы под одним ключом и одним видом документа - это
+    // повтор одной операции, обычная семантика ключа идемпотентности.
+    let unstable_framing = content_type.is_some_and(|value| {
+        value
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("multipart/")
+    });
+
     let mut digest = Sha256::new();
     digest.update(query.unwrap_or_default().as_bytes());
     digest.update(b"\0");
-    digest.update(body);
+    digest.update(if unstable_framing {
+        b"multipart".as_slice()
+    } else {
+        body
+    });
 
     hex_of(digest.finalize().as_slice(), String::new())
 }
@@ -832,14 +858,14 @@ mod tests {
     /// ни от чего другого. Проверяется без Redis - это чистая функция.
     #[test]
     fn the_fingerprint_covers_the_query_and_the_body() {
-        let base = fingerprint_of(None, b"{}");
+        let base = fingerprint_of(None, b"{}", None);
 
-        assert_eq!(base, fingerprint_of(None, b"{}"));
-        assert_ne!(base, fingerprint_of(Some("area=42"), b"{}"));
-        assert_ne!(base, fingerprint_of(None, b"{\"a\":1}"));
+        assert_eq!(base, fingerprint_of(None, b"{}", None));
+        assert_ne!(base, fingerprint_of(Some("area=42"), b"{}", None));
+        assert_ne!(base, fingerprint_of(None, b"{\"a\":1}", None));
         assert_ne!(
-            fingerprint_of(Some("a=1"), b"2"),
-            fingerprint_of(Some("a"), b"12"),
+            fingerprint_of(Some("a=1"), b"2", None),
+            fingerprint_of(Some("a"), b"12", None),
             "части отпечатка нельзя сдвинуть друг в друга"
         );
     }
