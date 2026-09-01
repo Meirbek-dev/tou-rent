@@ -52,7 +52,8 @@ pub async fn active(db: &Db) -> Result<Option<CommissionRecord>, sqlx::Error> {
         CommissionRecord,
         "SELECT id, name, valid_from, valid_until, approved_at
          FROM core.commissions
-         WHERE valid_from <= current_date AND current_date < valid_until
+         WHERE valid_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date
+           AND (core.now() AT TIME ZONE 'Asia/Almaty')::date < valid_until
          ORDER BY approved_at DESC NULLS LAST, valid_from DESC
          LIMIT 1"
     )

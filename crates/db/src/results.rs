@@ -105,7 +105,8 @@ pub async fn results_meeting(
                  (SELECT commission_id FROM core.sessions_meetings
                   WHERE tender_id = $1 AND kind = 'qualification'),
                  (SELECT id FROM core.commissions
-                  WHERE valid_from <= current_date AND current_date < valid_until
+                  WHERE valid_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date
+                    AND (core.now() AT TIME ZONE 'Asia/Almaty')::date < valid_until
                   ORDER BY valid_from DESC LIMIT 1))",
             tender_id
         )
