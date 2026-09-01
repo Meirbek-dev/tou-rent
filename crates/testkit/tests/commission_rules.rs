@@ -99,7 +99,7 @@ async fn fixture(tx: &mut sqlx::PgConnection) -> Result<Fixture, sqlx::Error> {
         "INSERT INTO core.tenders
            (title, status, organizer_id, submission_deadline, opening_at)
          VALUES ('Т19 тендер', 'qualification', $1,
-                 now() - interval '1 hour', now() - interval '30 minutes')
+                 now() + interval '1 hour', now() + interval '2 hours')
          RETURNING id",
         organizer_id
     )
@@ -125,6 +125,20 @@ async fn fixture(tx: &mut sqlx::PgConnection) -> Result<Fixture, sqlx::Error> {
     )
     .fetch_one(&mut *tx)
     .await?;
+
+    // Прием закрывается уже после подачи: заявка, вставленная задним числом,
+    // обходила бы INV-037 (сторож `core.check_application_deadline`), а
+    // сценарию нужен как раз следующий этап - работа комиссии
+    sqlx::query!(
+        "UPDATE core.tenders
+         SET submission_deadline = now() - interval '1 hour',
+             opening_at = now() - interval '30 minutes'
+         WHERE id = $1",
+        tender_id
+    )
+    .execute(&mut *tx)
+    .await?;
+
     let participant = participant_id.to_string();
     sqlx::query!("SELECT set_config('app.user_id', $1, true)", participant)
         .fetch_one(&mut *tx)
