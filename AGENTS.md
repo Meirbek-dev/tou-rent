@@ -71,6 +71,18 @@ health `/api/v1/healthz`; миграции накатываются перед �
 `vp run api:restart`, логи - `vp run api:logs`. Web - `vp run dev` (:3000). Только
 инфраструктура без api: `podman compose -f infra/compose/docker-compose.dev.yml up -d`.
 
+Пустой стенд (первый запуск или после удаления тома `pg_data`) наполняется
+`SEED_PASSWORD='<12+ символов>' vp run api:seed` - демо-учетки, комиссия,
+объекты и тендеры Прил. Б. Пароль приходит переменной и в репозитории не
+лежит (NFR-09): без нее подкоманда откажет, и это правильно. Повторный
+запуск безопасен. Учетки стенда - `*@tou.demo`, тот же пароль ждет прогон
+e2e (`E2E_PASSWORD`, см. `apps/e2e/tests/helpers.ts`).
+
+`vp run stack:down` останавливает контейнеры, но том `pg_data` не трогает -
+данные переживают перезапуск. Пересборка с нуля требует явного
+`podman volume rm tou-rent-dev_pg_data`, и после нее стенд пустой:
+миграции накатятся сами, а данные вернет только `api:seed`.
+
 ## А.3 Коммиты и MR
 
 Conventional commits, английский: `feat(auction): enforce 5% bid step [FR-601][INV-063]`.

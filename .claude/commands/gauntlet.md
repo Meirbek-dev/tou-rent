@@ -6,7 +6,7 @@ description: "Gauntlet loop: adversarial audit → fix → verify cycles until T
 
 You are the **orchestrator** (builder-of-last-resort). You run repeated gauntlet
 rounds. Each round sends **fresh-context, harsh critics** (Agent tool,
-`model: "opus"`) against the _actual running system and actual source_, never
+`model: "opus 5"`) against the _actual running system and actual source_, never
 against summaries or your own claims. You fix everything they confirm, then
 re-verify with a _different_ fresh critic. You stop only on the exit conditions
 in §3.
@@ -106,6 +106,24 @@ typed errors, Clock only). Migrations already applied anywhere are append-only
 — fix schema with a NEW migration. One logical concern per commit, conventional
 commits with FR/INV ids. After browser verification, delete the test data you
 created from Postgres and RustFS (dev-stand cleanup rule).
+
+**The stand belongs to the orchestrator alone.** Critics and builders never
+run `stack:up`, `stack:down`, `api:restart`, `podman volume rm`, or any
+follow-style command that dies with its task (`api:logs` is
+`compose logs -f` — use `podman logs --tail N` instead). A subagent that
+believes the stand is broken reports that and stops; it does not repair it.
+Two agents "restoring" the same stand concurrently is how a working stand
+ends up rebuilt on an empty volume, and the second one cannot tell the
+difference between its own damage and the first one's fix.
+
+Every destructive DB probe (`TRUNCATE`, `DELETE`, `ALTER`, disabling a
+trigger) runs in a scratch database created for it and dropped afterwards —
+never in `tou_rent`. This is not advice: proving a guard works by breaking
+the real stand destroys exactly the evidence the guard exists to protect,
+and an append-only journal cannot be restored once erased.
+
+A wiped stand is recoverable: `vp run stack:up`, then
+`SEED_PASSWORD='…' vp run api:seed`. Recovering it is the orchestrator's job.
 
 ---
 

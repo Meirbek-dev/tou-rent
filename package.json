@@ -13,6 +13,7 @@
     "api:restart": "podman compose -f infra/compose/docker-compose.dev.yml restart api",
     "api:logs": "podman compose -f infra/compose/docker-compose.dev.yml logs -f api",
     "api:migrate": "podman compose -f infra/compose/docker-compose.dev.yml run --rm api-migrate",
+    "api:seed": "podman compose -f infra/compose/docker-compose.dev.yml --profile api run --rm --no-deps -e SQLX_OFFLINE=true -e SEED_PASSWORD api cargo run -q -p api -- seed",
     "cache:size": "podman run --rm -v tou-rent-target:/target alpine:3.22 du -sh /target /target/debug/deps /target/debug/incremental",
     "cache:sweep": "podman run --rm -v tou-rent-target:/target alpine:3.22 rm -rf /target/debug/incremental",
     "cache:clean": "podman run --rm -v tou-rent-target:/target alpine:3.22 sh -c \"rm -rf /target/debug /target/release\"",
