@@ -1088,5 +1088,6 @@
   "ui_pagination_label": "Pagination",
   "ui_breadcrumb_label": "Breadcrumb",
   "ui_sidebar_title": "Sidebar",
-  "ui_sidebar_mobile_description": "Navigation sidebar for mobile screens"
+  "ui_sidebar_mobile_description": "Navigation sidebar for mobile screens",
+  "ui_close": "Close"
 }

@@ -1088,5 +1088,6 @@
   "ui_pagination_label": "Постраничная навигация",
   "ui_breadcrumb_label": "Хлебные крошки",
   "ui_sidebar_title": "Боковое меню",
-  "ui_sidebar_mobile_description": "Боковое меню навигации для мобильного экрана"
+  "ui_sidebar_mobile_description": "Боковое меню навигации для мобильного экрана",
+  "ui_close": "Закрыть"
 }

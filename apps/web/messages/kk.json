@@ -1088,5 +1088,6 @@
   "ui_pagination_label": "Беттеу навигациясы",
   "ui_breadcrumb_label": "Навигация тізбегі",
   "ui_sidebar_title": "Бүйірлік мәзір",
-  "ui_sidebar_mobile_description": "Мобильді экранға арналған бүйірлік навигация мәзірі"
+  "ui_sidebar_mobile_description": "Мобильді экранға арналған бүйірлік навигация мәзірі",
+  "ui_close": "Жабу"
 }
