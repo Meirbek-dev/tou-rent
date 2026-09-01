@@ -422,7 +422,8 @@ pub struct RegisterContractRequest {
     request_body = RegisterContractRequest,
     responses(
         (status = 200, description = "Договор зарегистрирован", body = ContractDto),
-        (status = 409, description = "Договор не подписан обеими сторонами либо номер занят",
+        (status = 404, description = "Договор не найден", body = crate::error::Problem),
+        (status = 409, description = "Не подписан, номер занят либо уже зарегистрирован",
          body = crate::error::Problem),
     )
 )]

@@ -15,7 +15,11 @@ use tou_domain::rule::{RuleRejection, RuleViolation};
 /// коду отличить его от нарушения любого другого CHECK нельзя.
 pub(crate) fn rejection(db_err: &dyn sqlx::error::DatabaseError) -> RuleRejection {
     let message = db_err.message();
+    // Имя ограничения - раньше SQLSTATE и позже сообщения: у CHECK таблицы
+    // текста правила нет вовсе, и имя остается единственным его признаком
+    // (`deadline_before_opening` вместо безымянного `23514`).
     let rule = RuleViolation::from_message(message)
+        .or_else(|| db_err.constraint().and_then(RuleViolation::from_constraint))
         .or_else(|| RuleViolation::from_sqlstate(db_err.code().as_deref().unwrap_or_default()))
         .unwrap_or(RuleViolation::OtherRule);
     RuleRejection::new(rule, message)

@@ -309,28 +309,55 @@ pub struct DraftFields<'a> {
     pub zoom_url: Option<&'a str>,
 }
 
+/// Отказ CHECK на правке черновика - не поломка, а перепутанные даты:
+/// `deadline_before_opening` ловит вскрытие раньше окончания приема заявок,
+/// и организатору полагается объяснение, а не 500 (FR-303, п. 27).
 pub async fn update_draft(
     db: &Db,
     actor: Uuid,
     id: Uuid,
     f: DraftFields<'_>,
-) -> Result<Option<TenderRecord>, sqlx::Error> {
-    crate::with_actor(db, actor, async |tx| {
-        tender_query_returning!(
-            "UPDATE core.tenders
+) -> Result<Option<TenderRecord>, TransitionError> {
+    crate::with_actor(db, actor, async |tx| update_draft_on(tx, id, f).await).await
+}
+
+/// То же в транзакции вызывающего - вариант `*_on` (арх. v3 § 6): тест
+/// откатывает свои изменения, а не оставляет их на стенде.
+pub async fn update_draft_on(
+    tx: &mut sqlx::PgConnection,
+    id: Uuid,
+    f: DraftFields<'_>,
+) -> Result<Option<TenderRecord>, TransitionError> {
+    tender_query_returning!(
+        "UPDATE core.tenders
              SET title = $2, submission_deadline = $3, opening_at = $4, trading_at = $5, zoom_url = $6
              WHERE id = $1 AND status = 'draft'",
-            id,
-            f.title,
-            f.submission_deadline,
-            f.opening_at,
-            f.trading_at,
-            f.zoom_url
-        )
-        .fetch_optional(&mut *tx)
-        .await
-    })
+        id,
+        f.title,
+        f.submission_deadline,
+        f.opening_at,
+        f.trading_at,
+        f.zoom_url
+    )
+    .fetch_optional(&mut *tx)
     .await
+    .map_err(map_rule)
+}
+
+/// Отказ по ограничению БД - причина из перечня, все прочее - поломка.
+///
+/// `P0001` здесь наравне с `23514`: сроки тендера стережет и CHECK таблицы,
+/// и триггеры публикации, и по коду они не различимы для вызывающего.
+fn map_rule(err: sqlx::Error) -> TransitionError {
+    if let sqlx::Error::Database(db_err) = &err
+        && matches!(
+            db_err.code().as_deref(),
+            Some("P0001") | Some("23514") | Some("23503") | Some("23505")
+        )
+    {
+        return TransitionError::Rejected(crate::rule::rejection(db_err.as_ref()));
+    }
+    TransitionError::Db(err)
 }
 
 /// Ссылка на запись торгов (FR-306, п. 72): вносится после того, как торги

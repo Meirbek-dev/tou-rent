@@ -567,7 +567,8 @@ pub async fn download_document(
     responses(
         (status = 200, description = "Черновик обновлен", body = TenderDto),
         (status = 404, description = "Не найден", body = crate::error::Problem),
-        (status = 409, description = "Тендер уже не черновик", body = crate::error::Problem),
+        (status = 409, description = "Тендер уже не черновик либо сроки противоречат друг другу",
+         body = crate::error::Problem),
     )
 )]
 pub async fn update_tender(
@@ -592,7 +593,8 @@ pub async fn update_tender(
             zoom_url: body.zoom_url.as_deref(),
         },
     )
-    .await?;
+    .await
+    .map_err(transition_error)?;
 
     match updated {
         Some(record) => {
@@ -718,8 +720,17 @@ async fn transition(
             let lots = tenders::lots_of(&state.db, record.id).await?;
             Ok(Json(TenderDto::from_record(record, lots)?))
         }
-        Err(TransitionError::NotFound) => Err(ApiError::NotFound),
-        Err(TransitionError::Rejected(reason)) => Err(ApiError::RuleViolation(reason)),
-        Err(TransitionError::Db(err)) => Err(err.into()),
+        Err(err) => Err(transition_error(err)),
+    }
+}
+
+/// Отказ слоя данных как его увидит клиент. Отдельно от [`transition`], потому
+/// что тем же перечнем отвечает и правка черновика: `deadline_before_opening`
+/// (вскрытие раньше окончания приема заявок) - отказ по правилу, а не 500.
+fn transition_error(err: TransitionError) -> ApiError {
+    match err {
+        TransitionError::NotFound => ApiError::NotFound,
+        TransitionError::Rejected(reason) => ApiError::RuleViolation(reason),
+        TransitionError::Db(err) => err.into(),
     }
 }
