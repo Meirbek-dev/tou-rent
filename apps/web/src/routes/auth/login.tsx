@@ -91,7 +91,15 @@ function LoginPage() {
                 data-testid="login-oidc"
                 className={cn(buttonVariants({ variant: "outline" }), "w-full")}
               >
-                {m.auth_sign_in_with({ provider: providers.oidc.label })}
+                {/* Подпись провайдера приходит с сервера одной строкой
+                    по-русски и в винительном падеже («учетную запись
+                    университета»), а подставленная в локализованный шаблон
+                    давала «Sign in with учетную запись университета» на en
+                    и «учетную запись университета арқылы кіру» на kk. Текст
+                    кнопки теперь целиком свой в трех локалях, а `oidc.label`
+                    в интерфейс не подставляется: падеж и язык серверной
+                    строки портал не контролирует (I18-3) */}
+                {m.auth_sign_in_university()}
               </a>
               <p className="text-center text-sm text-muted-foreground">
                 {m.auth_or_password()}

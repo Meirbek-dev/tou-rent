@@ -47,7 +47,7 @@ import {
   usersQuery,
 } from "@/lib/admin"
 import { meQuery, problemMessage } from "@/lib/auth"
-import { formatDateTime } from "@/lib/format"
+import { formatDateTime, formatTenge } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { tabSearch } from "@/lib/tabs"
@@ -651,7 +651,10 @@ function MrpPanel() {
               key={entry.year}
               className="rounded-lg border px-3 py-1.5 text-sm"
             >
-              {entry.year}: {entry.amount} ₸
+              {/* `amount` - строка Decimal («9999.00»): склеенная руками,
+                  она печаталась без разрядных пробелов и с точкой вместо
+                  запятой, мимо Intl и мимо локали */}
+              {entry.year}: {formatTenge(entry.amount)}
             </li>
           ))}
         </ul>

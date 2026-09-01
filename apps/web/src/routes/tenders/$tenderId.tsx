@@ -165,7 +165,10 @@ function TenderPage() {
         <header className="grid grid-cols-[minmax(0,1fr)] overflow-hidden rounded-xl border bg-card shadow-xs md:grid-cols-[minmax(0,1fr)_auto]">
           <div className="flex flex-col gap-3 p-5 md:p-6">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-              <TenderStatusBadge status={tender.status} />
+              <TenderStatusBadge
+                status={tender.status}
+                deadline={tender.submission_deadline}
+              />
               <span className="text-sm text-muted-foreground">
                 {m.tender_id_label()}{" "}
                 <span className="tabular-nums">{tender.id.slice(0, 8)}</span>

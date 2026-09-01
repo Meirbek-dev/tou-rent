@@ -132,8 +132,12 @@ export function notificationText(notification: NotificationDto): string {
         decision: decisionLabel(payload.decision),
       })
     }
+    // Все восемь видов каталога разобраны выше (это стережет
+    // `notification-kinds.test.ts`), но сервер выкатывается раньше страницы:
+    // девятый вид приедет в браузер, который его не знает, и машинный код
+    // вроде `protocol_published` в колокольчике - не текст уведомления
     default:
-      return notification.kind
+      return m.notif_unknown()
   }
 }
 

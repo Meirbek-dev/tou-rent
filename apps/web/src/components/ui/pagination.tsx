@@ -118,7 +118,7 @@ function PaginationEllipsis({
       {...props}
     >
       <MoreHorizontalIcon />
-      <span className="sr-only">More pages</span>
+      <span className="sr-only">{m.ui_pagination_more()}</span>
     </span>
   )
 }

@@ -31,7 +31,10 @@ export function TenderListItem({
       <article className="grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex min-w-0 flex-col gap-2 p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <TenderStatusBadge status={tender.status} />
+            <TenderStatusBadge
+              status={tender.status}
+              deadline={tender.submission_deadline}
+            />
             <span className="text-sm text-muted-foreground">
               {m.tenders_lots_count({ count: tender.lots.length })}
             </span>

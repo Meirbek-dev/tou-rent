@@ -107,7 +107,7 @@ function BreadcrumbEllipsis({
       {...props}
     >
       <MoreHorizontalIcon />
-      <span className="sr-only">More</span>
+      <span className="sr-only">{m.ui_breadcrumb_more()}</span>
     </span>
   )
 }
