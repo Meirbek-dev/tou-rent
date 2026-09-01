@@ -200,13 +200,15 @@ pub enum RoomEvent {
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct ScheduleAuctionRequest {
-    /// Процент от стартовой ставки; значение меньше 5 запрещено (Q-019)
+    /// Процент от стартовой ставки: от 5 (Q-019) до 100 - шаг больше самой
+    /// ставки превращает торги в один ход, а без потолка расчет шага не
+    /// помещался в `numeric(14,2)` и уходил наружу пятисоткой
     #[schema(value_type = String, example = "7.5")]
     pub bid_step_percent: Decimal,
 }
 
 /// Открытие комнаты лота (FR-601): фиксирует стартовую ставку (INV-062)
-/// и выбранный шаг не меньше 5 % (Q-019).
+/// и выбранный шаг от 5 % до 100 % (Q-019).
 #[utoipa::path(
     post,
     path = "/api/v1/lots/{id}/auction",
@@ -217,6 +219,7 @@ pub struct ScheduleAuctionRequest {
         (status = 200, description = "Комната торгов", body = AuctionDto),
         (status = 404, description = "Лот не найден", body = crate::error::Problem),
         (status = 409, description = "Нет допущенных заявок с ценой", body = crate::error::Problem),
+        (status = 422, description = "Шаг торгов вне диапазона 5-100 %", body = crate::error::Problem),
     )
 )]
 pub async fn schedule_auction(
