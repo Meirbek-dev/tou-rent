@@ -4,7 +4,7 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from "@tanstack/react-router"
-import { Suspense, lazy } from "react"
+import { Suspense, lazy, useEffect, useState } from "react"
 
 import PostHogProvider from "../integrations/posthog/provider"
 
@@ -16,6 +16,11 @@ import {
 } from "#/paraglide/runtime"
 import * as m from "#/paraglide/messages"
 import { buttonVariants } from "@/components/ui/button"
+import {
+  isStaleChunkError,
+  markReloadTried,
+  reloadTriedRecently,
+} from "@/lib/stale-chunk"
 import { themeInitializer } from "@/lib/theme"
 
 import faviconUrl from "../../favicon.ico?url"
@@ -101,8 +106,33 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
  * и утечка - в сообщении бывает адрес запроса и ответ api, поэтому наружу
  * идет только приглашение повторить, а подробности остаются в консоли
  * и в Sentry (событие туда отправляет сам роутер).
+ *
+ * Отдельная ветка - рассинхрон манифеста: вкладка открыта до выката, SSR
+ * отдает целую страницу, а гидратация падает на импорте исчезнувшего чанка.
+ * `reset()` там повторяет тот же импорт того же несуществующего файла, и
+ * экран не менялся никогда. Помогает только полная перезагрузка - она берет
+ * свежий манифест; ссылка «Главная» на этом экране тоже обычная, потому что
+ * переход роутером уперся бы в тот же манифест.
  */
-function ErrorPage({ reset }: { error: Error; reset: () => void }) {
+function ErrorPage({ error, reset }: { error: Error; reset: () => void }) {
+  const stale = isStaleChunkError(error)
+  // sessionStorage не читается на отрисовке: SSR его не видит, и разметка
+  // разошлась бы при гидратации
+  const [reloadFailed, setReloadFailed] = useState(false)
+
+  useEffect(() => {
+    if (stale && reloadTriedRecently()) setReloadFailed(true)
+  }, [stale])
+
+  const onRetry = () => {
+    if (!stale) {
+      reset()
+      return
+    }
+    markReloadTried()
+    window.location.reload()
+  }
+
   return (
     <main
       id="main"
@@ -111,18 +141,33 @@ function ErrorPage({ reset }: { error: Error; reset: () => void }) {
       <h1 className="text-3xl font-bold tracking-tight">
         {m.page_error_title()}
       </h1>
-      <p className="max-w-xl text-muted-foreground">{m.page_error_text()}</p>
+      <p className="max-w-xl text-muted-foreground">
+        {stale ? m.page_error_stale_text() : m.page_error_text()}
+      </p>
       <div className="flex flex-wrap items-center justify-center gap-3">
-        <button
-          type="button"
-          onClick={reset}
-          className={buttonVariants({ size: "lg" })}
-        >
-          {m.page_error_retry()}
-        </button>
-        <Link to="/" className={buttonVariants({ variant: "outline" })}>
-          {m.nav_home()}
-        </Link>
+        {reloadFailed ? (
+          <p className="max-w-xl font-medium">{m.page_error_reload_manual()}</p>
+        ) : (
+          <button
+            type="button"
+            onClick={onRetry}
+            className={buttonVariants({ size: "lg" })}
+          >
+            {stale ? m.page_error_reload() : m.page_error_retry()}
+          </button>
+        )}
+        {stale ? (
+          <a
+            href={localizeHref("/")}
+            className={buttonVariants({ variant: "outline" })}
+          >
+            {m.nav_home()}
+          </a>
+        ) : (
+          <Link to="/" className={buttonVariants({ variant: "outline" })}>
+            {m.nav_home()}
+          </Link>
+        )}
       </div>
     </main>
   )

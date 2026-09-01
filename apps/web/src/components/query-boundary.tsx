@@ -2,7 +2,7 @@ import { m } from "#/paraglide/messages"
 import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { problemMessage } from "@/lib/auth"
+import { problemDetail } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import { TriangleAlertIcon } from "lucide-react"
 
@@ -105,8 +105,10 @@ function QueryError({
   error: unknown
   onRetry: () => unknown
 }) {
-  const detail = problemMessage(error)
-  const known = detail !== "unknown_error"
+  // Признак «есть что показать» - отдельный, а не сравнение с литералом:
+  // раньше служебное слово отсеивалось строкой `detail !== "unknown_error"`,
+  // и любая правка текста молча возвращала его на экран
+  const detail = problemDetail(error)
 
   return (
     <div
@@ -121,7 +123,7 @@ function QueryError({
       <p className="font-heading text-base font-semibold text-destructive">
         {m.query_error_title()}
       </p>
-      {known && (
+      {detail !== null && (
         <p className="max-w-[46ch] text-sm text-balance text-destructive/90">
           {detail}
         </p>
