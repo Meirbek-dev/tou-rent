@@ -275,7 +275,7 @@ impl NotifyAdmittedStore for PgNotifyAdmittedStore<'_> {
                         r#"UPDATE core.tenders
                            SET trading_at = (
                              refdata.add_business_days(
-                               (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Almaty')::date,
+                               (core.now() AT TIME ZONE 'Asia/Almaty')::date,
                                $2
                              )::timestamp + time '10:00'
                            ) AT TIME ZONE 'Asia/Almaty'
