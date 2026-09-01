@@ -146,3 +146,62 @@ async fn audit_log_is_append_only() {
     rejected!("UPDATE audit.log SET action = 'INSERT' WHERE id = (SELECT max(id) FROM audit.log)");
     rejected!("DELETE FROM audit.log WHERE id = (SELECT max(id) FROM audit.log)");
 }
+
+/// G15, обратное направление: каждая мутируемая таблица `core` аудируется.
+///
+/// Прежний G15 проверял только «у каждой таблицы перечня есть триггер», то
+/// есть таблица, забытая в перечне, оставалась зеленой навсегда. Круг 2
+/// гаунтлета показал цену: `core.objects`, `core.auctions` и
+/// `core.ledger_accounts` мутировались без единого события, и живой прогон
+/// create → update → delete объекта давал ноль строк в `audit.log`.
+///
+/// Поэтому направление здесь обратное и не зависит от текста INVENTORY.md:
+/// перечень берется из прав роли приложения. Если роль может писать в
+/// таблицу схемы `core`, у таблицы обязан быть триггер `audit.record*` -
+/// либо она названа исключением ниже, с обоснованием.
+#[tokio::test]
+async fn g15_every_mutable_core_table_is_audited() {
+    let db = require_db!();
+
+    /// Осознанные исключения: не факты домена, а внутренняя механика.
+    /// `journal_counters` - счетчик номеров записей журнала (значение
+    /// выводится из самих записей, которые аудируются);
+    /// `account_verifications` - одноразовые коды подтверждения
+    /// регистрации, живут минутами и гасятся по `expires_at`.
+    const EXEMPT: [&str; 2] = ["account_verifications", "journal_counters"];
+
+    let unaudited = sqlx::query_scalar!(
+        r#"SELECT c.relname AS "table!"
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+           WHERE n.nspname = 'core' AND c.relkind = 'r'
+             AND (has_table_privilege('tou_rent_app', c.oid, 'INSERT')
+               OR has_table_privilege('tou_rent_app', c.oid, 'UPDATE')
+               OR has_table_privilege('tou_rent_app', c.oid, 'DELETE'))
+             AND NOT EXISTS (
+               SELECT 1 FROM pg_trigger t
+               JOIN pg_proc p       ON p.oid = t.tgfoid
+               JOIN pg_namespace pn ON pn.oid = p.pronamespace
+               WHERE t.tgrelid = c.oid AND NOT t.tgisinternal
+                 AND pn.nspname = 'audit' AND p.proname LIKE 'record%'
+             )
+           ORDER BY 1"#
+    )
+    .fetch_all(&db)
+    .await
+    .expect("таблицы без аудита");
+
+    let missing: Vec<String> = unaudited
+        .into_iter()
+        .filter(|table| !EXEMPT.contains(&table.as_str()))
+        .collect();
+
+    assert!(
+        missing.is_empty(),
+        "мутируемые таблицы core без audit-триггера: {missing:?}. \
+         Регламент А.5: каждая мутация домена пишет audit-событие. \
+         Добавьте CREATE TRIGGER audit_record ... EXECUTE FUNCTION audit.record() \
+         и внесите таблицу в перечень INV-AUDIT (specs/INVENTORY.md), \
+         либо назовите ее исключением в EXEMPT с обоснованием"
+    );
+}

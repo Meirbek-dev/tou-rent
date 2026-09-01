@@ -91,10 +91,15 @@ async fn append_only_guards_survive_replica_mode() {
            FROM pg_trigger t
            JOIN pg_class c     ON c.oid = t.tgrelid
            JOIN pg_namespace n ON n.oid = c.relnamespace
-           JOIN pg_proc p      ON p.oid = t.tgfoid
+           JOIN pg_proc p       ON p.oid = t.tgfoid
+           JOIN pg_namespace pn ON pn.oid = p.pronamespace
            WHERE NOT t.tgisinternal
-             AND p.proname = 'forbid_mutation'
-             AND t.tgenabled <> 'A'"#
+             AND t.tgenabled <> 'A'
+             AND (
+               (pn.nspname = 'core'  AND p.proname = 'forbid_mutation')
+               OR (pn.nspname = 'audit' AND p.proname LIKE 'record%')
+               OR (pn.nspname = 'core'  AND p.proname LIKE 'freeze\_%')
+             )"#
     )
     .fetch_all(&db)
     .await
@@ -102,7 +107,7 @@ async fn append_only_guards_survive_replica_mode() {
 
     assert!(
         origin_only.is_empty(),
-        "сторожа append-only не в режиме ALWAYS: {origin_only:?}. \
+        "сторожа журнала не в режиме ALWAYS: {origin_only:?}. \
          При session_replication_role='replica' они не сработают - \
          ALTER TABLE ... ENABLE ALWAYS TRIGGER ..."
     );
