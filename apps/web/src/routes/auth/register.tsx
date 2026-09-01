@@ -38,7 +38,7 @@ import {
 import { REGEXP_ONLY_DIGITS } from "input-otp"
 
 // FR-1501, FR-1504: регистрация по БИН/ИИН с обязательным подтверждением
-// выбранного канала. Сессия создается только после успешной проверки кода.
+// Email. Сессия создается только после успешной проверки кода.
 export const Route = createFileRoute("/auth/register")({
   head: () => ({ meta: [{ title: `${m.auth_register_title()} - ToU Rent` }] }),
   component: RegisterPage,
@@ -55,9 +55,6 @@ function RegisterPage() {
   >("legal_entity")
   const [idNumber, setIdNumber] = useState("")
   const [phone, setPhone] = useState("")
-  const [verificationChannel, setVerificationChannel] = useState<
-    "email" | "sms"
-  >("email")
   const [verificationCode, setVerificationCode] = useState("")
   const [pendingVerification, setPendingVerification] = useState(false)
   const [submitAttempted, setSubmitAttempted] = useState(false)
@@ -90,7 +87,7 @@ function RegisterPage() {
           applicant_kind: applicantKind,
           id_number: idNumber.trim(),
           phone: phone.trim(),
-          verification_channel: verificationChannel,
+          verification_channel: "email",
         },
       })
       if (error !== undefined || data === undefined) {
@@ -106,7 +103,7 @@ function RegisterPage() {
       const verification = await api.POST("/api/v1/auth/confirm-registration", {
         body: {
           email: email.trim(),
-          verification_channel: verificationChannel,
+          verification_channel: "email",
           code: verificationCode,
         },
       })
@@ -168,10 +165,7 @@ function RegisterPage() {
                     {m.auth_verification_code()}
                   </FieldLabel>
                   <FieldDescription>
-                    {m.auth_verification_hint({
-                      destination:
-                        verificationChannel === "email" ? email : phone,
-                    })}
+                    {m.auth_verification_hint({ destination: email })}
                   </FieldDescription>
                   <InputOTP
                     id="register-code"
@@ -319,28 +313,6 @@ function RegisterPage() {
                     onChange={(event) => setPhone(event.target.value)}
                   />
                   <FieldError>{phoneShown}</FieldError>
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="register-channel">
-                    {m.auth_verification_channel()}
-                  </FieldLabel>
-                  <NativeSelect
-                    id="register-channel"
-                    name="verification_channel"
-                    value={verificationChannel}
-                    onChange={(event) =>
-                      setVerificationChannel(
-                        event.target.value as "email" | "sms"
-                      )
-                    }
-                  >
-                    <NativeSelectOption value="email">
-                      {m.auth_channel_email()}
-                    </NativeSelectOption>
-                    <NativeSelectOption value="sms">
-                      {m.auth_channel_sms()}
-                    </NativeSelectOption>
-                  </NativeSelect>
                 </Field>
                 <Field data-invalid={passwordShown !== undefined}>
                   <FieldLabel htmlFor="register-password">
