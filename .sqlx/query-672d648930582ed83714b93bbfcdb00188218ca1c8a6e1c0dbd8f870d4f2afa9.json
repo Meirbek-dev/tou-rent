@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.site_announcements\n                 (placement, title, title_kk, body, body_kk,\n                  is_published, published_at,\n                  created_by, updated_by)\n               VALUES ('home', $1, $2, $3, $4, $5,\n                       CASE WHEN $5 THEN core.now() ELSE NULL END, $6, $6)\n               ON CONFLICT (placement) DO UPDATE SET\n                 title = EXCLUDED.title,\n                 title_kk = EXCLUDED.title_kk,\n                 body = EXCLUDED.body,\n                 body_kk = EXCLUDED.body_kk,\n                 is_published = EXCLUDED.is_published,\n                 published_at = CASE\n                   WHEN EXCLUDED.is_published THEN COALESCE(\n                     core.site_announcements.published_at, core.now()\n                   )\n                   ELSE NULL\n                 END,\n                 updated_by = EXCLUDED.updated_by,\n                 updated_at = core.now()\n               RETURNING id, title, title_kk, body, body_kk,\n                         is_published, published_at, updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "title_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "body_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "is_published",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "published_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "672d648930582ed83714b93bbfcdb00188218ca1c8a6e1c0dbd8f870d4f2afa9"
+}

@@ -1070,6 +1070,8 @@
   "admin_announcement_tab": "Хабарландыру",
   "admin_announcement_title": "Басты беттегі хабарландыру",
   "admin_announcement_hint": "Ашық басты бетте көрсетілетін хабарландыруды жасаңыз, өзгертіңіз немесе жасырыңыз.",
+  "admin_announcement_ru_version": "Орысша нұсқа",
+  "admin_announcement_kk_version": "Қазақша нұсқа",
   "admin_announcement_heading": "Тақырып",
   "admin_announcement_body": "Хабарландыру мәтіні",
   "admin_announcement_plain_text_hint": "Абзацтар мен жол ауысымдары сақталады. HTML және Markdown қолданылмайды.",

@@ -17,7 +17,9 @@ use crate::state::AppState;
 pub struct SiteAnnouncementDto {
     pub id: Uuid,
     pub title: String,
+    pub title_kk: String,
     pub body: String,
+    pub body_kk: String,
     pub is_published: bool,
     #[schema(value_type = Option<String>, format = DateTime)]
     pub published_at: Option<OffsetDateTime>,
@@ -30,7 +32,9 @@ impl From<SiteAnnouncementRecord> for SiteAnnouncementDto {
         Self {
             id: record.id,
             title: record.title,
+            title_kk: record.title_kk,
             body: record.body,
+            body_kk: record.body_kk,
             is_published: record.is_published,
             published_at: record.published_at,
             updated_at: record.updated_at,
@@ -41,7 +45,9 @@ impl From<SiteAnnouncementRecord> for SiteAnnouncementDto {
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct SaveSiteAnnouncementRequest {
     pub title: String,
+    pub title_kk: String,
     pub body: String,
+    pub body_kk: String,
     pub is_published: bool,
 }
 
@@ -115,12 +121,16 @@ pub async fn save(
 ) -> Result<Json<SiteAnnouncementDto>, ApiError> {
     user.require(Action::SiteAnnouncementManage)?;
     let title = validated_text(body.title, "title", 200)?;
+    let title_kk = validated_text(body.title_kk, "title_kk", 200)?;
     let announcement_body = validated_text(body.body, "body", 20_000)?;
+    let announcement_body_kk = validated_text(body.body_kk, "body_kk", 20_000)?;
     let record = tou_db::site_announcements::save(
         &state.db,
         user.id(),
         &title,
+        &title_kk,
         &announcement_body,
+        &announcement_body_kk,
         body.is_published,
     )
     .await?;

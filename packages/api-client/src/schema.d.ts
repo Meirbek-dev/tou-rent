@@ -4650,8 +4650,10 @@ export interface components {
         Rule: "tender_status_transition" | "tender_publication_terms" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
         SaveSiteAnnouncementRequest: {
             body: string;
+            body_kk: string;
             is_published: boolean;
             title: string;
+            title_kk: string;
         };
         ScheduleAuctionRequest: {
             /**
@@ -4680,12 +4682,14 @@ export interface components {
         };
         SiteAnnouncementDto: {
             body: string;
+            body_kk: string;
             /** Format: uuid */
             id: string;
             is_published: boolean;
             /** Format: date-time */
             published_at?: string | null;
             title: string;
+            title_kk: string;
             /** Format: date-time */
             updated_at: string;
         };

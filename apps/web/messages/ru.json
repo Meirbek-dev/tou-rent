@@ -1070,6 +1070,8 @@
   "admin_announcement_tab": "Объявление",
   "admin_announcement_title": "Объявление на главной странице",
   "admin_announcement_hint": "Создайте или измените объявление и управляйте его видимостью на открытой главной странице.",
+  "admin_announcement_ru_version": "Русская версия",
+  "admin_announcement_kk_version": "Казахская версия",
   "admin_announcement_heading": "Заголовок",
   "admin_announcement_body": "Текст объявления",
   "admin_announcement_plain_text_hint": "Абзацы и переносы строк сохраняются. HTML и Markdown не используются.",

@@ -141,6 +141,13 @@ async fn inv040_price_is_stored_encrypted() {
         .await
         .expect("ценовое предложение");
 
+    // Проверка хранения смотрит под владельцем тестовой БД: роль приложения
+    // обязана скрывать строку до вскрытия и проверяется отдельно в INV-040.
+    sqlx::query!("RESET ROLE")
+        .execute(&mut *tx)
+        .await
+        .expect("роль владельца тестовой БД");
+
     let row = sqlx::query!(
         "SELECT amount, amount_enc FROM core.price_proposals WHERE application_id = $1",
         f.application_id
@@ -207,6 +214,13 @@ async fn wrong_key_does_not_reveal_the_price() {
         .execute(&mut *tx)
         .await
         .expect("ценовое предложение");
+
+    // RLS проверяется отдельно; здесь привилегированный читатель доказывает,
+    // что даже доступ к строке не помогает без правильного мастер-ключа.
+    sqlx::query!("RESET ROLE")
+        .execute(&mut *tx)
+        .await
+        .expect("роль владельца тестовой БД");
 
     for key in ["", "чужой-ключ"] {
         sqlx::query!("SELECT set_config('app.price_key', $1, true)", key)

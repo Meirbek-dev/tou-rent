@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, title, body, is_published, published_at, updated_at\n               FROM core.site_announcements WHERE placement = 'home'",
+  "query": "SELECT id, title, title_kk, body, body_kk,\n                      is_published, published_at, updated_at\n               FROM core.site_announcements WHERE placement = 'home'",
   "describe": {
     "columns": [
       {
@@ -15,21 +15,31 @@
       },
       {
         "ordinal": 2,
-        "name": "body",
+        "name": "title_kk",
         "type_info": "Text"
       },
       {
         "ordinal": 3,
+        "name": "body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "body_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
         "name": "is_published",
         "type_info": "Bool"
       },
       {
-        "ordinal": 4,
+        "ordinal": 6,
         "name": "published_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 5,
+        "ordinal": 7,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -42,9 +52,11 @@
       false,
       false,
       false,
+      false,
+      false,
       true,
       false
     ]
   },
-  "hash": "a41e5be87ef28db097e9e9b0f67f139973195d4d8616c2e7254bdafd6c533e69"
+  "hash": "bfae592513c71e327e208f7d017b00bc4c3927710e606dbbb4a60a12b87d9d0c"
 }

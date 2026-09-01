@@ -333,8 +333,9 @@ async fn visible_prices(
     .await
 }
 
-/// INV-040: до вскрытия цену видит только участник-владелец; после
-/// `opened_at` - все (FR-403). Роль пула tou_rent_app без BYPASSRLS (A-011).
+/// INV-040: до вскрытия цену не видит никто, включая участника-владельца;
+/// после `opened_at` ее видят допущенные политикой пользователи (FR-403).
+/// Роль пула tou_rent_app не имеет BYPASSRLS (A-011).
 #[tokio::test]
 async fn inv040_price_sealed_until_opening() {
     let db = require_db!();
@@ -370,12 +371,12 @@ async fn inv040_price_sealed_until_opening() {
         .expect("count");
     assert_eq!(sealed, 0, "до вскрытия цена запечатана для не-владельца");
 
-    // Владелец видит свою цену всегда
+    // Критическое требование ТЗ закрывает цену и от ее владельца до вскрытия.
     act_as(&mut tx, f.participant_id).await.expect("guc");
     let own = visible_prices(&mut tx, application_id)
         .await
         .expect("count");
-    assert_eq!(own, 1, "участник видит свое предложение");
+    assert_eq!(own, 0, "до вскрытия цена запечатана и для владельца");
 
     // Вскрытие состоялось - цена открыта (на открытом заседании, FR-1102)
     opened_meeting(&mut tx, f.tender_id)

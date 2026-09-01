@@ -12955,17 +12955,25 @@
         "type": "object",
         "required": [
           "title",
+          "title_kk",
           "body",
+          "body_kk",
           "is_published"
         ],
         "properties": {
           "body": {
             "type": "string"
           },
+          "body_kk": {
+            "type": "string"
+          },
           "is_published": {
             "type": "boolean"
           },
           "title": {
+            "type": "string"
+          },
+          "title_kk": {
             "type": "string"
           }
         }
@@ -13025,12 +13033,17 @@
         "required": [
           "id",
           "title",
+          "title_kk",
           "body",
+          "body_kk",
           "is_published",
           "updated_at"
         ],
         "properties": {
           "body": {
+            "type": "string"
+          },
+          "body_kk": {
             "type": "string"
           },
           "id": {
@@ -13048,6 +13061,9 @@
             "format": "date-time"
           },
           "title": {
+            "type": "string"
+          },
+          "title_kk": {
             "type": "string"
           },
           "updated_at": {

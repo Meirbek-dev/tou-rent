@@ -2,6 +2,7 @@ import { ArrowRightIcon, InboxIcon } from "lucide-react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 
 import { m } from "#/paraglide/messages"
+import { getLocale } from "#/paraglide/runtime"
 import { EmptyState } from "@/components/empty-state"
 import { PublicShell } from "@/components/public-shell"
 import { TenderListItem } from "@/components/tender-list-item"
@@ -88,6 +89,7 @@ function EntryTile({
 
 function Home() {
   const { tenders, objects, plots, announcement } = Route.useLoaderData()
+  const kazakh = getLocale() === "kk"
   const latest = tenders.items.slice(0, LATEST_COUNT)
   const accepting = tenders.items.filter(
     (tender) => tender.status === "accepting"
@@ -166,10 +168,10 @@ function Home() {
               id="home-site-announcement"
               className="text-xl font-semibold tracking-tight"
             >
-              {announcement.title}
+              {kazakh ? announcement.title_kk : announcement.title}
             </h2>
             <p className="text-sm leading-7 whitespace-pre-line text-muted-foreground sm:text-base">
-              {announcement.body}
+              {kazakh ? announcement.body_kk : announcement.body}
             </p>
           </article>
         </section>

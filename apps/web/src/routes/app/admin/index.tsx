@@ -12,6 +12,8 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
+  FieldLegend,
+  FieldSet,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -129,7 +131,9 @@ function SiteAnnouncementPanel() {
   const { data: announcement } = useQuery(adminSiteAnnouncementQuery)
   const [form, setForm] = useState({
     title: "",
+    title_kk: "",
     body: "",
+    body_kk: "",
     is_published: false,
   })
 
@@ -137,8 +141,10 @@ function SiteAnnouncementPanel() {
     if (announcement === undefined) return
     setForm(
       announcement ?? {
-        title: m.admin_announcement_default_title(),
-        body: m.admin_announcement_default_body(),
+        title: m.admin_announcement_default_title({}, { locale: "ru" }),
+        title_kk: m.admin_announcement_default_title({}, { locale: "kk" }),
+        body: m.admin_announcement_default_body({}, { locale: "ru" }),
+        body_kk: m.admin_announcement_default_body({}, { locale: "kk" }),
         is_published: false,
       }
     )
@@ -171,44 +177,89 @@ function SiteAnnouncementPanel() {
         }}
       >
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="site-announcement-title">
-              {m.admin_announcement_heading()}
-            </FieldLabel>
-            <Input
-              id="site-announcement-title"
-              value={form.title}
-              maxLength={200}
-              required
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  title: event.target.value,
-                }))
-              }
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="site-announcement-body">
-              {m.admin_announcement_body()}
-            </FieldLabel>
-            <Textarea
-              id="site-announcement-body"
-              className="min-h-64"
-              value={form.body}
-              maxLength={20_000}
-              required
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  body: event.target.value,
-                }))
-              }
-            />
-            <FieldDescription>
-              {m.admin_announcement_plain_text_hint()}
-            </FieldDescription>
-          </Field>
+          <FieldSet>
+            <FieldLegend>{m.admin_announcement_ru_version()}</FieldLegend>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="site-announcement-title">
+                  {m.admin_announcement_heading()}
+                </FieldLabel>
+                <Input
+                  id="site-announcement-title"
+                  value={form.title}
+                  maxLength={200}
+                  required
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      title: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="site-announcement-body">
+                  {m.admin_announcement_body()}
+                </FieldLabel>
+                <Textarea
+                  id="site-announcement-body"
+                  className="min-h-64"
+                  value={form.body}
+                  maxLength={20_000}
+                  required
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      body: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+            </FieldGroup>
+          </FieldSet>
+          <FieldSet>
+            <FieldLegend>{m.admin_announcement_kk_version()}</FieldLegend>
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="site-announcement-title-kk">
+                  {m.admin_announcement_heading()}
+                </FieldLabel>
+                <Input
+                  id="site-announcement-title-kk"
+                  value={form.title_kk}
+                  maxLength={200}
+                  required
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      title_kk: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="site-announcement-body-kk">
+                  {m.admin_announcement_body()}
+                </FieldLabel>
+                <Textarea
+                  id="site-announcement-body-kk"
+                  className="min-h-64"
+                  value={form.body_kk}
+                  maxLength={20_000}
+                  required
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      body_kk: event.target.value,
+                    }))
+                  }
+                />
+              </Field>
+            </FieldGroup>
+          </FieldSet>
+          <FieldDescription>
+            {m.admin_announcement_plain_text_hint()}
+          </FieldDescription>
           <Field orientation="horizontal">
             <Switch
               id="site-announcement-published"

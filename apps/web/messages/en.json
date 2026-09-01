@@ -1070,6 +1070,8 @@
   "admin_announcement_tab": "Announcement",
   "admin_announcement_title": "Home page announcement",
   "admin_announcement_hint": "Create or edit the announcement and control whether it appears on the public home page.",
+  "admin_announcement_ru_version": "Russian version",
+  "admin_announcement_kk_version": "Kazakh version",
   "admin_announcement_heading": "Heading",
   "admin_announcement_body": "Announcement text",
   "admin_announcement_plain_text_hint": "Paragraphs and line breaks are preserved. HTML and Markdown are not used.",

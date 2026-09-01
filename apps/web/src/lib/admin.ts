@@ -126,7 +126,9 @@ export const adminSiteAnnouncementQuery = queryOptions({
 
 export const saveSiteAnnouncement = (body: {
   title: string
+  title_kk: string
   body: string
+  body_kk: string
   is_published: boolean
 }) => mutate(api.PUT("/api/v1/admin/site-announcement", { body }))
 

@@ -9,7 +9,9 @@ use crate::Db;
 pub struct SiteAnnouncementRecord {
     pub id: Uuid,
     pub title: String,
+    pub title_kk: String,
     pub body: String,
+    pub body_kk: String,
     pub is_published: bool,
     pub published_at: Option<OffsetDateTime>,
     pub updated_at: OffsetDateTime,
@@ -19,7 +21,8 @@ macro_rules! announcement_query {
     ($tail:literal $(, $arg:expr)*) => {
         sqlx::query_as!(
             SiteAnnouncementRecord,
-            r#"SELECT id, title, body, is_published, published_at, updated_at
+            r#"SELECT id, title, title_kk, body, body_kk,
+                      is_published, published_at, updated_at
                FROM core.site_announcements"# + $tail
             $(, $arg)*
         )
@@ -46,20 +49,25 @@ pub async fn save(
     db: &Db,
     actor: Uuid,
     title: &str,
+    title_kk: &str,
     body: &str,
+    body_kk: &str,
     is_published: bool,
 ) -> Result<SiteAnnouncementRecord, sqlx::Error> {
     crate::with_actor(db, actor, async |tx| {
         sqlx::query_as!(
             SiteAnnouncementRecord,
             r#"INSERT INTO core.site_announcements
-                 (placement, title, body, is_published, published_at,
+                 (placement, title, title_kk, body, body_kk,
+                  is_published, published_at,
                   created_by, updated_by)
-               VALUES ('home', $1, $2, $3,
-                       CASE WHEN $3 THEN core.now() ELSE NULL END, $4, $4)
+               VALUES ('home', $1, $2, $3, $4, $5,
+                       CASE WHEN $5 THEN core.now() ELSE NULL END, $6, $6)
                ON CONFLICT (placement) DO UPDATE SET
                  title = EXCLUDED.title,
+                 title_kk = EXCLUDED.title_kk,
                  body = EXCLUDED.body,
+                 body_kk = EXCLUDED.body_kk,
                  is_published = EXCLUDED.is_published,
                  published_at = CASE
                    WHEN EXCLUDED.is_published THEN COALESCE(
@@ -69,9 +77,12 @@ pub async fn save(
                  END,
                  updated_by = EXCLUDED.updated_by,
                  updated_at = core.now()
-               RETURNING id, title, body, is_published, published_at, updated_at"#,
+               RETURNING id, title, title_kk, body, body_kk,
+                         is_published, published_at, updated_at"#,
             title,
+            title_kk,
             body,
+            body_kk,
             is_published,
             actor
         )
