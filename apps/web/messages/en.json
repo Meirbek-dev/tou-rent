@@ -1079,5 +1079,14 @@
   "admin_announcement_save": "Save announcement",
   "admin_announcement_saved": "Announcement saved",
   "admin_announcement_default_title": "ANNOUNCEMENT",
-  "admin_announcement_default_body": "On an electronic ascending-price tender for leasing the real estate of Toraighyrov University NJSC\n\nTender organizer: Toraighyrov University NJSC (64 Lomov Street, Pavlodar, Republic of Kazakhstan) announces an electronic ascending-price tender for leasing the Company's real estate.\n\nThe tender is held electronically on the University's official website.\n\nLease term: 12 months from the date the agreement is signed."
+  "admin_announcement_default_body": "On an electronic ascending-price tender for leasing the real estate of Toraighyrov University NJSC\n\nTender organizer: Toraighyrov University NJSC (64 Lomov Street, Pavlodar, Republic of Kazakhstan) announces an electronic ascending-price tender for leasing the Company's real estate.\n\nThe tender is held electronically on the University's official website.\n\nLease term: 12 months from the date the agreement is signed.",
+  "ui_sidebar_toggle": "Collapse or expand the sidebar",
+  "ui_loading": "Loading",
+  "ui_toast_close": "Close notification",
+  "ui_pagination_prev": "Previous page",
+  "ui_pagination_next": "Next page",
+  "ui_pagination_label": "Pagination",
+  "ui_breadcrumb_label": "Breadcrumb",
+  "ui_sidebar_title": "Sidebar",
+  "ui_sidebar_mobile_description": "Navigation sidebar for mobile screens"
 }
