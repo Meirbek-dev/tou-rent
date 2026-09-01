@@ -131,7 +131,12 @@ function ManageTender({
       }
       return data
     },
-    onSuccess: refresh,
+    onSuccess: async () => {
+      // Новые сроки делают прежний отказ публикации неактуальным.
+      // Сбрасываем состояние отдельной мутации сразу, без перезагрузки страницы.
+      transition.reset()
+      await refresh()
+    },
   })
 
   const transition = useMutation({
