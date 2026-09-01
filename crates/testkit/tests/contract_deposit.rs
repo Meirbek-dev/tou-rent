@@ -103,10 +103,9 @@ async fn fixture(tx: &mut sqlx::PgConnection) -> Result<Fixture, sqlx::Error> {
     let contract_id = sqlx::query_scalar!(
         "INSERT INTO core.contracts
            (tender_id, lot_id, object_id, tenant_id, monthly_rate, lease_months,
-            status, place, drafted_at, tenant_signed_at, documents_received_at, checklist_done_at,
-            landlord_signed_at)
+            status, place, drafted_at, tenant_signed_at, documents_received_at)
          VALUES ($1, $2, $3, $4, $5, 12, 'draft', 'winner',
-                 core.now(), core.now(), core.now(), core.now(), core.now())
+                 core.now(), core.now(), core.now())
          RETURNING id",
         tender_id,
         lot_id,
@@ -115,6 +114,22 @@ async fn fixture(tx: &mut sqlx::PgConnection) -> Result<Fixture, sqlx::Error> {
         Decimal::from(MONTHLY_RATE)
     )
     .fetch_one(&mut *tx)
+    .await?;
+
+    // Подпись наймодателя - только после завершенной сверки (INV-115):
+    // договор, рожденный подписанным, обходил бы этот рубеж
+    sqlx::query!(
+        "INSERT INTO core.contract_checklists (contract_id, item_code, checked_at)
+         VALUES ($1, 'bank_details', core.now())",
+        contract_id
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "UPDATE core.contracts SET landlord_signed_at = core.now() WHERE id = $1",
+        contract_id
+    )
+    .execute(&mut *tx)
     .await?;
 
     Ok(Fixture {
