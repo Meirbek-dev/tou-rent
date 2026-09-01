@@ -169,6 +169,38 @@ pub enum RateError {
         code: CoefficientCode,
         value: Decimal,
     },
+    /// Входы положительны по отдельности, но произведение не умещается в
+    /// `Decimal`. Умножение `Decimal` паникует при переполнении, а паника в
+    /// axum-обработчике роняет соединение без ответа - то есть без
+    /// проверки клиент получал бы не problem+json, а обрыв (А.4).
+    #[error("расчет не умещается в допустимый диапазон сумм")]
+    Overflow,
+}
+
+/// Умножение с типизированным отказом вместо паники `Decimal`.
+fn mul(left: Decimal, right: Decimal) -> Result<Decimal, RateError> {
+    left.checked_mul(right).ok_or(RateError::Overflow)
+}
+
+/// Произведение коэффициентов Прил. 4, деленное на Кв (п. 137).
+fn multiplier_of(f: &RateFactors) -> Result<Decimal, RateError> {
+    let numerator = [
+        f.kk.value,
+        f.ksk.value,
+        f.kr.value,
+        f.kvd.value,
+        f.kopf.value,
+        f.kfu.value,
+        f.ksots.value,
+        f.k.value,
+        f.kn.value,
+    ]
+    .into_iter()
+    .try_fold(f.kt.value, mul)?;
+
+    // Кв уже проверен на положительность, но деление тоже паникует
+    // при переполнении частного
+    numerator.checked_div(f.kv.value).ok_or(RateError::Overflow)
 }
 
 /// Чистый расчет ставки по п. 137 Прил. 4 (FR-201).
@@ -189,22 +221,17 @@ pub fn calculate(inputs: RateInputs) -> Result<RateCalculation, RateError> {
     }
 
     let f = &inputs.factors;
-    let base_rate_rbs = dec!(1.5) * inputs.mrp.amount();
-    let numerator = f.kt.value
-        * f.kk.value
-        * f.ksk.value
-        * f.kr.value
-        * f.kvd.value
-        * f.kopf.value
-        * f.kfu.value
-        * f.ksots.value
-        * f.k.value
-        * f.kn.value;
-    let multiplier = numerator / f.kv.value;
+    let base_rate_rbs = mul(dec!(1.5), inputs.mrp.amount())?;
+    let multiplier = multiplier_of(f)?;
 
-    let annual_raw = base_rate_rbs * inputs.area_m2 * multiplier;
+    let annual_raw = mul(mul(base_rate_rbs, inputs.area_m2)?, multiplier)?;
     let annual = Money::new(annual_raw).round_to_tenge();
-    let monthly = Money::new(annual_raw / dec!(12)).round_to_tenge();
+    let monthly = Money::new(
+        annual_raw
+            .checked_div(dec!(12))
+            .ok_or(RateError::Overflow)?,
+    )
+    .round_to_tenge();
 
     Ok(RateCalculation {
         base_rate_rbs,
@@ -318,21 +345,11 @@ pub fn calculate_hourly(mrp: Money, factors: RateFactors) -> Result<HourlyRate, 
         }
     }
 
-    let f = &factors;
-    let multiplier = (f.kt.value
-        * f.kk.value
-        * f.ksk.value
-        * f.kr.value
-        * f.kvd.value
-        * f.kopf.value
-        * f.kfu.value
-        * f.ksots.value
-        * f.k.value
-        * f.kn.value)
-        / f.kv.value;
+    let multiplier = multiplier_of(&factors)?;
 
-    let floor = Money::new(HOURLY_MIN_MRP * mrp.amount()).round_to_tenge();
-    let hourly_raw = HOURLY_MIN_MRP * mrp.amount() * multiplier;
+    let minimum = mul(HOURLY_MIN_MRP, mrp.amount())?;
+    let floor = Money::new(minimum).round_to_tenge();
+    let hourly_raw = mul(minimum, multiplier)?;
     let rounded = Money::new(hourly_raw).round_to_tenge();
 
     // «Ставка от 2 МРП/час» (п. 97): коэффициенты поднимают ставку, но
@@ -501,6 +518,32 @@ mod tests {
                 code: CoefficientCode::Kv,
                 value: Decimal::ZERO
             })
+        );
+    }
+
+    /// Площадь проходит проверку знака, но произведение не умещается в
+    /// `Decimal`. До типизированного отказа умножение паниковало, а паника
+    /// в обработчике рвала соединение: клиент получал не 422, а пустой
+    /// ответ (`curl: (52) Empty reply from server`).
+    #[test]
+    fn absurd_area_is_rejected_instead_of_panicking() {
+        let inputs = RateInputs {
+            mrp: Money::new(dec("9999")),
+            area_m2: dec("6000000000000000000000000"),
+            factors: unit_factors(),
+        };
+        assert_eq!(calculate(inputs), Err(RateError::Overflow));
+    }
+
+    /// Тот же обрыв достижим и без площади - через сами коэффициенты.
+    #[test]
+    fn absurd_factor_is_rejected_instead_of_panicking() {
+        let mut factors = unit_factors();
+        factors.kt = Factor::new("absurd", dec("1e28"));
+        factors.kk = Factor::new("absurd", dec("1e28"));
+        assert_eq!(
+            calculate_hourly(Money::new(dec("9999")), factors),
+            Err(RateError::Overflow)
         );
     }
 
