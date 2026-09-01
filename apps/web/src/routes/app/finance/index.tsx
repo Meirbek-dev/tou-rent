@@ -183,28 +183,43 @@ function AccountCard({ account }: { account: LedgerAccountDto }) {
 }
 
 function Entries({ accountId }: { accountId: string }) {
-  const { data: entries } = useQuery(ledgerEntriesQuery(accountId))
-  if (entries === undefined) return null
+  const { data: page } = useQuery(ledgerEntriesQuery(accountId))
+  if (page === undefined) return null
 
   return (
-    <ul className="flex flex-col gap-1 text-sm" data-testid="ledger-entries">
-      {entries.map((entry) => (
-        <li key={entry.id} className="flex flex-wrap items-center gap-x-3">
-          <span className="text-muted-foreground" suppressHydrationWarning>
-            {formatDateTime(entry.occurred_at)}
-          </span>
-          <span>{opLabel(entry.op)}</span>
-          <span className={Number(entry.credit) > 0 ? "" : "text-destructive"}>
-            {Number(entry.credit) > 0
-              ? `+${formatTenge(entry.credit)}`
-              : `−${formatTenge(entry.debit)}`}
-          </span>
-          {entry.rule_ref !== null && (
-            <span className="text-muted-foreground">{entry.rule_ref}</span>
-          )}
-        </li>
-      ))}
-    </ul>
+    <>
+      {/* Обрезанная выписка - это недосчитанные деньги: о потолке выборки
+          финблок узнает из ответа, а не из расхождения в сверке */}
+      {page.truncated && (
+        <p
+          role="status"
+          className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400"
+          data-testid="ledger-truncated"
+        >
+          {m.list_truncated({ count: page.items.length })}
+        </p>
+      )}
+      <ul className="flex flex-col gap-1 text-sm" data-testid="ledger-entries">
+        {page.items.map((entry) => (
+          <li key={entry.id} className="flex flex-wrap items-center gap-x-3">
+            <span className="text-muted-foreground" suppressHydrationWarning>
+              {formatDateTime(entry.occurred_at)}
+            </span>
+            <span>{opLabel(entry.op)}</span>
+            <span
+              className={Number(entry.credit) > 0 ? "" : "text-destructive"}
+            >
+              {Number(entry.credit) > 0
+                ? `+${formatTenge(entry.credit)}`
+                : `−${formatTenge(entry.debit)}`}
+            </span>
+            {entry.rule_ref !== null && (
+              <span className="text-muted-foreground">{entry.rule_ref}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
   )
 }
 
