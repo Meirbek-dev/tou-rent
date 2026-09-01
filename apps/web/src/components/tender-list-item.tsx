@@ -36,7 +36,11 @@ export function TenderListItem({
               {m.tenders_lots_count({ count: tender.lots.length })}
             </span>
           </div>
-          <Heading className="text-lg leading-snug font-semibold">
+          {/* Наименование тендера - свободный текст: в нем встречается
+              длинный неразрывный кусок (номер, идентификатор, ссылка).
+              Без переноса он уезжает за карточку, а `overflow-hidden`
+              у нее срезает хвост - на узком экране заголовок обрывался */}
+          <Heading className="text-lg leading-snug font-semibold break-words">
             <Link
               to="/tenders/$tenderId"
               params={{ tenderId: tender.id }}
