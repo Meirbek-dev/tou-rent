@@ -1357,7 +1357,7 @@ export interface paths {
         put?: never;
         /**
          * Открытие комнаты лота (FR-601): фиксирует стартовую ставку (INV-062)
-         *     и выбранный шаг не меньше 5 % (Q-019).
+         *     и выбранный шаг от 5 % до 100 % (Q-019).
          */
         post: operations["schedule_auction"];
         delete?: never;
@@ -3660,7 +3660,7 @@ export interface components {
          * @description Машинные коды ошибок контракта (enum без catch-all).
          * @enum {string}
          */
-        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "id_number_taken" | "verification_failed" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "idempotency_in_flight" | "timeout" | "internal";
+        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "id_number_taken" | "verification_failed" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "idempotency_in_flight" | "idempotency_key_reuse" | "method_not_allowed" | "timeout" | "internal";
         EvaderDto: {
             /**
              * Format: int32
@@ -4657,7 +4657,9 @@ export interface components {
         };
         ScheduleAuctionRequest: {
             /**
-             * @description Процент от стартовой ставки; значение меньше 5 запрещено (Q-019)
+             * @description Процент от стартовой ставки: от 5 (Q-019) до 100 - шаг больше самой
+             *     ставки превращает торги в один ход, а без потолка расчет шага не
+             *     помещался в `numeric(14,2)` и уходил наружу пятисоткой
              * @example 7.5
              */
             bid_step_percent: string;
@@ -7157,7 +7159,16 @@ export interface operations {
                     "application/json": components["schemas"]["ContractDto"];
                 };
             };
-            /** @description Договор не подписан обеими сторонами либо номер занят */
+            /** @description Договор не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Не подписан, номер занят либо уже зарегистрирован */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8006,6 +8017,15 @@ export interface operations {
             };
             /** @description Нет допущенных заявок с ценой */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Шаг торгов вне диапазона 5-100 % */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9889,7 +9909,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Тендер уже не черновик */
+            /** @description Тендер уже не черновик либо сроки противоречат друг другу */
             409: {
                 headers: {
                     [name: string]: unknown;

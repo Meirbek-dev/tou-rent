@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT n.nspname || '.' || c.relname || ' / ' || t.tgname AS \"qualified!\"\n           FROM pg_trigger t\n           JOIN pg_class c     ON c.oid = t.tgrelid\n           JOIN pg_namespace n ON n.oid = c.relnamespace\n           JOIN pg_proc p       ON p.oid = t.tgfoid\n           JOIN pg_namespace pn ON pn.oid = p.pronamespace\n           WHERE NOT t.tgisinternal\n             AND t.tgenabled <> 'A'\n             AND (\n               (pn.nspname = 'core'  AND p.proname = 'forbid_mutation')\n               OR (pn.nspname = 'audit' AND p.proname LIKE 'record%')\n               OR (pn.nspname = 'core'  AND p.proname LIKE 'freeze\\_%')\n             )",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "qualified!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f475bc9e84117f814e98e625ff54d090f9889731530c5d09bfc5e83a0e1628a4"
+}

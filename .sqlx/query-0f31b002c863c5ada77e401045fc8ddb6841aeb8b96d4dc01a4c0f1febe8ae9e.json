@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refdata.clock_offset\n         SET shift = $1::text::interval, set_by = $2,\n             set_at = clock_timestamp() -- ALLOWED-BY-ENGINEER:ADR-0005\n         WHERE id\n         RETURNING extract(epoch FROM shift)::float8 AS \"shift!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "shift!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0f31b002c863c5ada77e401045fc8ddb6841aeb8b96d4dc01a4c0f1febe8ae9e"
+}

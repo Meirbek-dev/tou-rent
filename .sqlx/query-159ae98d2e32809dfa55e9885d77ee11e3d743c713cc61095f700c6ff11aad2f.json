@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.ledger_entries (account_id, op, credit, rule_ref, paid_at)\n             SELECT $1, 'receipt_confirmed', $2, 'п. 23, 25', (core.now() AT TIME ZONE 'Asia/Almaty')::date\n             WHERE NOT EXISTS (SELECT 1 FROM core.ledger_entries e WHERE e.account_id = $1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Numeric"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "159ae98d2e32809dfa55e9885d77ee11e3d743c713cc61095f700c6ff11aad2f"
+}

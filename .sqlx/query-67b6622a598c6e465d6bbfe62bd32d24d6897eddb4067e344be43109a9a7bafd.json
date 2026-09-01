@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.bids (id, auction_id, application_id, amount, announced)\n         VALUES (gen_random_uuid(), $1, $2, 176000.00, true)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "67b6622a598c6e465d6bbfe62bd32d24d6897eddb4067e344be43109a9a7bafd"
+}

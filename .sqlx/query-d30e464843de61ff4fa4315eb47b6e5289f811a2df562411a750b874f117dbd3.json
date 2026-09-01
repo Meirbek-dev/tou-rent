@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.tenders (title, status, organizer_id, announced_at, opening_at)\n         VALUES ('Гаунтлет взнос', 'accepting', $1, $2, $3) RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d30e464843de61ff4fa4315eb47b6e5289f811a2df562411a750b874f117dbd3"
+}

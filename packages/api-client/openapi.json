@@ -2866,8 +2866,18 @@
               }
             }
           },
+          "404": {
+            "description": "Договор не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "Договор не подписан обеими сторонами либо номер занят",
+            "description": "Не подписан, номер занят либо уже зарегистрирован",
             "content": {
               "application/json": {
                 "schema": {
@@ -3985,7 +3995,7 @@
         "tags": [
           "auctions"
         ],
-        "summary": "Открытие комнаты лота (FR-601): фиксирует стартовую ставку (INV-062)\nи выбранный шаг не меньше 5 % (Q-019).",
+        "summary": "Открытие комнаты лота (FR-601): фиксирует стартовую ставку (INV-062)\nи выбранный шаг от 5 % до 100 % (Q-019).",
         "operationId": "schedule_auction",
         "parameters": [
           {
@@ -4032,6 +4042,16 @@
           },
           "409": {
             "description": "Нет допущенных заявок с ценой",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Шаг торгов вне диапазона 5-100 %",
             "content": {
               "application/json": {
                 "schema": {
@@ -6591,7 +6611,7 @@
             }
           },
           "409": {
-            "description": "Тендер уже не черновик",
+            "description": "Тендер уже не черновик либо сроки противоречат друг другу",
             "content": {
               "application/json": {
                 "schema": {
@@ -10207,6 +10227,8 @@
           "provider_unavailable",
           "too_many_requests",
           "idempotency_in_flight",
+          "idempotency_key_reuse",
+          "method_not_allowed",
           "timeout",
           "internal"
         ]
@@ -12986,7 +13008,7 @@
         "properties": {
           "bid_step_percent": {
             "type": "string",
-            "description": "Процент от стартовой ставки; значение меньше 5 запрещено (Q-019)",
+            "description": "Процент от стартовой ставки: от 5 (Q-019) до 100 - шаг больше самой\nставки превращает торги в один ход, а без потолка расчет шага не\nпомещался в `numeric(14,2)` и уходил наружу пятисоткой",
             "example": "7.5"
           }
         }

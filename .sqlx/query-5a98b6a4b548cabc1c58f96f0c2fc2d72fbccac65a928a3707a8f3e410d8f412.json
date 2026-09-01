@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contracts\n         SET landlord_signed_at = core.now(), registered_at = core.now(), reg_number = $2\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5a98b6a4b548cabc1c58f96f0c2fc2d72fbccac65a928a3707a8f3e410d8f412"
+}
