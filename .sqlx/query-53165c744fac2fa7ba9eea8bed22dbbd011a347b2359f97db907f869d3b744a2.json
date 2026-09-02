@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.relname || '/' || t.tgname AS \"name!\"\n           FROM pg_trigger t\n           JOIN pg_class c ON c.oid = t.tgrelid\n           JOIN pg_proc p ON p.oid = t.tgfoid\n           WHERE NOT t.tgisinternal AND p.proname = 'forbid_mutation' AND t.tgenabled <> 'A'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "53165c744fac2fa7ba9eea8bed22dbbd011a347b2359f97db907f869d3b744a2"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT table_name AS \"table_name!\"\n           FROM information_schema.tables\n           WHERE table_schema = 'core' AND table_type = 'BASE TABLE'\n           ORDER BY 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "table_name!",
+        "type_info": "Name",
+        "origin": {
+          "Table": {
+            "table": "information_schema.tables",
+            "name": "table_name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "59bc0e9912720107c004eb628a2bcce62dcbded47d8da2a6aa846dac5c8fc7a8"
+}

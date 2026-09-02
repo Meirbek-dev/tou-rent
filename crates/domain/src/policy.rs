@@ -135,10 +135,18 @@ pub enum Action {
     RefdataRead,
     // М16: аудит
     AuditRead,
+    /// Очистка данных стенда (М15): удаление тендера со всем, что на нем
+    /// висит, и полная очистка процедур и объектов перед вводом в работу.
+    ///
+    /// Право само по себе не открывает удаления: маршрут действует только
+    /// при `ALLOW_DATA_PURGE` на стороне api, и на рабочем стенде переменная
+    /// не задается (по образцу сдвига часов, ADR-0005). Здесь право стоит
+    /// ради матрицы: кто вообще может дойти до этой кнопки.
+    DataPurge,
 }
 
 impl Action {
-    pub const ALL: [Action; 38] = [
+    pub const ALL: [Action; 39] = [
         Action::ObjectRead,
         Action::ObjectManage,
         Action::RateCalculate,
@@ -177,6 +185,7 @@ impl Action {
         Action::RefdataManage,
         Action::RefdataRead,
         Action::AuditRead,
+        Action::DataPurge,
     ];
 }
 
@@ -389,6 +398,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::RefdataManage
                 | A::CommissionManage
                 | A::AuditRead
+                | A::DataPurge
                 | A::NotificationReadOwn
                 | A::RefdataRead
         ),

@@ -5,6 +5,7 @@ import { m } from "#/paraglide/messages"
 import { ConfirmAction } from "@/components/confirm-action"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
+import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -31,13 +32,18 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import {
   GRANTABLE_ROLES,
+  PURGE_CONFIRMATION,
   addCoefficientVersion,
   addHoliday,
   adminSiteAnnouncementQuery,
   auditChainQuery,
   coefficientsQuery,
+  dataOverviewQuery,
+  deactivateDemoAccounts,
   grantRole,
   mrpQuery,
+  purgeAllData,
+  purgeTender,
   removeHoliday,
   resetPassword,
   revokeRole,
@@ -46,6 +52,7 @@ import {
   saveSiteAnnouncement,
   usersQuery,
 } from "@/lib/admin"
+import { localizedTenderTitle } from "@/lib/api"
 import { meQuery, problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
@@ -61,13 +68,15 @@ import type { GrantableRole, SiteAnnouncementDto, UserDto } from "@/lib/admin"
 // FR-202 держится не запретом на правку, а тем, что в лоте лежит снимок
 // расчета, а коэффициенты версионируются по дате вступления в силу: админ
 // добавляет версию, а не переписывает историю.
-/** Разделы кабинета: люди отдельно, справочники расчета - отдельно. */
+/** Разделы кабинета: люди отдельно, справочники расчета - отдельно,
+ * очистка данных стенда - в самом конце, подальше от повседневного. */
 const TABS = [
   "users",
   "announcement",
   "mrp",
   "coefficients",
   "holidays",
+  "data",
 ] as const
 
 export const Route = createFileRoute("/app/admin/")({
@@ -110,6 +119,7 @@ function AdminHome() {
             {m.admin_coefficients_title()}
           </TabsTrigger>
           <TabsTrigger value="holidays">{m.admin_holidays_title()}</TabsTrigger>
+          <TabsTrigger value="data">{m.admin_data_tab()}</TabsTrigger>
         </TabsList>
         {/* Одна панель на выбранную вкладку: справочники ниже сами ходят
             в сеть, и держать разметку всех четырех ради вкладки, которую
@@ -120,9 +130,275 @@ function AdminHome() {
           {tab === "mrp" && <MrpPanel />}
           {tab === "coefficients" && <CoefficientsPanel />}
           {tab === "holidays" && <HolidaysPanel />}
+          {tab === "data" && <DataPanel />}
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+/**
+ * Очистка данных стенда (М15). Стенд, наполненный сидом под демонстрацию,
+ * становится рабочим: демо-тендеры, объекты, заявки и протоколы должны уйти
+ * до прихода настоящих процедур. Само удаление живет в БД одной транзакцией
+ * со следом в аудите; здесь - обзор того, что уйдет, и три действия за
+ * подтверждением. Без `ALLOW_DATA_PURGE` на стороне api кнопки удаления не
+ * действуют, и панель говорит об этом прямо, а не молчит серой кнопкой.
+ */
+function DataPanel() {
+  const queryClient = useQueryClient()
+  const { data: overview } = useQuery(dataOverviewQuery)
+  const [phrase, setPhrase] = useState("")
+
+  // После очистки устаревает все, что кабинеты успели закешировать:
+  // реестры, карточки тендеров, уведомления - кеш сбрасывается целиком
+  const refresh = () => queryClient.invalidateQueries()
+
+  const purgeAll = useMutation({
+    mutationFn: () => purgeAllData(phrase),
+    onSuccess: async (result) => {
+      setPhrase("")
+      notifySuccess(
+        m.admin_data_purged_toast({ rows: deletedRows(result.deleted) })
+      )
+      await refresh()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
+  })
+  const purgeOne = useMutation({
+    mutationFn: (tenderId: string) => purgeTender(tenderId),
+    onSuccess: async () => {
+      notifySuccess(m.admin_data_tender_deleted_toast())
+      await refresh()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
+  })
+  const demo = useMutation({
+    mutationFn: deactivateDemoAccounts,
+    onSuccess: async (result) => {
+      notifySuccess(
+        m.admin_data_demo_deactivated_toast({ count: result.deactivated })
+      )
+      await refresh()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
+  })
+
+  if (overview === undefined) return null
+  const enabled = overview.purge_enabled
+  const { counts } = overview
+
+  const rows: [string, number][] = [
+    [m.admin_data_count_objects(), counts.objects],
+    [m.admin_data_count_tenders(), counts.tenders],
+    [m.admin_data_count_lots(), counts.lots],
+    [m.admin_data_count_applications(), counts.applications],
+    [m.admin_data_count_protocols(), counts.protocols],
+    [m.admin_data_count_auctions(), counts.auctions],
+    [m.admin_data_count_contracts(), counts.contracts],
+    [m.admin_data_count_acts(), counts.acts],
+    [m.admin_data_count_ledger_entries(), counts.ledger_entries],
+    [m.admin_data_count_special_requests(), counts.special_requests],
+    [m.admin_data_count_land_plots(), counts.land_plots],
+    [m.admin_data_count_investment_contracts(), counts.investment_contracts],
+    [m.admin_data_count_dossier_items(), counts.dossier_items],
+    [m.admin_data_count_public_records(), counts.public_records],
+    [m.admin_data_count_obligations(), counts.obligations],
+    [m.admin_data_count_notifications(), counts.notifications],
+  ]
+
+  return (
+    <div className="flex flex-col gap-6">
+      {!enabled && (
+        <div
+          role="alert"
+          data-testid="admin-data-disabled"
+          className="flex flex-col gap-1 rounded-lg border border-destructive p-3 text-sm"
+        >
+          <span className="font-medium">{m.admin_data_disabled_title()}</span>
+          <span className="text-muted-foreground">
+            {m.admin_data_disabled_hint()}
+          </span>
+        </div>
+      )}
+
+      <Panel
+        title={m.admin_data_counts_title()}
+        description={m.admin_data_counts_hint()}
+      >
+        <dl
+          data-testid="admin-data-counts"
+          className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3"
+        >
+          {rows.map(([label, value]) => (
+            <div
+              key={label}
+              className="flex items-baseline justify-between gap-3 border-b py-1.5"
+            >
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="font-medium tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      </Panel>
+
+      <Panel
+        title={m.admin_data_tenders_title()}
+        description={m.admin_data_tenders_hint()}
+      >
+        {overview.tenders.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {m.admin_data_tenders_empty()}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table data-testid="admin-data-tenders">
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col">{m.admin_data_tender()}</TableHead>
+                  <TableHead scope="col">
+                    {m.admin_data_tender_status()}
+                  </TableHead>
+                  <TableHead scope="col">
+                    {m.admin_data_tender_created()}
+                  </TableHead>
+                  <TableHead scope="col">
+                    {m.admin_data_tender_applications()}
+                  </TableHead>
+                  <TableHead scope="col">
+                    <span className="sr-only">
+                      {m.admin_data_delete_tender()}
+                    </span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {overview.tenders.map((tender) => (
+                  <TableRow key={tender.id}>
+                    <TableCell className="font-medium">
+                      {localizedTenderTitle(tender)}
+                    </TableCell>
+                    <TableCell>
+                      <TenderStatusBadge status={tender.status} />
+                    </TableCell>
+                    <TableCell suppressHydrationWarning>
+                      {formatDateTime(tender.created_at)}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {tender.applications}
+                    </TableCell>
+                    <TableCell>
+                      <ConfirmAction
+                        title={m.admin_data_delete_tender_confirm_title()}
+                        description={m.admin_data_delete_tender_confirm_description(
+                          {
+                            title: localizedTenderTitle(tender),
+                            applications: tender.applications,
+                          }
+                        )}
+                        confirmLabel={m.admin_data_delete_tender()}
+                        disabled={!enabled || purgeOne.isPending}
+                        onConfirm={() => purgeOne.mutate(tender.id)}
+                        trigger={
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            data-testid={`purge-tender-${tender.id}`}
+                          >
+                            {m.admin_data_delete_tender()}
+                          </Button>
+                        }
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        {overview.tenders_truncated && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {m.admin_data_tenders_truncated()}
+          </p>
+        )}
+      </Panel>
+
+      <Panel
+        title={m.admin_data_purge_title()}
+        description={m.admin_data_purge_hint()}
+      >
+        <div className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor="purge-phrase">
+              {m.admin_data_purge_phrase_label({ phrase: PURGE_CONFIRMATION })}
+            </FieldLabel>
+            <Input
+              id="purge-phrase"
+              className="max-w-xs"
+              value={phrase}
+              autoComplete="off"
+              disabled={!enabled}
+              onChange={(event) => setPhrase(event.target.value)}
+            />
+          </Field>
+          <div>
+            {/* Кнопка спит, пока слово не набрано целиком: подтверждение
+                в диалоге - второй рубеж, а не единственный */}
+            <ConfirmAction
+              title={m.admin_data_purge_confirm_title()}
+              description={m.admin_data_purge_confirm_description({
+                tenders: counts.tenders,
+                objects: counts.objects,
+                applications: counts.applications,
+              })}
+              confirmLabel={m.admin_data_purge_button()}
+              disabled={
+                !enabled ||
+                phrase.trim() !== PURGE_CONFIRMATION ||
+                purgeAll.isPending
+              }
+              onConfirm={() => purgeAll.mutate()}
+              trigger={
+                <Button variant="destructive" data-testid="purge-all">
+                  {m.admin_data_purge_button()}
+                </Button>
+              }
+            />
+          </div>
+        </div>
+      </Panel>
+
+      <Panel
+        title={m.admin_data_demo_title()}
+        description={m.admin_data_demo_hint()}
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm" data-testid="admin-demo-count">
+            {m.admin_data_demo_count({ count: counts.demo_accounts })}
+          </span>
+          <ConfirmAction
+            title={m.admin_data_demo_confirm_title()}
+            description={m.admin_data_demo_confirm_description()}
+            confirmLabel={m.admin_data_demo_button()}
+            disabled={demo.isPending || counts.demo_accounts === 0}
+            onConfirm={() => demo.mutate()}
+            trigger={
+              <Button variant="outline" data-testid="deactivate-demo">
+                {m.admin_data_demo_button()}
+              </Button>
+            }
+          />
+        </div>
+      </Panel>
+    </div>
+  )
+}
+
+/** Сумма удаленных строк по таблицам - для одной строки тоста. */
+function deletedRows(deleted: Record<string, unknown>): number {
+  return Object.values(deleted).reduce<number>(
+    (sum, value) => sum + (typeof value === "number" ? value : 0),
+    0
   )
 }
 

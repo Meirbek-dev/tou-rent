@@ -48,6 +48,10 @@ pub struct AppState {
     /// (`WS_ALLOWED_ORIGINS`). Пустой список - проверка не выполняется:
     /// см. [`allowed_ws_origins_from_env`]
     pub ws_allowed_origins: Arc<[String]>,
+    /// Очистка данных из кабинета админа разрешена конфигурацией стенда
+    /// (`ALLOW_DATA_PURGE`). По умолчанию выключена: право роли до кнопки
+    /// доводит, а само удаление требует явного намерения деплоя
+    pub data_purge_enabled: bool,
 }
 
 impl AppState {
@@ -70,7 +74,16 @@ impl AppState {
             auction_minutes: DEFAULT_DURATION_MINUTES,
             oidc: None,
             ws_allowed_origins: Arc::from([]),
+            data_purge_enabled: false,
         }
+    }
+
+    /// `ALLOW_DATA_PURGE=1` - очистка данных из кабинета админа (М15).
+    /// Читает композиция, как и остальное окружение: на рабочем стенде
+    /// переменная задается только на окно перед вводом в работу.
+    pub fn with_data_purge(mut self, enabled: bool) -> Self {
+        self.data_purge_enabled = enabled;
+        self
     }
 
     /// Источники, которым разрешен апгрейд WS-комнаты торгов (FR-603).

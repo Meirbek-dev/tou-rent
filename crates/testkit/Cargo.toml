@@ -21,3 +21,5 @@ tou-domain.workspace = true
 # Разбор отказа БД в ответ API проверяется той же воронкой, что и в обработчике (AC-1)
 tou-http.workspace = true
 uuid.workspace = true
+# Ожидаемый payload события аудита собирается тем же json!, что и в домене
+serde_json.workspace = true

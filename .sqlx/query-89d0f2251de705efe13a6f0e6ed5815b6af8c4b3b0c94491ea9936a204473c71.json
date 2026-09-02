@@ -1,0 +1,135 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n             (SELECT count(*) FROM core.objects)              AS \"objects!\",\n             (SELECT count(*) FROM core.tenders)              AS \"tenders!\",\n             (SELECT count(*) FROM core.lots)                 AS \"lots!\",\n             (SELECT count(*) FROM core.applications)         AS \"applications!\",\n             (SELECT count(*) FROM core.protocols)            AS \"protocols!\",\n             (SELECT count(*) FROM core.auctions)             AS \"auctions!\",\n             (SELECT count(*) FROM core.contracts)            AS \"contracts!\",\n             (SELECT count(*) FROM core.acts)                 AS \"acts!\",\n             (SELECT count(*) FROM core.ledger_entries)       AS \"ledger_entries!\",\n             (SELECT count(*) FROM core.special_requests)     AS \"special_requests!\",\n             (SELECT count(*) FROM core.land_plots)           AS \"land_plots!\",\n             (SELECT count(*) FROM core.investment_contracts) AS \"investment_contracts!\",\n             (SELECT count(*) FROM core.dossier_items)        AS \"dossier_items!\",\n             (SELECT count(*) FROM core.public_records)       AS \"public_records!\",\n             (SELECT count(*) FROM core.obligations)          AS \"obligations!\",\n             (SELECT count(*) FROM core.notifications)        AS \"notifications!\",\n             (SELECT count(*) FROM core.users\n               WHERE is_active AND email::text LIKE '%' || $1) AS \"demo_accounts!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "objects!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "tenders!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "lots!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "applications!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "protocols!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "auctions!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "contracts!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "acts!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "ledger_entries!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "special_requests!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "land_plots!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "investment_contracts!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "dossier_items!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "public_records!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "obligations!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 15,
+        "name": "notifications!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 16,
+        "name": "demo_accounts!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "89d0f2251de705efe13a6f0e6ed5815b6af8c4b3b0c94491ea9936a204473c71"
+}

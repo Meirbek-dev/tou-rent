@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.users SET is_active = false\n             WHERE is_active AND id <> $1 AND email::text LIKE '%' || $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f092b362a222d29987e81fabe721cff86a88e3b71bf474bc12edeed542891f45"
+}
