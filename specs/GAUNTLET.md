@@ -121,12 +121,12 @@
 
 ## Baseline (round 0, 2026-09-02)
 
-| Проверка             | Результат                                   |
-| -------------------- | ------------------------------------------- |
-| `vp run gates --all` | green                                       |
-| `vp check`           | green (295 fmt, 234 lint/type)              |
-| `vp run rust:lint`   | green                                       |
-| `vp test`            | green (11 files, 72 tests)                  |
-| `vp run rust:test`   | запущен в раунде 1 (см. round-1)            |
-| `vp run e2e`         | RED: 21 passed, 6 failed (G-001…G-004)      |
-| стенд                | api healthz ok, web 200, 11 тендеров в seed |
+| Проверка             | Результат                                                     |
+| -------------------- | ------------------------------------------------------------- |
+| `vp run gates --all` | green                                                         |
+| `vp check`           | green (295 fmt, 234 lint/type)                                |
+| `vp run rust:lint`   | green                                                         |
+| `vp test`            | green (11 files, 72 tests)                                    |
+| `vp run rust:test`   | R0: не стартовал (G-005); R1 после починки: green (24 бинаря) |
+| `vp run e2e`         | R0: 21/27 (G-001…G-004, G-019); R1 после починок: 27/27 green |
+| стенд                | api healthz ok, web 200, 11 тендеров в seed                   |
