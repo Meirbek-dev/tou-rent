@@ -12,6 +12,7 @@ import { AmendmentsBanner } from "@/components/amendments-banner"
 import { ContractPanel } from "@/components/contract-panel"
 import { DossierPanel } from "@/components/dossier-panel"
 import { EvasionPanel } from "@/components/evasion-panel"
+import { ConfirmAction } from "@/components/confirm-action"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { TenderChangesPanel } from "@/components/tender-changes-panel"
@@ -51,6 +52,7 @@ import {
   toAlmatyInput,
 } from "@/lib/organizer"
 import { tabSearch } from "@/lib/tabs"
+import { notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 
 /** Вкладки ведения тендера организатором - в порядке работы над ним. */
@@ -199,6 +201,25 @@ function ManageTender({
     onSuccess: refresh,
   })
 
+  // Удалить можно только черновик (FR-301): объявленный тендер отменяют
+  // (FR-305, п. 78), сервер такой запрос отклонит. После удаления страницы
+  // тендера больше нет - уходим в список
+  const removeDraft = useMutation({
+    mutationFn: async () => {
+      const { error } = await api.DELETE("/api/v1/tenders/{id}", {
+        params: { path: { id: tenderId } },
+      })
+      if (error !== undefined) throw error
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: organizerTendersQuery.queryKey,
+      })
+      notifySuccess(m.tender_draft_deleted_toast())
+      await navigate({ to: "/app/organizer/tenders" })
+    },
+  })
+
   const uploadDocument = useMutation({
     mutationFn: async () => {
       const file = documentInput.current?.files?.[0]
@@ -265,6 +286,27 @@ function ManageTender({
                 {m.tender_open_acceptance()}
               </Button>
             )}
+            {/* Удаление стоит рядом с публикацией и только у черновика:
+                объявленный тендер отсюда исчезает, и остается отмена */}
+            {isDraft && (
+              <ConfirmAction
+                title={m.tender_draft_delete_confirm_title()}
+                description={m.tender_draft_delete_confirm_description()}
+                confirmLabel={m.tender_draft_delete()}
+                variant="destructive-solid"
+                disabled={removeDraft.isPending}
+                onConfirm={() => removeDraft.mutate()}
+                trigger={
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    data-testid="delete-tender"
+                  >
+                    {m.tender_draft_delete()}
+                  </Button>
+                }
+              />
+            )}
             <a
               href={`/api/v1/tenders/${tender.id}/announcement.pdf`}
               target="_blank"
@@ -280,6 +322,11 @@ function ManageTender({
       {transition.isError && (
         <p role="alert" className="text-sm text-destructive">
           {problemMessage(transition.error)}
+        </p>
+      )}
+      {removeDraft.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {problemMessage(removeDraft.error)}
         </p>
       )}
 

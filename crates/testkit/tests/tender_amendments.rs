@@ -493,3 +493,90 @@ async fn amendment_appends_lots_after_existing() {
     );
     assert!(duplicate.contains("lots_tender_id_seq_key"), "{duplicate}");
 }
+
+/// Удаляется только черновик (FR-301). Объявленный тендер остается: его
+/// отменяют (FR-305, п. 78), а материалы процедуры живут в досье (FR-1602).
+#[tokio::test]
+async fn only_a_draft_tender_can_be_deleted() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, 20).await.expect("фикстура");
+
+    // Фикстура дает объявленный тендер - его удалять нельзя
+    let announced = sqlx::query_scalar!(
+        r#"SELECT status::text AS "status!" FROM core.tenders WHERE id = $1"#,
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("статус тендера");
+    assert_eq!(announced, "accepting", "фикстура объявлена");
+
+    let deleted = sqlx::query!(
+        "DELETE FROM core.tenders WHERE id = $1 AND status = 'draft'",
+        f.tender_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("запрос не падает - просто ничего не удаляет");
+    assert_eq!(
+        deleted.rows_affected(),
+        0,
+        "условие статуса не дает удалить объявленный тендер"
+    );
+
+    // Черновик того же организатора уходит вместе с лотами
+    let organizer = sqlx::query_scalar!(
+        "SELECT organizer_id FROM core.tenders WHERE id = $1",
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("организатор");
+
+    let draft = sqlx::query_scalar!(
+        "INSERT INTO core.tenders (title, status, organizer_id)
+         VALUES ('Т27 черновик', 'draft', $1) RETURNING id",
+        organizer
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("черновик");
+
+    let object = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', 'Т27 объект черновика', 'адрес', 12.00) RETURNING id"
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("объект");
+
+    sqlx::query!(
+        "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                                base_rate_monthly, rate_calculation, guarantee_fee)
+         VALUES ($1, 1, $2, 'офис', 12, 50000.00, '{}'::jsonb, 50000.00)",
+        draft,
+        object
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("лот черновика");
+
+    let removed = sqlx::query!(
+        "DELETE FROM core.tenders WHERE id = $1 AND status = 'draft'",
+        draft
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("удаление черновика");
+    assert_eq!(removed.rows_affected(), 1, "черновик удаляется");
+
+    let orphans = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM core.lots WHERE tender_id = $1"#,
+        draft
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("лоты удаленного черновика");
+    assert_eq!(orphans, 0, "лоты черновика уходят каскадом");
+}

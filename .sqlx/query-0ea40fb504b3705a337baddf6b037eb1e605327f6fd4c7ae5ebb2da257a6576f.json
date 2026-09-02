@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT organizer_id FROM core.tenders WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "organizer_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "organizer_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0ea40fb504b3705a337baddf6b037eb1e605327f6fd4c7ae5ebb2da257a6576f"
+}

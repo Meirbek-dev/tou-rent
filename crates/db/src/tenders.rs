@@ -379,6 +379,66 @@ fn map_rule(err: sqlx::Error) -> TransitionError {
     TransitionError::Db(err)
 }
 
+/// Чем кончилась попытка удалить тендер.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DraftDeletion {
+    Deleted,
+    NotFound,
+    /// Тендер уже объявлен - удалению не подлежит
+    Published,
+}
+
+/// Удаление черновика (FR-301). Объявленный тендер не удаляется никогда: его
+/// отменяют (FR-305, п. 78), а след процедуры остается в досье (FR-1602) -
+/// поэтому статус читается под `FOR UPDATE` и повторно стоит условием самого
+/// DELETE: между проверкой и удалением тендер не должен успеть уйти в
+/// публикацию. Лоты и документацию уносит каскад, запись в аудит делает
+/// триггер таблицы.
+///
+/// Обязательства снимаются здесь же: сроки черновика - его собственный хвост,
+/// и следить за ними после удаления не за чем. Ссылки из заявок, протоколов,
+/// досье и прочих таблиц процедуры стоят без каскада и намеренно не трогаются:
+/// они заводятся только после публикации, так что их наличие означает, что
+/// процедура шла. Такая ссылка вернется отказом внешнего ключа - наверх он
+/// приедет как [`TransitionError::Rejected`], а не как удаление половины дела.
+pub async fn delete_draft(
+    db: &Db,
+    actor: Uuid,
+    id: Uuid,
+) -> Result<DraftDeletion, TransitionError> {
+    crate::with_actor(db, actor, async |tx| {
+        let status = sqlx::query_scalar!(
+            r#"SELECT status::text AS "status!" FROM core.tenders WHERE id = $1 FOR UPDATE"#,
+            id
+        )
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        let Some(status) = status else {
+            return Ok(DraftDeletion::NotFound);
+        };
+        if status != "draft" {
+            return Ok(DraftDeletion::Published);
+        }
+
+        sqlx::query!("DELETE FROM core.obligations WHERE tender_id = $1", id)
+            .execute(&mut *tx)
+            .await
+            .map_err(map_rule)?;
+
+        sqlx::query!(
+            "DELETE FROM core.tenders WHERE id = $1 AND status = 'draft'",
+            id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(map_rule)?;
+
+        Ok(DraftDeletion::Deleted)
+    })
+    .await
+}
+
 /// Ссылка на запись торгов (FR-306, п. 72): вносится после того, как торги
 /// завершены, - до итогов записи не существует. Возвращает None, если тендер
 /// не найден или еще не подведен: проверку держит условие запроса, а не
