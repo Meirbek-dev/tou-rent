@@ -141,8 +141,7 @@ function SpecialRequestCard({ request }: { request: SpecialRequest }) {
               {m.special_category_label()}
             </dt>
             <dd className="font-medium">
-              {category ? localeLabel(category) : request.category_label} (
-              {request.category_rule_ref})
+              {category ? localeLabel(category) : request.category_label}
             </dd>
           </div>
           <div className="flex flex-col gap-0.5">

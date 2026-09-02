@@ -1,6 +1,6 @@
 # TOU.Rent - техническая архитектура v3 (фактическая)
 
-Версия 3.0 · 08.08.2026 · заменяет [v2.0](tou-rent-architecture-v2.md)
+Версия 3.0 · 08.08.2026 · фактическая архитектура проекта
 Основание: Правила передачи недвижимого имущества НАО «Торайгыров университет» в имущественный наем, реш. СД № 1 от 30.01.2026 (далее - Правила) + ответы заказчика от 06.08.2026 + реализация контуров 1–3 (T0–T44).
 
 Документ читается совместно с [ТЗ v1.0](tou-rent-tz-v1.md) (требования `FR-`/`NFR-`/`INV-`) и [ТЗ v2.0](tou-rent-tz-v2.md) (состояние и оставшиеся работы). При противоречии приоритет у ТЗ.
@@ -20,7 +20,7 @@
 | SQL под контролем типов | `sqlx::query!` + `.sqlx` + гейт G3                        | запросы строковые, макросы выключены; G3 сторожит только появление макросов без кеша                                                                | A-003; **остается долгом (ТЗ v2 T46)**     |
 | Реалтайм                | Redis pub/sub для SSE и WS                                | так и сделано (T58): публикация уходит в Redis, доставка до сокета - локальный broadcast                                                            | § 5.4                                      |
 | PostgreSQL              | 18 (`uuidv7()`)                                           | 19beta2 в dev, CI и прод-compose                                                                                                                    | ADR-0002; **[решение]** § 6.1              |
-| Наблюдаемость           | только `grafana/otel-lgtm`                                | **нет наблюдаемости бэкенда** (otel-lgtm снят 09.08.2026, Q-018); Sentry и PostHog в `apps/web`                                                     | § 8                                        |
+| Наблюдаемость           | только `grafana/otel-lgtm`                                | **нет наблюдаемости бэкенда** (otel-lgtm снят решением инженера 09.08.2026); Sentry и PostHog в `apps/web`                                          | § 8                                        |
 | TypeScript              | TS 7 (tsgo) + дублирующий typecheck на 5.9                | TS 7.x в `apps/web`, typecheck внутри `vp check`; дублирующего прогона нет                                                                          | § 7                                        |
 | G7 (линт фронта)        | Biome ci + Knip + dependency-cruiser                      | oxlint (type-aware) внутри `vp check`; запрет межслойных импортов - правилами `no-restricted-imports`, а не отдельным инструментом                  | § 9                                        |
 | Терминология запретов   | `biome.json`, `biome-ignore`                              | `oxlint-disable`; файла `biome.json` не существует                                                                                                  | § 9, AGENTS.md § А.4                       |
@@ -94,8 +94,8 @@ tou-rent/
 │  └─ testkit/             # тесты против живой БД + гейты трассировки INV/FR
 ├─ packages/
 │  └─ api-client/          # @generated: openapi.json + openapi-typescript (@tou/api-client)
-├─ specs/                  # INVENTORY.md, BACKLOG.md, QUESTIONS.md, ASSUMPTIONS.md, adr/
-├─ docs/                   # ТЗ v1, ТЗ v2, архитектура v2 (история), архитектура v3
+├─ specs/                  # INVENTORY.md, активный BACKLOG.md, QUESTIONS.md, adr/, указатель старых A-ID
+├─ docs/                   # ТЗ v1, ТЗ v2, архитектура v3, руководство пользователя
 ├─ infra/
 │  ├─ compose/             # docker-compose.dev.yml / prod.yml, Caddyfile, deploy.sh
 │  ├─ docker/              # api.Dockerfile, web.Dockerfile
@@ -109,7 +109,7 @@ tou-rent/
 
 **Почему `packages/ui` и `packages/i18n` не появились.** Второго потребителя у компонентов и переводов нет: единственное приложение с интерфейсом - `apps/web`. Выделение пакета дало бы границу без пользы и лишний шаг сборки. Компоненты shadcn/ui лежат в `apps/web/src/components/ui` и правятся как свой код (реестр `components.json`); брендовые токены университета по-прежнему подключаются заменой CSS-переменных в `src/styles/globals.css` - компоненты не переписываются, как и планировалось. Если появится второе приложение, вынос делается механически.
 
-**Пакетный менеджер и команды.** Bun 1.3 (`packageManager` в `package.json`) - менеджер и раннер. Единая команда самопроверки - **`vp check`** (fmt → lint → typecheck → test для TS-части). Rust-часть проверяется своими командами: `cargo clippy --workspace --all-targets -- -D warnings` и `cargo test --workspace`. Дев-стенд - `bun run stack:up` / `api:restart` / `api:logs`; Zitadel - профиль `zitadel:up` + `zitadel:provision`.
+**Пакетный менеджер и команды.** Bun (`packageManager` в `package.json`) - менеджер пакетов, Vite+ — единая точка запуска. Самопроверка — **`vp run verify`**, тесты — `vp test`; Rust-команды выполняются контейнерной обвязкой `vp run rust:*`. Дев-стенд — `vp run stack:up` / `api:restart` / `api:logs`; Zitadel — `vp run zitadel:up` + `vp run zitadel:provision`.
 
 ---
 
@@ -240,7 +240,7 @@ Redis - только эфемерное (сессии, шина событий, 
 
 ## 8. Наблюдаемость
 
-**Бэкенд** - нет. Стек `grafana/otel-lgtm` и весь экспорт OTLP сняты 09.08.2026 решением инженера (см. Q-018): вместе с ними ушли слой RED `http.server.request.duration` и бизнес-метрика `tou.tenders.count`. У api не остается ни метрик, ни трейсов; наблюдаемость сводится к логам `tracing` в stdout контейнера. Это осознанный откат относительно замысла v3 и относительно ТЗ v2 (T49, T70), а не незакрытая задача - см. отметку у T17 в BACKLOG.
+**Бэкенд** - нет. Стек `grafana/otel-lgtm` и весь экспорт OTLP сняты 09.08.2026 решением инженера: вместе с ними ушли слой RED `http.server.request.duration` и бизнес-метрика `tou.tenders.count`. У api нет метрик и трейсов; наблюдаемость сводится к логам `tracing` в stdout контейнера. NFR-02 подтверждается разовым нагрузочным прогоном T59.
 
 Ограничение, которое отсюда следует: NFR по времени отклика проверяются только нагрузочным прогоном вручную, непрерывного измерения задержек и доли ошибок в проде нет.
 
@@ -307,4 +307,4 @@ Redis - только эфемерное (сессии, шина событий, 
 
 ---
 
-_Сопровождающие артефакты: [ТЗ v1.0](tou-rent-tz-v1.md), [ТЗ v2.0](tou-rent-tz-v2.md) (состояние и оставшиеся работы), `specs/INVENTORY.md`, `specs/BACKLOG.md`, `specs/adr/`. Архитектура v2 сохраняется в репозитории как история замысла._
+_Сопровождающие артефакты: [ТЗ v1.0](tou-rent-tz-v1.md), [ТЗ v2.0](tou-rent-tz-v2.md), `specs/INVENTORY.md`, `specs/BACKLOG.md`, `specs/QUESTIONS.md`, `specs/adr/`. Историю редакций хранит Git._

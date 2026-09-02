@@ -150,7 +150,7 @@ export function DecisionForm({
               >
                 {reasons.map((r) => (
                   <NativeSelectOption key={r.code} value={r.code}>
-                    {reasonLabel(reasons, r.code)} ({r.rule_ref})
+                    {reasonLabel(reasons, r.code)}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>

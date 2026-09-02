@@ -146,10 +146,7 @@ function ContractCard({ contract }: { contract: ContractDto }) {
       description={`${contract.object_name} · ${formatTenge(contract.monthly_rate)}`}
       contentClassName="flex flex-col gap-5"
     >
-      <ContractStages
-        stage={contract.stage}
-        ruleRef={contract.stage_rule_ref ?? undefined}
-      />
+      <ContractStages stage={contract.stage} />
 
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-0.5">
@@ -279,12 +276,7 @@ function ContractCard({ contract }: { contract: ContractDto }) {
                   key={act.id}
                   className="flex flex-wrap items-center justify-between gap-2"
                 >
-                  <span className="flex flex-wrap items-center gap-2">
-                    {actKindLabel(act.kind)}
-                    <span className="text-muted-foreground">
-                      {act.appendix}
-                    </span>
-                  </span>
+                  <span>{actKindLabel(act.kind)}</span>
                   <span
                     className="text-muted-foreground"
                     suppressHydrationWarning
@@ -309,23 +301,14 @@ function ContractCard({ contract }: { contract: ContractDto }) {
  * Порядок шагов - это и есть содержание п. 110–115, поэтому он показан
  * списком, а не одной строкой.
  */
-function ContractStages({
-  stage,
-  ruleRef,
-}: {
-  stage: string | null | undefined
-  ruleRef?: string | undefined
-}) {
+function ContractStages({ stage }: { stage: string | null | undefined }) {
   const current = isStage(stage) ? stage : null
   const reached = current == null ? -1 : STAGE_SEQUENCE[current]
 
   return (
     <section aria-label={m.contract_stage_label()}>
-      <div className="mb-2 flex flex-wrap items-baseline gap-2">
+      <div className="mb-2">
         <h3 className="font-medium">{m.contract_stage_label()}</h3>
-        {ruleRef != null && (
-          <span className="text-sm text-muted-foreground">{ruleRef}</span>
-        )}
       </div>
       <ol className="flex flex-col gap-1.5 sm:flex-row sm:flex-wrap sm:items-center">
         {STAGES.map((item, index) => {

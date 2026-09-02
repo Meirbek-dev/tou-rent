@@ -142,7 +142,7 @@ function NewSpecialRequestPage() {
             >
               {categories.map((item) => (
                 <NativeSelectOption key={item.code} value={item.code}>
-                  {localeLabel(item)} - {item.rule_ref}
+                  {localeLabel(item)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>

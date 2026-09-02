@@ -100,9 +100,6 @@ function PublicRecordCard({ record }: { record: PublicRecord }) {
       <div className="flex flex-col gap-3 p-5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <Badge variant="outline">{record.kind_title_ru}</Badge>
-          <span className="text-sm text-muted-foreground tabular-nums">
-            {record.rule_ref}
-          </span>
           <span
             className="text-sm text-muted-foreground"
             suppressHydrationWarning

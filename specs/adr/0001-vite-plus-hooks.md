@@ -1,26 +1,25 @@
-# ADR-0001: нативные git-хуки Vite+ вместо lefthook
+# ADR-0001: проверки в нативных Git hooks Vite+
 
-Статус: accepted · 2026-08-06 · связано: A-001, A-007
+Статус: accepted · 2026-08-06 · актуализировано 2026-09-02
 
 ## Контекст
 
-Арх. § 4 предусматривает `lefthook.yml`. Репозиторий фактически использует
-Vite+ (A-001), который включает собственный диспетчер git-хуков
-(`vp config` → `.vite-hooks/`) и раннер staged-проверок (`vp staged`,
-конфиг - блок `staged` в `vite.config.ts`).
+Проект использует Vite+ как единый frontend toolchain. Отдельный менеджер hooks добавил бы
+второй конфиг и второй способ запуска тех же проверок.
 
 ## Решение
 
-lefthook не вводится. Хуки - проектные скрипты в `.vite-hooks/`:
+Hooks устанавливает `vp config --no-agent`, конфигурация staged-файлов живет в
+`vite.config.ts`, исполняемые файлы — в `.vite-hooks/`:
 
-- `pre-commit` - `vp staged`: oxfmt по staged TS/CSS/JSON/MD, rustfmt по staged `*.rs`;
-- `commit-msg` - регэксп Conventional Commits (регламент А.3);
-- `pre-push` - `vp check` + `cargo fmt --all --check`.
+- `pre-commit` запускает `vp staged`;
+- `pre-push` запускает grep-гейты, `vp check` и Rust fmt/clippy через контейнер;
+- явный разовый пропуск Rust — `TOU_SKIP_RUST=1`; отключение всех hooks — штатная
+  переменная Vite+ `VP_GIT_HOOKS=0`.
 
-Диспетчер ставится `vp config --no-agent` (script `prepare` в корневом
-package.json). Отключение на машине: `VP_GIT_HOOKS=0`.
+Полная ручная проверка перед MR — `vp run verify`, отдельно тесты — `vp test`.
 
 ## Следствия
 
-- Одним инструментом меньше; конфиг staged-проверок живет рядом с lint/fmt в `vite.config.ts`.
-- Rust-часть хуков ограничена rustfmt: clippy/test на Windows-хосте невозможны (A-003), их закрывает CI (G1–G2, G8).
+Локальные hooks дают быстрый рубеж, но не заменяют pipeline. Изменения их состава должны
+одновременно отражаться в `AGENTS.md`, чтобы команды разработчика и автоматики не расходились.

@@ -63,9 +63,6 @@ export function MyDeadlines() {
                   <span className="font-medium">
                     {deadlineLabel(obligation.action)}
                   </span>
-                  <span className="text-muted-foreground">
-                    {obligation.rule_ref}
-                  </span>
                   {obligation.tender_id != null &&
                     obligation.tender_title != null && (
                       <Link

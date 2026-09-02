@@ -138,7 +138,6 @@ function DeadlineRow({
         >
           {formatDateTime(obligation.due_at) ?? "-"}
         </span>
-        <span className="text-muted-foreground">{obligation.rule_ref}</span>
       </span>
     </li>
   )

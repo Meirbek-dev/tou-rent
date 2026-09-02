@@ -64,12 +64,7 @@ export function EvasionPanel({
                     <span className="text-muted-foreground">
                       {serverLabel(evasion, "place_title")}
                     </span>
-                    <span>
-                      {evasion.ground_label}{" "}
-                      <span className="text-muted-foreground">
-                        ({evasion.ground_rule_ref})
-                      </span>
-                    </span>
+                    <span>{evasion.ground_label}</span>
                     <span
                       className="text-muted-foreground"
                       suppressHydrationWarning

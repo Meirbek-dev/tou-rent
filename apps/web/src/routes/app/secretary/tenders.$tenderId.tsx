@@ -295,7 +295,7 @@ function SecretaryTenderPage() {
         }}
         className="gap-6"
       >
-        <TabsList className="max-w-full overflow-x-auto">
+        <TabsList className="max-w-full overflow-x-auto overflow-y-hidden">
           <TabsTrigger value="overview">{m.tab_overview()}</TabsTrigger>
           <TabsTrigger value="meeting">{m.tab_meeting()}</TabsTrigger>
           <TabsTrigger value="applications">{m.tab_applications()}</TabsTrigger>

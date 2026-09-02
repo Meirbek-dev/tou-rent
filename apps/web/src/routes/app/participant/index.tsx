@@ -174,7 +174,7 @@ function ParticipantHome() {
                   {m.special_card_title({ id: request.id.slice(0, 8) })}
                 </Link>
                 <span className="text-sm text-muted-foreground">
-                  {request.category_label} ({request.category_rule_ref})
+                  {request.category_label}
                 </span>
                 <span
                   className="ml-auto text-xs text-muted-foreground tabular-nums"

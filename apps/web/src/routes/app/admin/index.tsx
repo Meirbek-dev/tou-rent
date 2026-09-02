@@ -124,7 +124,7 @@ function AdminHome() {
         }}
         className="gap-6"
       >
-        <TabsList className="max-w-full overflow-x-auto">
+        <TabsList className="max-w-full overflow-x-auto overflow-y-hidden">
           <TabsTrigger value="users">{m.admin_users_title()}</TabsTrigger>
           <TabsTrigger value="announcement">
             {m.admin_announcement_tab()}

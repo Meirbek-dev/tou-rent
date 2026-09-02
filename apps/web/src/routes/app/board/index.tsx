@@ -168,7 +168,7 @@ function RequestCard({ request }: { request: SpecialRequest }) {
             {specialStatusLabel(request.status)}
           </span>
           <span className="text-sm text-muted-foreground">
-            {request.category_label} ({request.category_rule_ref})
+            {request.category_label}
           </span>
           <span
             className="text-sm text-muted-foreground tabular-nums"

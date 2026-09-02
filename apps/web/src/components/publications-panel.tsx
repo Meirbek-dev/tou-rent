@@ -103,7 +103,6 @@ function PendingCard({ item }: { item: PendingPublication }) {
     <article className="flex flex-col gap-2 rounded-lg border p-4">
       <div className="flex flex-wrap items-center gap-3">
         <Badge variant="neutral">{serverLabel(item, "kind_title")}</Badge>
-        <span className="text-sm text-muted-foreground">{item.rule_ref}</span>
         <span
           className="text-sm text-muted-foreground"
           suppressHydrationWarning

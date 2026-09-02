@@ -344,7 +344,7 @@ function ManageTender({
         }}
         className="gap-6"
       >
-        <TabsList className="max-w-full overflow-x-auto">
+        <TabsList className="max-w-full overflow-x-auto overflow-y-hidden">
           <TabsTrigger value="overview">{m.tab_overview()}</TabsTrigger>
           <TabsTrigger value="lots">{m.tab_lots()}</TabsTrigger>
           <TabsTrigger value="changes">{m.tab_changes()}</TabsTrigger>

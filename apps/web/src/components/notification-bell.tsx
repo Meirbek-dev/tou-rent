@@ -87,7 +87,6 @@ export function notificationText(notification: NotificationDto): string {
       const payload = notification.payload as ObligationOverduePayload
       return m.notif_obligation_overdue({
         action: deadlineLabel(payload.action),
-        rule: payload.rule_ref,
       })
     }
     // FR-903 (п. 117–118): договор предлагается участнику № 2

@@ -9,7 +9,6 @@ import { DepositPanel } from "@/components/deposit-panel"
 import { FormAlert } from "@/components/form-alert"
 import { Panel } from "@/components/panel"
 import { QueryBoundary } from "@/components/query-boundary"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
@@ -274,10 +273,7 @@ function ContractCard({
       <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
         <div className="flex gap-2">
           <dt className="text-muted-foreground">{m.contract_stage_label()}:</dt>
-          <dd data-testid="contract-stage">
-            {stageLabel(contract.stage)}
-            {contract.stage_rule_ref != null && ` (${contract.stage_rule_ref})`}
-          </dd>
+          <dd data-testid="contract-stage">{stageLabel(contract.stage)}</dd>
         </div>
         <div className="flex gap-2">
           <dt className="text-muted-foreground">{m.contract_reg_label()}:</dt>
@@ -312,10 +308,7 @@ function ContractCard({
                     }
                   />
                   <label htmlFor={`check-${contract.id}-${item.item_code}`}>
-                    {serverLabel(item)}{" "}
-                    <span className="text-muted-foreground">
-                      ({item.rule_ref})
-                    </span>
+                    {serverLabel(item)}
                   </label>
                 </li>
               ))}
@@ -458,7 +451,7 @@ function EvasionSection({
               </NativeSelectOption>
               {items.map((item) => (
                 <NativeSelectOption key={item.code} value={item.code}>
-                  {serverLabel(item)} ({item.rule_ref})
+                  {serverLabel(item)}
                 </NativeSelectOption>
               ))}
             </NativeSelect>
@@ -544,9 +537,6 @@ function ActsSection({
                 className="flex flex-wrap items-center gap-x-3 gap-y-1"
               >
                 <span>{actKindLabel(act.kind)}</span>
-                {/* `appendix` приходит с сервера ссылкой на Правила
-                    («Прил. 7»), как и `rule_ref`: это цитата, а не код */}
-                <Badge variant="neutral">{act.appendix}</Badge>
                 <span suppressHydrationWarning>{formatDate(act.act_date)}</span>
                 {act.has_pdf && (
                   <a

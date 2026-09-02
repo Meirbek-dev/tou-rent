@@ -213,9 +213,6 @@ function Entries({ accountId }: { accountId: string }) {
                 ? `+${formatTenge(entry.credit)}`
                 : `−${formatTenge(entry.debit)}`}
             </span>
-            {entry.rule_ref !== null && (
-              <span className="text-muted-foreground">{entry.rule_ref}</span>
-            )}
           </li>
         ))}
       </ul>
@@ -268,7 +265,7 @@ function RefundForm({ applicationId }: { applicationId: string }) {
         </NativeSelectOption>
         {(reasons ?? []).map((item) => (
           <NativeSelectOption key={item.code} value={item.code}>
-            {`${item.label_ru} (${item.rule_ref})`}
+            {item.label_ru}
           </NativeSelectOption>
         ))}
       </NativeSelect>

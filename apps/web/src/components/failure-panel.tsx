@@ -150,10 +150,7 @@ function FailureFacts({ state }: { state: FailureStateDto }) {
     <dl className="grid grid-cols-1 gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
       <div className="flex gap-2">
         <dt className="text-muted-foreground">{m.failure_ground_label()}:</dt>
-        <dd data-testid="failure-ground">
-          {groundLabel(state.ground)}
-          {state.ground_rule_ref != null && ` (${state.ground_rule_ref})`}
-        </dd>
+        <dd data-testid="failure-ground">{groundLabel(state.ground)}</dd>
       </div>
       <div className="flex gap-2">
         <dt className="text-muted-foreground">
