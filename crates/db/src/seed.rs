@@ -51,8 +51,14 @@ pub const EXTRA_PARTICIPANTS: [(&str, &str); 2] = [
 /// Демо-комиссия (М11): без нее невозможны заседание, голоса и протокол
 /// допуска (FR-503). Состав - по правилам FR-1101: председатель, заместитель,
 /// пять членов (голосующих семь, нечетно) и два резервных.
-/// TODO-ENGINEER: реальный состав утверждается приказом (п. 9–11).
-pub const DEMO_COMMISSION_NAME: &str = "Тендерная комиссия ТОУ (демо, TODO-ENGINEER: состав)";
+/// TODO-ENGINEER: реальный состав утверждается приказом (п. 9–11). Метка
+/// остается здесь, в коде: в названии она доходила до члена комиссии на
+/// экране (гаунтлет G-054).
+pub const DEMO_COMMISSION_NAME: &str = "Тендерная комиссия ТОУ (демо)";
+
+/// Прежнее название демо-комиссии - стенды, засеянные до переименования,
+/// узнаются по нему и переименовываются, а не получают вторую комиссию.
+const LEGACY_DEMO_COMMISSION_NAME: &str = "Тендерная комиссия ТОУ (демо, TODO-ENGINEER: состав)";
 
 /// (email, ФИО, роль в комиссии). Отдельные учетные записи, а не носители
 /// других ролей: секретарь в состав не входит вовсе (п. 16–17), а Правление
@@ -94,11 +100,23 @@ pub async fn seed_commission(db: &Db) -> Result<bool, sqlx::Error> {
     let mut tx = db.begin().await?;
 
     let existing = sqlx::query_scalar!(
-        "SELECT id FROM core.commissions WHERE name = $1",
-        DEMO_COMMISSION_NAME
+        "SELECT id FROM core.commissions WHERE name IN ($1, $2)",
+        DEMO_COMMISSION_NAME,
+        LEGACY_DEMO_COMMISSION_NAME
     )
     .fetch_optional(&mut *tx)
     .await?;
+    if let Some(id) = existing {
+        // Переименование - только когда имя действительно старое: холостой
+        // UPDATE оставил бы событие аудита на каждый повторный запуск
+        sqlx::query!(
+            "UPDATE core.commissions SET name = $1 WHERE id = $2 AND name <> $1",
+            DEMO_COMMISSION_NAME,
+            id
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
 
     let created = existing.is_none();
     let commission_id = match existing {
@@ -148,13 +166,17 @@ pub async fn seed_commission(db: &Db) -> Result<bool, sqlx::Error> {
     .execute(&mut *tx)
     .await?;
 
+    // Холостой DO UPDATE будил бы `reset_commission_approval` и писал в
+    // аудит девять событий об изменениях, которых не было (гаунтлет G-047):
+    // роль переписывается только когда она действительно другая
     for (email, _, member_role) in COMMISSION_ACCOUNTS {
         sqlx::query!(
-            "INSERT INTO core.commission_members (commission_id, user_id, member_role)
+            "INSERT INTO core.commission_members AS cm (commission_id, user_id, member_role)
              SELECT $1, u.id, $2::text::core.commission_member_role
              FROM core.users u WHERE u.email = $3::citext
              ON CONFLICT (commission_id, user_id)
-             DO UPDATE SET member_role = EXCLUDED.member_role",
+             DO UPDATE SET member_role = EXCLUDED.member_role
+             WHERE cm.member_role IS DISTINCT FROM EXCLUDED.member_role",
             commission_id,
             member_role,
             email
@@ -163,12 +185,14 @@ pub async fn seed_commission(db: &Db) -> Result<bool, sqlx::Error> {
         .await?;
     }
 
-    // Утверждение состава - проверка FR-1101 на стороне БД (триггер)
+    // Утверждение состава - проверка FR-1101 на стороне БД (триггер).
+    // Утвержденный состав заново не утверждается: дата и автор утверждения -
+    // факт, который повторный seed переписывать не вправе
     sqlx::query!(
         "UPDATE core.commissions
          SET approved_at = core.now(),
              approved_by = (SELECT id FROM core.users WHERE email = 'admin@tou.demo'::citext)
-         WHERE id = $1",
+         WHERE id = $1 AND approved_at IS NULL",
         commission_id
     )
     .execute(&mut *tx)
@@ -501,7 +525,8 @@ pub async fn seed_tenders(db: &Db) -> Result<SeededTenders, SeedError> {
     if demo_created {
         created += 1;
         if let Some(tender_id) = demo_tender_id {
-            seed_demo_applications(db, tender_id, DEMO_APPLICANTS.len()).await?;
+            let applicants = demo_applicants(db, DEMO_APPLICANTS.len()).await?;
+            seed_demo_applications(db, tender_id, &applicants).await?;
         }
     }
 
@@ -620,21 +645,18 @@ async fn seed_tender(
     Ok(true)
 }
 
-/// Заявки трех демо-участников с разными ценами (§ 9.1) и записи журнала
-/// (Прил. 12). Порядок важен: журнал закрывается дедлайном (INV-037),
-/// поэтому прием закрывается уже после подачи.
-async fn seed_demo_applications(
-    db: &Db,
-    tender_id: uuid::Uuid,
-    count: usize,
-) -> Result<(), SeedError> {
-    let lot_id = sqlx::query_scalar!(
-        "SELECT id FROM core.lots WHERE tender_id = $1 ORDER BY seq LIMIT 1",
-        tender_id
-    )
-    .fetch_one(db)
-    .await?;
+/// Заявитель демо-заявки: учетная запись участника и реквизиты формы.
+struct DemoApplicant {
+    participant: uuid::Uuid,
+    email: String,
+    name: &'static str,
+    bin: &'static str,
+    price: &'static str,
+}
 
+/// Демо-участники § 9.1 по их учеткам; отсутствующие пропускаются.
+async fn demo_applicants(db: &Db, count: usize) -> Result<Vec<DemoApplicant>, SeedError> {
+    let mut applicants = Vec::with_capacity(count);
     for &(email, name, bin, price) in DEMO_APPLICANTS.iter().take(count) {
         let participant =
             sqlx::query_scalar!("SELECT id FROM core.users WHERE email = $1::citext", email)
@@ -643,21 +665,57 @@ async fn seed_demo_applications(
         let Some(participant) = participant else {
             continue;
         };
+        applicants.push(DemoApplicant {
+            participant,
+            email: email.to_owned(),
+            name,
+            bin,
+            price,
+        });
+    }
+    Ok(applicants)
+}
 
+/// Заявки демо-участников с разными ценами (§ 9.1) и записи журнала
+/// (Прил. 12). Порядок важен: журнал закрывается дедлайном (INV-037),
+/// поэтому прием закрывается уже после подачи.
+///
+/// Заявитель, лот и момент подачи после регистрации не переписываются
+/// (INV-037, триггер `freeze_application_identity`), поэтому заявка сразу
+/// подается от того участника, которому она принадлежит на площадке.
+async fn seed_demo_applications(
+    db: &Db,
+    tender_id: uuid::Uuid,
+    applicants: &[DemoApplicant],
+) -> Result<(), SeedError> {
+    let lot_id = sqlx::query_scalar!(
+        "SELECT id FROM core.lots WHERE tender_id = $1 ORDER BY seq LIMIT 1",
+        tender_id
+    )
+    .fetch_one(db)
+    .await?;
+
+    for applicant in applicants {
+        let participant = applicant.participant;
         let details = serde_json::json!({
-            "name": name,
+            "name": applicant.name,
             // TODO-ENGINEER: реквизиты демо-стенда фиктивны
-            "bin": bin,
+            "bin": applicant.bin,
             "address": "г. Павлодар, ул. Ломова, 64",
             "phone": "+7 700 000-00-00",
-            "email": email,
+            "email": applicant.email,
         });
+        let price = applicant.price;
 
+        // Демо-заявка идет без зашифрованного пакета PDF: как и строки,
+        // существовавшие до 20260828100000, она вставлена, а не подана
+        // мастером, и допуск по ней иначе невозможен (FR-502, Q-023)
         crate::with_actor(db, participant, async |tx| {
             let application_id = sqlx::query_scalar!(
                 "INSERT INTO core.applications
-                   (tender_id, lot_id, participant_id, applicant_kind, applicant_details)
-                 VALUES ($1, $2, $3, 'legal_entity', $4) RETURNING id",
+                   (tender_id, lot_id, participant_id, applicant_kind, applicant_details,
+                    package_required)
+                 VALUES ($1, $2, $3, 'legal_entity', $4, false) RETURNING id",
                 tender_id,
                 lot_id,
                 participant,
@@ -730,7 +788,8 @@ pub async fn seed_demo_tender(db: &Db, title: &str) -> Result<uuid::Uuid, SeedEr
         .await?;
 
     if created {
-        seed_demo_applications(db, tender_id, DEMO_APPLICANTS.len()).await?;
+        let applicants = demo_applicants(db, DEMO_APPLICANTS.len()).await?;
+        seed_demo_applications(db, tender_id, &applicants).await?;
     }
 
     Ok(tender_id)
@@ -743,17 +802,40 @@ pub async fn seed_demo_tender(db: &Db, title: &str) -> Result<uuid::Uuid, SeedEr
 /// допущены и внесли взносы, торги завершены, победитель и второе место
 /// привязаны к реальным ставкам (FR-606). Дальше сценарий идет через UI.
 pub async fn seed_summed_up_tender(db: &Db, title: &str) -> Result<uuid::Uuid, SeedError> {
+    let organizer =
+        sqlx::query_scalar!("SELECT id FROM core.users WHERE email = 'organizer@tou.demo'::citext")
+            .fetch_optional(db)
+            .await?;
+    let Some(organizer) = organizer else {
+        return Err(SeedError::Refdata(
+            "нет организатора: сначала seed-аккаунты".to_owned(),
+        ));
+    };
+    let Some(object) = DEMO_OBJECTS.first() else {
+        return Err(SeedError::Refdata("нет демо-объектов".to_owned()));
+    };
+
     // Заявки подаются, пока прием открыт (INV-037), поэтому тендер сначала
     // живет как «горячий», а потом доводится до итогов торгов
-    let tender_id = seed_demo_tender(db, title).await?;
+    seed_objects(db).await?;
+    let created = seed_tender(db, organizer, title, "accepting", object).await?;
+    let tender_id = sqlx::query_scalar!("SELECT id FROM core.tenders WHERE title = $1", title)
+        .fetch_one(db)
+        .await?;
+    if !created {
+        return Ok(tender_id);
+    }
+
     // Свой объект на площадку: договор доходит до регистрации, а один объект
     // не сдается на пересекающиеся периоды (INV-DB-02) - иначе повторный
     // прогон сценария упирался бы в чужую аренду
     dedicate_object(db, tender_id, title).await?;
     // Свои участники: сценарий уклонения заносит победителя в реестр
     // уклонистов (FR-505), и демо-аккаунты после него перестали бы
-    // проходить допуск в других прогонах
-    dedicate_participants(db, tender_id, title).await?;
+    // проходить допуск в других прогонах. Заявитель после подачи не
+    // переписывается (INV-037), поэтому участники создаются до заявок
+    let applicants = dedicated_applicants(db, title).await?;
+    seed_demo_applications(db, tender_id, &applicants).await?;
     advance_to_summed_up(db, tender_id).await?;
 
     // Допуск: третий участник отклонен основанием п. 52 (FR-502)
@@ -803,56 +885,43 @@ pub async fn seed_single_application_tender(db: &Db, title: &str) -> Result<uuid
     if created {
         // Одна заявка: журнал append-only, поэтому лишние не удаляются,
         // а просто не подаются (INV-037)
-        seed_demo_applications(db, tender_id, 1).await?;
+        let applicants = demo_applicants(db, 1).await?;
+        seed_demo_applications(db, tender_id, &applicants).await?;
     }
 
     Ok(tender_id)
 }
 
-/// Отдельные участники площадки: заявки переводятся на созданных под этот
-/// прогон пользователей (FR-505 - уклонение попадает в реестр навсегда).
-async fn dedicate_participants(
-    db: &Db,
-    tender_id: uuid::Uuid,
-    title: &str,
-) -> Result<(), SeedError> {
-    let applications = sqlx::query!(
-        "SELECT id, applicant_details->>'name' AS name FROM core.applications
-         WHERE tender_id = $1 ORDER BY submitted_at",
-        tender_id
-    )
-    .fetch_all(db)
-    .await?;
-
-    for (index, application) in applications.iter().enumerate() {
+/// Отдельные участники площадки: под каждый прогон создаются свои
+/// пользователи с реквизитами демо-участников (FR-505 - уклонение попадает
+/// в реестр навсегда, и общие демо-аккаунты его бы не пережили).
+async fn dedicated_applicants(db: &Db, title: &str) -> Result<Vec<DemoApplicant>, SeedError> {
+    let mut applicants = Vec::with_capacity(DEMO_APPLICANTS.len());
+    for (index, &(_, name, bin, price)) in DEMO_APPLICANTS.iter().enumerate() {
         let email = format!(
             "e2e-{}-{}@tou.test",
             index + 1,
             uuid::Uuid::now_v7().simple()
         );
-        let full_name = application
-            .name
-            .clone()
-            .unwrap_or_else(|| format!("Участник {}", index + 1));
 
         let participant = sqlx::query_scalar!(
             "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
              VALUES ($1::citext, 'e2e', $2, core.now()) RETURNING id",
             email,
-            format!("{full_name} - {title}")
+            format!("{name} - {title}")
         )
         .fetch_one(db)
         .await?;
 
-        sqlx::query!(
-            "UPDATE core.applications SET participant_id = $2 WHERE id = $1",
-            application.id,
-            participant
-        )
-        .execute(db)
-        .await?;
+        applicants.push(DemoApplicant {
+            participant,
+            email,
+            name,
+            bin,
+            price,
+        });
     }
-    Ok(())
+    Ok(applicants)
 }
 
 /// Отдельный объект имущества для площадки сценария: копия демо-объекта
