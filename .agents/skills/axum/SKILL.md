@@ -39,7 +39,6 @@ Axum is a Rust web framework built on Hyper and Tower. Use it for type-safe requ
 ### Minimal server
 
 ✅ **Correct: typed handler + JSON response**
-
 ```rust
 use axum::{routing::get, Json, Router};
 use serde::Serialize;
@@ -65,7 +64,6 @@ async fn main() {
 ```
 
 ❌ **Wrong: block the async runtime**
-
 ```rust
 async fn handler() {
     std::thread::sleep(std::time::Duration::from_secs(1)); // blocks executor
@@ -79,7 +77,6 @@ async fn handler() {
 Handlers are async functions that return something implementing `IntoResponse`.
 
 ✅ **Correct: route nesting**
-
 ```rust
 use axum::{routing::get, Router};
 
@@ -105,7 +102,6 @@ Prefer extractors for parsing and validation at the boundary:
 - `State<T>`: shared application state
 
 ✅ **Correct: typed path + JSON**
-
 ```rust
 use axum::{extract::Path, Json};
 use serde::{Deserialize, Serialize};
@@ -135,7 +131,6 @@ async fn get_user(Path(id): Path<String>) -> Json<User> {
 If your crate is published as a library in addition to being built as a binary, isolate the HTTP stack to avoid bloating library consumers.
 
 ✅ **Correct: optional HTTP feature**
-
 ```toml
 [dependencies]
 axum = { version = "0.7", optional = true }
@@ -152,13 +147,11 @@ required-features = ["http-server"]
 ```
 
 This way:
-
 - Library consumers (`cargo add my-lib`) get just the core logic without the HTTP overhead.
 - Binary builds include the server by default: `cargo install my-crate` works as expected.
 - Opt-out is explicit: `cargo add my-crate --no-default-features` for library use.
 
 ❌ **Wrong: unconditional HTTP dependencies**
-
 ```toml
 # Never do this if the crate is also a library:
 axum = "0.7"
@@ -173,7 +166,6 @@ tower-http = "0.5"
 Use `State<Arc<AppState>>` and keep state immutable where possible.
 
 ✅ **Correct: AppState via Arc**
-
 ```rust
 use axum::{extract::State, routing::get, Router};
 use std::sync::Arc;
@@ -197,7 +189,6 @@ fn app(state: Arc<AppState>) -> Router {
 Centralize error mapping to HTTP status codes and JSON.
 
 ✅ **Correct: AppError converts into response**
-
 ```rust
 use axum::{http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
@@ -232,7 +223,6 @@ impl IntoResponse for AppError {
 Use `tower-http` for production-grade layers: tracing, timeouts, request IDs, CORS.
 
 ✅ **Correct: trace + timeout + CORS**
-
 ```rust
 use axum::{routing::get, Router};
 use std::time::Duration;
@@ -260,7 +250,6 @@ fn app() -> Router {
 Terminate on SIGINT/SIGTERM and let in-flight requests drain.
 
 ✅ **Correct: with_graceful_shutdown**
-
 ```rust
 async fn shutdown_signal() {
     let ctrl_c = async {
@@ -300,7 +289,6 @@ async fn main() {
 Signal handling above is application-level. In production, your supervisor (systemd, launchd, container orchestrator) controls the actual termination window.
 
 **systemd (Linux)**: Set `KillSignal=SIGTERM` and `TimeoutStopSec=120` (or higher) in your `.service` file.
-
 - The default 90s timeout can fire mid-fsync on networked storage (EBS/EFS), truncating writes.
 - 120s gives in-flight HTTP requests time to drain plus a safety margin for filesystem syncs.
 
@@ -313,7 +301,6 @@ Signal handling above is application-level. In production, your supervisor (syst
 Test routers without sockets using `tower::ServiceExt`.
 
 ✅ **Correct: request/response test**
-
 ```rust
 use axum::{body::Body, http::Request, Router};
 use tower::ServiceExt;
@@ -350,3 +337,4 @@ async fn health_returns_ok() {
 - Axum docs: https://docs.rs/axum
 - Tower HTTP layers: https://docs.rs/tower-http
 - Tracing: https://docs.rs/tracing
+

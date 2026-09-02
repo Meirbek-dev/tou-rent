@@ -1,16 +1,42 @@
 import { defineConfig } from "vite-plus"
 
+const generatedStagedBasenames = new Set([
+  "openapi.json",
+  "schema.d.ts",
+  "routeTree.gen.ts",
+])
+
+function formatStagedFiles(files: readonly string[]) {
+  const targets = files.filter((file) => {
+    const normalized = file.replaceAll("\\", "/")
+    const basename = normalized.slice(normalized.lastIndexOf("/") + 1)
+
+    return (
+      !normalized.includes("/.agents/skills/") &&
+      !normalized.includes("/.claude/skills/") &&
+      !normalized.includes("/src/paraglide/") &&
+      !normalized.includes("/.sqlx/") &&
+      !generatedStagedBasenames.has(basename) &&
+      !basename.startsWith("query-")
+    )
+  })
+
+  return targets.length === 0
+    ? []
+    : `vp fmt --write ${targets.map((file) => JSON.stringify(file)).join(" ")}`
+}
+
 export default defineConfig({
   // Прекоммит-лазеры (арх. § 8): vp staged из .vite-hooks/pre-commit.
-  // Выходы кодогена (fmt ignorePatterns ниже) исключены и из staged-глоба:
-  // иначе коммит из одних сгенерированных файлов валит vp fmt
+  // Выходы кодогена и вендоренные навыки (fmt ignorePatterns ниже)
+  // исключаются из команды: иначе их крупные пакеты разбиваются
+  // lint-staged на чанки, каждый из которых валит vp fmt без целей
   // («Expected at least one target file»).
   // `query-*` - слепок `.sqlx` (гейт G3), такой же выход кодогена: его
   // формирует `sqlx prepare`, и переформатировать его нельзя - `sqlx prepare
   // --check` в rust-test сверяет файлы байт в байт с тем, что порождает sqlx.
   staged: {
-    "!(openapi|schema.d|routeTree.gen|query-*).{ts,tsx,js,jsx,mjs,css,json,jsonc,md,yml,yaml}":
-      "vp fmt --write",
+    "*.{ts,tsx,js,jsx,mjs,css,json,jsonc,md,yml,yaml}": formatStagedFiles,
     "*.rs": "rustfmt --edition 2024",
   },
   // Playwright-сценарии (apps/e2e, T14) гоняет свой раннер - vitest их

@@ -5,19 +5,19 @@
 `beforeLoad` runs before the route renders. Throw a redirect to block unauthenticated access:
 
 ```typescript
-import { createFileRoute, redirect } from "@tanstack/react-router"
-import { createServerFn } from "@tanstack/react-start"
-import { auth } from "@clerk/tanstack-react-start/server"
+import { createFileRoute, redirect } from '@tanstack/react-router'
+import { createServerFn } from '@tanstack/react-start'
+import { auth } from '@clerk/tanstack-react-start/server'
 
 const checkAuth = createServerFn().handler(async () => {
   const { isAuthenticated, userId } = await auth()
   if (!isAuthenticated) {
-    throw redirect({ to: "/sign-in" })
+    throw redirect({ to: '/sign-in' })
   }
   return { userId }
 })
 
-export const Route = createFileRoute("/dashboard")({
+export const Route = createFileRoute('/dashboard')({
   beforeLoad: async () => await checkAuth(),
 })
 ```
@@ -74,7 +74,7 @@ Child routes under `/_authenticated/` inherit the guard automatically.
 
 ```typescript
 throw redirect({
-  to: "/sign-in",
+  to: '/sign-in',
   search: { redirect: window.location.pathname },
 })
 ```
