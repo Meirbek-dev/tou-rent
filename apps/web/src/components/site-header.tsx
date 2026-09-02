@@ -33,8 +33,10 @@ export function SiteHeader() {
   return (
     <header className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="relative mx-auto flex h-16 w-full max-w-6xl items-center gap-2 px-4 sm:px-6">
-        <Link to="/" className="rounded-md">
-          <AppLogo />
+        {/* `min-w-0`: на 375 px знак делит строку с темой, языком, сессией
+            и меню - подпись должна ужиматься, а не выталкивать их за край */}
+        <Link to="/" className="min-w-0 rounded-md">
+          <AppLogo variant="header" />
         </Link>
 
         {/* Пять русских подписей в одну строку помещаются начиная с xl;

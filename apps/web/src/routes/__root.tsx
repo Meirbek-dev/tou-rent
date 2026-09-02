@@ -16,6 +16,7 @@ import {
 } from "#/paraglide/runtime"
 import * as m from "#/paraglide/messages"
 import { buttonVariants } from "@/components/ui/button"
+import { absoluteUrl } from "@/lib/site"
 import {
   isStaleChunkError,
   markReloadTried,
@@ -23,7 +24,6 @@ import {
 } from "@/lib/stale-chunk"
 import { themeInitializer } from "@/lib/theme"
 
-import faviconUrl from "../../favicon.ico?url"
 import appCss from "../styles/globals.css?url"
 
 import type { QueryClient } from "@tanstack/react-query"
@@ -41,12 +41,24 @@ interface MyRouterContext {
 
 const subscribeToNothing = () => () => undefined
 
+// Open Graph требует локаль в виде language_TERRITORY, а не тега BCP-47
+const OG_LOCALES: Record<(typeof locales)[number], string> = {
+  ru: "ru_RU",
+  kk: "kk_KZ",
+  en: "en_US",
+}
+
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   head: ({ matches }) => {
     // Локаль живет в пути (стратегия "url": /kk/..., /en/..., ru без
     // префикса), поэтому у каждой страницы есть три различимых адреса -
     // и поисковику надо сказать, что это одна и та же страница.
     const pathname = matches.at(-1)?.pathname ?? "/"
+    const locale = getLocale()
+    // Один и тот же адрес и для canonical, и для og:url - абсолютный:
+    // относительный путь краулер не разворачивает, а разнобой в адресах
+    // поисковик читает как разные страницы.
+    const canonical = absoluteUrl(localizeHref(pathname))
 
     return {
       meta: [
@@ -57,40 +69,132 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
           name: "viewport",
           content: "width=device-width, initial-scale=1",
         },
-        // Цвет служебных полос браузера повторяет --background обеих тем
+        // Служебные полосы браузера и заголовок установленного PWA - в
+        // фирменном синем, как `theme_color` манифеста. Одна запись, а не
+        // две с `media`: роутер оставляет по одному meta на `name`, и из
+        // пары «светлая/темная» до разметки доходила только вторая; тема
+        // к тому же переключается классом, а не media-запросом, так что
+        // цвет полосы по `prefers-color-scheme` за переключателем не
+        // следовал бы. Синий читается и на белом, и на темном фоне.
         {
           name: "theme-color",
-          media: "(prefers-color-scheme: light)",
-          content: "#ffffff",
+          content: "#1d3d66",
         },
         {
-          name: "theme-color",
-          media: "(prefers-color-scheme: dark)",
-          content: "#161616",
+          name: "description",
+          content: m.portal_subtitle(),
+        },
+        {
+          name: "application-name",
+          content: m.app_name(),
+        },
+        {
+          name: "apple-mobile-web-app-title",
+          content: m.app_name(),
+        },
+        // Карточку ссылки в мессенджере и соцсети собирает краулер: он не
+        // исполняет JS, поэтому берет то, что пришло с SSR. Обложка одна на
+        // весь портал - своей картинки у страниц нет и рисовать ее нечем;
+        // заголовок и описание страница уточняет своим `head` (роутер
+        // оставляет по одному meta на property, ближний match выигрывает).
+        {
+          property: "og:type",
+          content: "website",
+        },
+        {
+          property: "og:site_name",
+          content: m.app_name(),
+        },
+        {
+          property: "og:title",
+          content: m.portal_title(),
+        },
+        {
+          property: "og:description",
+          content: m.portal_subtitle(),
+        },
+        {
+          property: "og:url",
+          content: canonical,
+        },
+        {
+          property: "og:image",
+          content: absoluteUrl("/brand/og-cover.png"),
+        },
+        {
+          property: "og:image:width",
+          content: "1200",
+        },
+        {
+          property: "og:image:height",
+          content: "630",
+        },
+        {
+          property: "og:image:alt",
+          content: m.footer_university(),
+        },
+        {
+          property: "og:locale",
+          content: OG_LOCALES[locale],
+        },
+        // Остальные две локали - той же страницы. Роутер держит по одному
+        // meta на property, поэтому в разметку попадет одна из двух; полный
+        // перечень адресов поисковик берет из hreflang-ссылок ниже.
+        ...locales
+          .filter((alternate) => alternate !== locale)
+          .map((alternate) => ({
+            property: "og:locale:alternate",
+            content: OG_LOCALES[alternate],
+          })),
+        {
+          name: "twitter:card",
+          content: "summary_large_image",
         },
         {
           title: "ToU Rent",
         },
       ],
       links: [
+        // Файлы лежат в `public/` и отдаются от корня сайта: импортировать
+        // их нельзя - имя с хешем сборки сломало бы и манифест, и iOS.
         {
           rel: "icon",
-          href: faviconUrl,
-          sizes: "any",
+          href: "/favicon.ico",
+          sizes: "48x48",
+          type: "image/x-icon",
+        },
+        {
+          rel: "icon",
+          href: "/brand/icon-192.png",
+          type: "image/png",
+          sizes: "192x192",
+        },
+        {
+          rel: "apple-touch-icon",
+          href: "/brand/apple-touch-icon.png",
+          sizes: "180x180",
+        },
+        {
+          rel: "manifest",
+          href: "/manifest.json",
         },
         {
           rel: "stylesheet",
           href: appCss,
         },
-        ...locales.map((locale) => ({
+        {
+          rel: "canonical",
+          href: canonical,
+        },
+        ...locales.map((alternate) => ({
           rel: "alternate",
-          hrefLang: locale,
-          href: localizeHref(pathname, { locale }),
+          hrefLang: alternate,
+          href: absoluteUrl(localizeHref(pathname, { locale: alternate })),
         })),
         {
           rel: "alternate",
           hrefLang: "x-default",
-          href: localizeHref(pathname, { locale: baseLocale }),
+          href: absoluteUrl(localizeHref(pathname, { locale: baseLocale })),
         },
       ],
     }

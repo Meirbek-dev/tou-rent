@@ -27,8 +27,12 @@ const badgeVariants = cva(
         // бейджа - подложка-заливка на 10-15 %, как у destructive выше
         success:
           "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 [a]:hover:bg-emerald-500/20",
+        // В светлой теме текст на ступень темнее (amber-800): amber-700 на
+        // 15-процентной подложке давал ровно 4.5:1 и в замере axe (гейт G17)
+        // округлялся вниз - бейджи «идет тендер» и «в тендере» отбивали
+        // страницы реестра и свободных площадей
         warning:
-          "bg-amber-500/15 text-amber-700 dark:text-amber-400 [a]:hover:bg-amber-500/25",
+          "bg-amber-500/15 text-amber-800 dark:text-amber-400 [a]:hover:bg-amber-500/25",
         info: "bg-primary/10 text-primary [a]:hover:bg-primary/20",
         neutral:
           "bg-muted text-muted-foreground dark:bg-muted/50 [a]:hover:bg-muted/80",

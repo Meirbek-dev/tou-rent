@@ -20,7 +20,13 @@ import type { PublicRecord } from "@/lib/public-records"
 export const Route = createFileRoute("/special-orders")({
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(publicRecordsQuery),
-  head: () => ({ meta: [{ title: `${m.public_records_title()} - ToU Rent` }] }),
+  head: () => ({
+    meta: [
+      { title: `${m.public_records_title()} - ToU Rent` },
+      { property: "og:title", content: m.public_records_title() },
+      { property: "og:description", content: m.public_records_hint() },
+    ],
+  }),
   component: SpecialOrdersPage,
   pendingComponent: () => <RegistryPending title={m.public_records_title()} />,
 })

@@ -61,15 +61,17 @@ export const Route = createFileRoute("/tenders/$tenderId")({
 
     return tender
   },
-  head: ({ loaderData }) => ({
-    meta: [
-      {
-        title: loaderData
-          ? `${localizedTenderTitle(loaderData)} - ToU Rent`
-          : "ToU Rent",
-      },
-    ],
-  }),
+  head: ({ loaderData }) => {
+    // Без данных загрузчика (404) og:* не трогаем: корневые значения
+    // портала уместнее пустой или служебной карточки ссылки
+    const title = loaderData ? localizedTenderTitle(loaderData) : null
+    return {
+      meta: [
+        { title: title === null ? "ToU Rent" : `${title} - ToU Rent` },
+        ...(title === null ? [] : [{ property: "og:title", content: title }]),
+      ],
+    }
+  },
   component: TenderPage,
   notFoundComponent: TenderNotFound,
 })

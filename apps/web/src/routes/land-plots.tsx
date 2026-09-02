@@ -17,7 +17,13 @@ import type { LandPlot } from "@/lib/land"
 // опубликованному участку инвестор подает заявку из своего кабинета (п. 105).
 export const Route = createFileRoute("/land-plots")({
   loader: ({ context }) => context.queryClient.ensureQueryData(landPlotsQuery),
-  head: () => ({ meta: [{ title: `${m.land_plots_title()} - ToU Rent` }] }),
+  head: () => ({
+    meta: [
+      { title: `${m.land_plots_title()} - ToU Rent` },
+      { property: "og:title", content: m.land_plots_title() },
+      { property: "og:description", content: m.land_plots_hint() },
+    ],
+  }),
   component: LandPlotsPage,
   pendingComponent: () => <RegistryPending title={m.land_plots_title()} />,
 })

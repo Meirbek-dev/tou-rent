@@ -33,7 +33,13 @@ export const Route = createFileRoute("/objects/")({
   loaderDeps: ({ search }) => search,
   loader: ({ context, deps }) =>
     context.queryClient.ensureQueryData(objectsPageQuery(deps)),
-  head: () => ({ meta: [{ title: `${m.objects_title()} - ToU Rent` }] }),
+  head: () => ({
+    meta: [
+      { title: `${m.objects_title()} - ToU Rent` },
+      { property: "og:title", content: m.objects_title() },
+      { property: "og:description", content: m.objects_subtitle() },
+    ],
+  }),
   component: ObjectsPage,
   pendingComponent: () => <RegistryPending title={m.objects_title()} />,
 })
