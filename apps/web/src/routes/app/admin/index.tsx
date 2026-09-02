@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
@@ -52,7 +52,7 @@ import { holidaysQuery } from "@/lib/obligations"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { tabSearch } from "@/lib/tabs"
 
-import type { GrantableRole, UserDto } from "@/lib/admin"
+import type { GrantableRole, SiteAnnouncementDto, UserDto } from "@/lib/admin"
 
 // Кабинет департамента цифрового развития (М15, ТЗ § 3): пользователи и роли
 // (FR-1503, FR-1902) и справочники расчета - МРП, коэффициенты Прил. 4,
@@ -127,28 +127,57 @@ function AdminHome() {
 }
 
 function SiteAnnouncementPanel() {
-  const queryClient = useQueryClient()
-  const { data: announcement } = useQuery(adminSiteAnnouncementQuery)
-  const [form, setForm] = useState({
-    title: "",
-    title_kk: "",
-    body: "",
-    body_kk: "",
-    is_published: false,
-  })
+  const { data: announcement, dataUpdatedAt } = useQuery(
+    adminSiteAnnouncementQuery
+  )
 
-  useEffect(() => {
-    if (announcement === undefined) return
-    setForm(
-      announcement ?? {
-        title: m.admin_announcement_default_title({}, { locale: "ru" }),
-        title_kk: m.admin_announcement_default_title({}, { locale: "kk" }),
-        body: m.admin_announcement_default_body({}, { locale: "ru" }),
-        body_kk: m.admin_announcement_default_body({}, { locale: "kk" }),
-        is_published: false,
-      }
-    )
-  }, [announcement])
+  return (
+    <SiteAnnouncementEditor
+      key={dataUpdatedAt}
+      initialForm={initialAnnouncementForm(announcement)}
+    />
+  )
+}
+
+type AnnouncementForm = Parameters<typeof saveSiteAnnouncement>[0]
+
+function initialAnnouncementForm(
+  announcement: SiteAnnouncementDto | null | undefined
+): AnnouncementForm {
+  if (announcement !== null && announcement !== undefined) {
+    return {
+      title: announcement.title,
+      title_kk: announcement.title_kk,
+      body: announcement.body,
+      body_kk: announcement.body_kk,
+      is_published: announcement.is_published,
+    }
+  }
+  if (announcement === undefined) {
+    return {
+      title: "",
+      title_kk: "",
+      body: "",
+      body_kk: "",
+      is_published: false,
+    }
+  }
+  return {
+    title: m.admin_announcement_default_title({}, { locale: "ru" }),
+    title_kk: m.admin_announcement_default_title({}, { locale: "kk" }),
+    body: m.admin_announcement_default_body({}, { locale: "ru" }),
+    body_kk: m.admin_announcement_default_body({}, { locale: "kk" }),
+    is_published: false,
+  }
+}
+
+function SiteAnnouncementEditor({
+  initialForm,
+}: {
+  initialForm: AnnouncementForm
+}) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState(() => initialForm)
 
   const save = useMutation({
     mutationFn: () => saveSiteAnnouncement(form),

@@ -14,9 +14,9 @@
     "api:logs": "podman compose -f infra/compose/docker-compose.dev.yml logs -f api",
     "api:migrate": "podman compose -f infra/compose/docker-compose.dev.yml run --rm api-migrate",
     "api:seed": "podman compose -f infra/compose/docker-compose.dev.yml --profile api run --rm --no-deps -e SQLX_OFFLINE=true -e SEED_PASSWORD api cargo run -q -p api -- seed",
-    "cache:size": "podman run --rm -v tou-rent-target:/target alpine:3.22 du -sh /target /target/debug/deps /target/debug/incremental",
-    "cache:sweep": "podman run --rm -v tou-rent-target:/target alpine:3.22 rm -rf /target/debug/incremental",
-    "cache:clean": "podman run --rm -v tou-rent-target:/target alpine:3.22 sh -c \"rm -rf /target/debug /target/release\"",
+    "cache:size": "podman run --rm -v tou-rent-target:/target alpine:3.24.1 du -sh /target /target/debug/deps /target/debug/incremental",
+    "cache:sweep": "podman run --rm -v tou-rent-target:/target alpine:3.24.1 rm -rf /target/debug/incremental",
+    "cache:clean": "podman run --rm -v tou-rent-target:/target alpine:3.24.1 sh -c \"rm -rf /target/debug /target/release\"",
     "zitadel:up": "podman compose -f infra/compose/docker-compose.dev.yml --profile zitadel up -d",
     "zitadel:down": "podman compose -f infra/compose/docker-compose.dev.yml --profile zitadel down",
     "zitadel:provision": "podman compose -f infra/compose/docker-compose.dev.yml run --rm zitadel-init",
@@ -35,12 +35,12 @@
     "e2e:install": "bun run --cwd apps/e2e e2e:install"
   },
   "devDependencies": {
-    "turbo": "^2.10.9",
+    "turbo": "^2.10.12",
     "typescript": "catalog:",
-    "vite": "^0.2.9",
-    "vite-plus": "^0.2.9"
+    "vite": "^0.3.0",
+    "vite-plus": "^0.3.0"
   },
-  "packageManager": "bun@1.3.14",
+  "packageManager": "bun@1.4.0",
   "engines": {
     "node": ">=24"
   },
@@ -52,12 +52,13 @@
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
     "vitest": "4.1.9",
     "vite-plus": "latest",
-    "typescript": "6.0.3"
+    "typescript": "7.0.2"
   },
   "overrides": {
     "vite": "catalog:",
     "vitest": "catalog:",
     "typescript": "catalog:",
-    "js-yaml": "^4.3.1"
+    "js-yaml": "^4.3.1",
+    "nanoid": "3.3.18"
   }
 }

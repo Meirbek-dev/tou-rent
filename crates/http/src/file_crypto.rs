@@ -4,7 +4,7 @@
 use aes_gcm::aead::{Aead as _, KeyInit as _, Payload};
 use aes_gcm::{Aes256Gcm, Nonce};
 use hkdf::Hkdf;
-use sha2_compat::Sha256;
+use sha2::Sha256;
 use uuid::Uuid;
 
 const MAGIC: &[u8; 8] = b"TOURENT1";

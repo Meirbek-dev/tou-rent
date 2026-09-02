@@ -4,7 +4,7 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from "@tanstack/react-router"
-import { Suspense, lazy, useEffect, useState } from "react"
+import { Suspense, lazy, useSyncExternalStore } from "react"
 
 import PostHogProvider from "../integrations/posthog/provider"
 
@@ -38,6 +38,8 @@ const Devtools = import.meta.env.DEV
 interface MyRouterContext {
   queryClient: QueryClient
 }
+
+const subscribeToNothing = () => () => undefined
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
   head: ({ matches }) => {
@@ -116,13 +118,13 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
  */
 function ErrorPage({ error, reset }: { error: Error; reset: () => void }) {
   const stale = isStaleChunkError(error)
-  // sessionStorage не читается на отрисовке: SSR его не видит, и разметка
-  // разошлась бы при гидратации
-  const [reloadFailed, setReloadFailed] = useState(false)
-
-  useEffect(() => {
-    if (stale && reloadTriedRecently()) setReloadFailed(true)
-  }, [stale])
+  // Серверный снимок всегда false; после гидратации React перечитает
+  // sessionStorage как внешний браузерный источник, не меняя state в effect.
+  const reloadFailed = useSyncExternalStore(
+    subscribeToNothing,
+    () => stale && reloadTriedRecently(),
+    () => false
+  )
 
   const onRetry = () => {
     if (!stale) {

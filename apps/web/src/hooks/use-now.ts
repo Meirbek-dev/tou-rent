@@ -19,9 +19,15 @@ export function useNowMs(): number | null {
   const [nowMs, setNowMs] = useState<number | null>(null)
 
   useEffect(() => {
-    setNowMs(Date.now())
-    const timer = setInterval(() => setNowMs(Date.now()), TICK_MS)
-    return () => clearInterval(timer)
+    let timer: ReturnType<typeof setInterval> | undefined
+    const frame = requestAnimationFrame(() => {
+      setNowMs(Date.now())
+      timer = setInterval(() => setNowMs(Date.now()), TICK_MS)
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      if (timer !== undefined) clearInterval(timer)
+    }
   }, [])
 
   return nowMs

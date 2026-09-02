@@ -13,6 +13,7 @@ import { deadlineLabel } from "@/lib/obligation-labels"
 import { myObligationsQuery } from "@/lib/obligations"
 import { deadlineUrgency, formatRelative } from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
+import { useNowMs } from "@/hooks/use-now"
 import { AlarmClockIcon } from "lucide-react"
 
 import type { ObligationDto } from "@/lib/obligations"
@@ -33,9 +34,12 @@ const PREVIEW = 5
  */
 export function DeadlineChip() {
   const { data: page } = useQuery(myObligationsQuery)
+  const now = useNowMs()
   const obligations = page?.items
 
-  if (obligations === undefined || obligations.length === 0) return null
+  if (now === null || obligations === undefined || obligations.length === 0) {
+    return null
+  }
 
   const sorted = [...obligations].toSorted(
     (left, right) => Date.parse(left.due_at) - Date.parse(right.due_at)
@@ -43,9 +47,6 @@ export function DeadlineChip() {
   const nearest = sorted[0]
   if (nearest === undefined) return null
 
-  // Отсчет ведется от текущего момента браузера: дерево кабинетов клиентское
-  // (`ssr: false`), расходиться с разметкой сервера здесь нечему
-  const now = Date.now()
   const urgency = deadlineUrgency(nearest.due_at, now)
   const relative = formatRelative(nearest.due_at, now)
 

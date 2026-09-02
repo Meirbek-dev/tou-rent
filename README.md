@@ -116,7 +116,7 @@ vp check                   # формат + линт + типы + тесты ф�
 # (A-003), а кеш-тома общие с дев-стендом. Одна обвязка на check/clippy/test:
 podman run --rm -v "$PWD":/w -w /w -e CARGO_TARGET_DIR=/target \
   -v tou-rent-cargo:/usr/local/cargo/registry -v tou-rent-target:/target \
-  -v tou-rent-rustup:/usr/local/rustup rust:1.97 \
+  -v tou-rent-rustup:/usr/local/rustup rust:1.98.0 \
   sh -c "cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace"
 ```
 
@@ -131,7 +131,7 @@ podman run --rm --network tou-rent-dev_default -v "$PWD":/w -w /w \
   -e CARGO_TARGET_DIR=/target -e PRICE_ENCRYPTION_KEY=tou_rent_dev_price_key \
   -e TESTKIT_DATABASE_URL=postgres://tou_rent:tou_rent_dev@postgres:5432/tou_rent \
   -v tou-rent-cargo:/usr/local/cargo/registry -v tou-rent-target:/target \
-  -v tou-rent-rustup:/usr/local/rustup rust:1.97 cargo test -p tou-testkit
+  -v tou-rent-rustup:/usr/local/rustup rust:1.98.0 cargo test -p tou-testkit
 ```
 
 Сквозные сценарии Правил (гейт G11) - `apps/e2e`, см. [его README](apps/e2e/README.md):

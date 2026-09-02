@@ -115,7 +115,7 @@ tou-rent/
 
 ## 5. Бэкенд (Rust)
 
-Rust 1.97 (пин в `rust-toolchain.toml`), edition 2024, `unsafe_code = "forbid"` на уровне workspace-линтов. Запреты G2 заданы не grep'ом, а компилятором: `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`, `dbg_macro`, `print_stdout`, `print_stderr`, `disallowed_methods` - все `deny` в `[workspace.lints.clippy]`; в тестах паники разрешены (`clippy.toml`). `disallowed-methods` содержит `SystemTime::now` и `jiff::Timestamp::now` - время только через доменный `Clock`.
+Rust 1.98.0 (пин в `rust-toolchain.toml`), edition 2024, `unsafe_code = "forbid"` на уровне workspace-линтов. Запреты G2 заданы не grep'ом, а компилятором: `unwrap_used`, `expect_used`, `panic`, `todo`, `unimplemented`, `dbg_macro`, `print_stdout`, `print_stderr`, `disallowed_methods` - все `deny` в `[workspace.lints.clippy]`; в тестах паники разрешены (`clippy.toml`). `disallowed-methods` содержит `SystemTime::now` и `jiff::Timestamp::now` - время только через доменный `Clock`.
 
 ### 5.1 Библиотеки по слоям
 
@@ -282,7 +282,7 @@ Redis - только эфемерное (сессии, шина событий, 
 
 `infra/compose/deploy.sh`: пулл образов из GitLab Registry → миграции отдельным сервисом `api-migrate` (тот же образ, команда `migrate`) → `podman compose up -d` → ожидание `/healthz` у **обоих** контейнеров трафика, api и web. Выполняется из GitLab CI по SSH. **Окно заморозки:** деплой блокируется, пока жива хоть одна комната торгов (`core.auctions.status = 'running'` и срок не истек) - заморозку задает комната, а не статус тендера, который может висеть в `trading` с уже завершенными торгами (обход - `DEPLOY_FORCE=1`). **Откат:** тег, прошедший проверку здоровья, пишется в `.deployed-tag`; при отказе стенд возвращается на него, схему БД откат не трогает (A-100).
 
-Образы: `infra/docker/api.Dockerfile` (Rust, сборка в `rust:1.97` → запуск на debian-slim; в нем же едут миграции и воркер `jobs`) и `web.Dockerfile` (сборка и запуск на Bun - сервер nitro/srvx собирается под тот рантайм, в котором шла сборка). Секреты прод-стенда - `.env` рядом с compose-файлом, в репозиторий не попадает; шаблон - `.env.prod.example`.
+Образы: `infra/docker/api.Dockerfile` (Rust, сборка в `rust:1.98.0` → запуск на debian-slim; в нем же едут миграции и воркер `jobs`) и `web.Dockerfile` (сборка и запуск на Bun - сервер nitro/srvx собирается под тот рантайм, в котором шла сборка). Секреты прод-стенда - `.env` рядом с compose-файлом, в репозиторий не попадает; шаблон - `.env.prod.example`.
 
 Контейнеры ограничены (T74): потолки памяти под хост с 16 ГБ (A-099), `no-new-privileges` и `cap_drop: [ALL]` с точечными исключениями - Caddy оставлен `NET_BIND_SERVICE`, Postgres минимум для штатного входа образа, Redis запускается сразу от `redis` (A-101). Сам контур поднимался целиком локально 10.08.2026 (T75): это нашло три отказа, которых чтение YAML не показывало, - несобиравшийся образ `web`, падавший на старте Redis и вечно unhealthy `jobs`.
 

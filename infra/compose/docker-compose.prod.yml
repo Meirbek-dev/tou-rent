@@ -241,7 +241,7 @@ services:
   # записей безобидна, потеря всех - нет
   redis:
     <<: [*logging, *hardening]
-    image: redis:8.10.0
+    image: redis:8.10.1
     restart: unless-stopped
     # Штатный вход образа снимает права до `redis` только если у него есть
     # SETUID и SETGID, а их снял cap_drop - и redis-server оставался root'ом.
@@ -279,7 +279,7 @@ services:
   # и консоль доступны только из сети стенда, снаружи файлы ходят через api.
   rustfs:
     <<: [*logging, *hardening]
-    image: rustfs/rustfs:1.0.0-rc.1
+    image: rustfs/rustfs:1.0.0-rc.5
     restart: unless-stopped
     mem_limit: 2g
     environment:
@@ -305,7 +305,7 @@ services:
   # и шаг не зависит от клиента конкретного вендора (A-093).
   rustfs-init:
     <<: *hardening
-    image: amazon/aws-cli:2.36.19
+    image: amazon/aws-cli:2.36.37
     restart: "no"
     mem_limit: 256m
     depends_on:

@@ -133,6 +133,9 @@ export default defineConfig({
     },
     sortPackageJson: false,
     ignorePatterns: [
+      // Установленные навыки - вендоренные файлы, как и в lint выше.
+      ".claude/skills/",
+      ".agents/skills/",
       "**/routeTree.gen.ts",
       "**/src/paraglide/",
       // Выход кодогена G5 - байт-в-байт как сгенерирован

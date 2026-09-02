@@ -1,4 +1,4 @@
-import posthog from "posthog-js"
+import posthogClient from "posthog-js"
 import { PostHogProvider as BasePostHogProvider } from "@posthog/react"
 
 import { sanitizeProperties } from "../../../telemetry.mjs"
@@ -19,7 +19,7 @@ import type { ReactNode } from "react"
 // Модуль подключен из `__root.tsx`, то есть схема исполняется при старте
 // и в браузере, и на SSR.
 if (typeof window !== "undefined" && env.VITE_POSTHOG_KEY) {
-  posthog.init(env.VITE_POSTHOG_KEY, {
+  posthogClient.init(env.VITE_POSTHOG_KEY, {
     api_host: env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com",
     person_profiles: "identified_only",
     capture_pageview: false,
@@ -38,5 +38,7 @@ interface PostHogProviderProps {
 }
 
 export default function PostHogProvider({ children }: PostHogProviderProps) {
-  return <BasePostHogProvider client={posthog}>{children}</BasePostHogProvider>
+  return (
+    <BasePostHogProvider client={posthogClient}>{children}</BasePostHogProvider>
+  )
 }

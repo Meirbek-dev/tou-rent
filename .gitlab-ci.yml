@@ -49,15 +49,15 @@ variables:
   # причине, что и образы (T70): иначе релиз у стороннего проекта краснит
   # гейт без единого коммита в этом репозитории, и отличить «сломали код»
   # от «сменилось окружение» нельзя
-  SQUAWK_VERSION: "2.62.0"
-  SQLX_CLI_VERSION: "0.8.6"
+  SQUAWK_VERSION: "2.64.0"
+  SQLX_CLI_VERSION: "0.9.0"
   CARGO_MUTANTS_VERSION: "27.1.0"
   CARGO_DENY_VERSION: "0.20.2"
-  TRIVY_VERSION: "v0.73.0"
-  SCHEMATHESIS_VERSION: "4.24.3"
+  TRIVY_VERSION: "v0.74.0"
+  SCHEMATHESIS_VERSION: "4.25.2"
   # Тот же bun, что закреплен в package.json (packageManager)
-  BUN_VERSION: "1.3.14"
-  RUST_TOOLCHAIN: "1.97"
+  BUN_VERSION: "1.4.0"
+  RUST_TOOLCHAIN: "1.98.0"
   # Кеш крейтов лежал в `.cargo/registry`, а cargo в этом образе ходит
   # в /usr/local/cargo: путь кешировался пустым, и каждое задание выкачивало
   # реестр заново. Теперь домом cargo служит каталог проекта - только он
@@ -71,7 +71,7 @@ variables:
   SQLX_OFFLINE: "true"
 
 .rust:
-  image: rust:1.97
+  image: rust:1.98.0
   # Три кеша с разным сроком жизни вместо одного общего. Реестр крейтов
   # меняется вместе с Cargo.lock и делится всеми заданиями; собранные
   # инструменты - вместе со своими версиями; `target/` у каждого задания
@@ -108,7 +108,7 @@ variables:
       }
 
 .bun:
-  image: oven/bun:1.3
+  image: oven/bun:1.4.0
   cache:
     key:
       prefix: bun
@@ -122,9 +122,9 @@ variables:
       alias: postgres
     # Та же версия, что на обоих стендах: пайплайн проверяет ту систему,
     # которая поедет в прод, а не соседнюю (T70)
-    - name: redis:8.10.0
+    - name: redis:8.10.1
       alias: redis
-    - name: rustfs/rustfs:1.0.0-rc.1
+    - name: rustfs/rustfs:1.0.0-rc.5
       alias: rustfs
   variables:
     RUSTFS_VOLUMES: /data
@@ -323,7 +323,7 @@ contract:
 e2e:
   extends: .stack-services
   stage: verify
-  image: mcr.microsoft.com/playwright:v1.58.0-noble
+  image: mcr.microsoft.com/playwright:v1.62.1-noble
   variables:
     E2E_BASE_URL: http://localhost:3000
     # Пароль демо-аккаунтов приходит переменной проекта (Settings → CI/CD →

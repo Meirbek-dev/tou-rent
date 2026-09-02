@@ -31,7 +31,7 @@ anyhow = "1.0.104" # только в bin-крейтах (арх. § 5)
 axum = "0.8.9"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
 jiff = { version = "0.2.35", features = ["serde"] }
-rust_decimal = { version = "1.42.1", features = ["serde", "macros"] }
+rust_decimal = { version = "1.43.0", features = ["serde", "macros"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 # Фича "macros" (query!/G3 `sqlx prepare`) включена: запросы проверяются
@@ -39,7 +39,7 @@ serde_json = "1.0.151"
 # Сборка идет в контейнере (A-003), поэтому VS Build Tools на Windows-хосте
 # больше не при чем. Для сборок без БД (образ, CI) служит offline-слепок
 # `.sqlx` + SQLX_OFFLINE=true.
-sqlx = { version = "=0.8.6", default-features = false, features = [
+sqlx = { version = "=0.9.0", default-features = false, features = [
   "runtime-tokio",
   "macros",
   "postgres",
@@ -49,18 +49,18 @@ sqlx = { version = "=0.8.6", default-features = false, features = [
   "json",
   "time",
 ] }
-thiserror = "2.0.19"
+thiserror = "2.0.20"
 tokio = { version = "1.53.1", features = ["full"] }
 # BroadcastStream - SSE-доставка уведомлений (FR-1301)
 tokio-stream = { version = "0.1.19", features = ["sync"] }
 tower = "0.5.3"
-tower-http = { version = "0.7.0", features = ["trace", "timeout", "cors"] }
+tower-http = { version = "0.7.1", features = ["trace", "timeout", "cors"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 utoipa = { version = "5.5.0", features = ["axum_extras", "uuid", "decimal"] }
 utoipa-axum = "0.2.0"
 utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
-uuid = { version = "1.24.0", features = ["v7", "serde"] }
+uuid = { version = "1.26.0", features = ["v7", "serde"] }
 
 # --- Запинено заранее, крейты подключают через `workspace = true` ---
 # Валидация домена (паритет с Valibot, FR-401)
@@ -71,7 +71,7 @@ time = { version = "0.3.55", features = [
   "macros",
 ] } # tower-sessions + timestamptz DTO + печатные формы (даты Asia/Almaty)
 # Auth контура 1: Argon2id + сессии в Redis (FR-1501)
-argon2 = "0.6.0-rc.8"
+argon2 = "0.6.0"
 # 0.14: диктуется tower-sessions-redis-store 0.16 (tower-sessions-core 0.14)
 tower-sessions = "=0.14.0"
 tower-sessions-redis-store = "0.16.0"
@@ -83,7 +83,7 @@ fred = { version = "10.1.0", features = ["subscriber-client"] }
 # Obligations engine и отложенные задачи (FR-1701, INV-076)
 apalis = "1.0.0-rc.9"
 apalis-cron = "1.0.0-rc.8"
-deadpool-redis = "0.23.0"
+deadpool-redis = "0.23.1"
 # Печатные формы PDF: объявление, протоколы, договор (Прил. 1–3, 5–12)
 typst = "0.15.1"
 typst-layout = "0.15.1" # PagedDocument не реэкспортируется из typst
@@ -101,19 +101,17 @@ sha2 = "0.11.0"
 rand = "0.10.2"
 # Шифрование пакетов заявок до вскрытия: AES-256-GCM и отдельный ключ
 # каждой заявки, производный через HKDF-SHA256.
-aes-gcm = "0.10.3"
-hkdf = "0.12.4"
-# hkdf 0.12 использует digest 0.10; основной sha2 0.11 остается для аудита.
-sha2-compat = { package = "sha2", version = "0.10.9" }
+aes-gcm = "0.11.1"
+hkdf = "0.13.0"
 # Доставка одноразовых кодов регистрации: SMTP и настраиваемый SMS HTTP API.
-lettre = { version = "0.11.19", default-features = false, features = [
+lettre = { version = "0.11.23", default-features = false, features = [
   "builder",
   "smtp-transport",
   "tokio1-rustls-tls",
 ] }
-reqwest = { version = "0.12.28", default-features = false, features = [
+reqwest = { version = "0.13.4", default-features = false, features = [
   "json",
-  "rustls-tls",
+  "rustls",
 ] }
 # Вход через внешнего провайдера идентичности (FR-1502, ADR-0003): OIDC
 # authorization code + PKCE; rustls - без системного OpenSSL в образе

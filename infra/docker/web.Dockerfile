@@ -2,7 +2,7 @@
 # в bun (см. пояснение у рантайм-стадии: сервер собирается под тот рантайм,
 # в котором шла сборка).
 # Браузер ходит в api через свой origin - маршрут /api/** отдает Caddy.
-FROM oven/bun:1.3 AS build
+FROM oven/bun:1.4.0 AS build
 WORKDIR /w
 
 COPY package.json bun.lock bunfig.toml turbo.json vite.config.ts ./
@@ -24,7 +24,7 @@ RUN bun run --cwd apps/web build
 
 # Рантайм - bun: сервер nitro/srvx собирается под тот рантайм, в котором шла
 # сборка, и в node падает с «Bun is not defined»
-FROM oven/bun:1.3
+FROM oven/bun:1.4.0
 WORKDIR /app
 COPY --from=build /w/apps/web/.output ./.output
 
