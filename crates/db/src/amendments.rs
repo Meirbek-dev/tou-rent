@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use crate::Db;
 use crate::obligations::Subject;
+use crate::tenders::NewLot;
 
 #[derive(Debug, thiserror::Error)]
 pub enum AmendmentError {
@@ -133,6 +134,19 @@ fn to_timestamp(value: OffsetDateTime) -> tou_domain::amendment::Instant {
     tou_domain::amendment::instant(value.unix_timestamp())
 }
 
+/// Содержание новой редакции документации (FR-304, п. 27): продленный срок
+/// приема и то необязательное, что редакция меняет заодно - время вскрытия,
+/// дату торгов, добавляемые лоты. Отдельным типом, а не списком аргументов:
+/// пять подряд идущих параметров разной природы легко перепутать местами.
+pub struct AmendmentInput<'a> {
+    pub summary: &'a str,
+    pub new_deadline: OffsetDateTime,
+    /// `None` - прежнее вскрытие БД сдвигает вслед за дедлайном (п. 27)
+    pub new_opening_at: Option<OffsetDateTime>,
+    pub new_trading_at: Option<OffsetDateTime>,
+    pub lots: &'a [NewLot<'a>],
+}
+
 /// Публикация новой редакции документации (FR-304, п. 27). Правила окна
 /// изменения проверяет домен, номер редакции, прежний срок и продление
 /// дедлайна проставляет БД; здесь - извещение участников и его срок.
@@ -140,9 +154,16 @@ pub async fn amend(
     db: &Db,
     actor: Uuid,
     tender_id: Uuid,
-    summary: &str,
-    new_deadline: OffsetDateTime,
+    input: AmendmentInput<'_>,
 ) -> Result<AmendmentRecord, AmendmentError> {
+    let AmendmentInput {
+        summary,
+        new_deadline,
+        new_opening_at,
+        new_trading_at,
+        lots,
+    } = input;
+
     let facts = facts(db, tender_id)
         .await?
         .ok_or(AmendmentError::NotFound)?;
@@ -163,6 +184,34 @@ pub async fn amend(
         .await
         .map_err(map_rule)?
         .ok_or(AmendmentError::NotFound)?;
+
+        if new_opening_at.is_some() || new_trading_at.is_some() {
+            sqlx::query!(
+                "UPDATE core.tenders
+                 SET opening_at = coalesce($2, opening_at),
+                     trading_at = coalesce($3, trading_at)
+                 WHERE id = $1",
+                tender_id,
+                new_opening_at,
+                new_trading_at
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(map_rule)?;
+        }
+
+        if !lots.is_empty() {
+            let first_seq = sqlx::query_scalar!(
+                "SELECT coalesce(max(seq), 0) + 1 AS \"first_seq!\"
+                 FROM core.lots WHERE tender_id = $1",
+                tender_id
+            )
+            .fetch_one(&mut *tx)
+            .await?;
+            crate::tenders::insert_lots_on(&mut *tx, tender_id, first_seq, lots)
+                .await
+                .map_err(map_rule)?;
+        }
 
         // Извещение участников - обязанность организатора (п. 27); срок
         // закрывается рассылкой в этой же транзакции

@@ -3018,11 +3018,23 @@ export interface components {
             stage: string;
         };
         AmendRequest: {
+            /** @description Новые лоты, добавляемые опубликованной редакцией документации. */
+            lots?: components["schemas"]["CreateLotRequest"][];
             /**
              * Format: date-time
              * @description Новый срок приема заявок (п. 27: ≥ 10 календарных дней от публикации)
              */
             new_deadline: string;
+            /**
+             * Format: date-time
+             * @description Новое время вскрытия. Если не задано, БД сдвигает прежнее вслед за дедлайном.
+             */
+            new_opening_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Новая дата торгов; может меняться той же опубликованной редакцией.
+             */
+            new_trading_at?: string | null;
             /** @description Существо изменений - попадает в баннер и в извещение участников */
             summary: string;
         };

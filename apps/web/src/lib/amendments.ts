@@ -5,6 +5,7 @@ import { api } from "@/lib/api"
 import type { components } from "@tou/api-client"
 
 export type AmendmentDto = components["schemas"]["AmendmentDto"]
+export type AmendLotInput = components["schemas"]["CreateLotRequest"]
 
 async function mutate<T>(promise: Promise<{ data?: T; error?: unknown }>) {
   const { data, error } = await promise
@@ -30,12 +31,23 @@ export const tenderAmendmentsQuery = (tenderId: string) =>
 export const amendTender = (
   tenderId: string,
   summary: string,
-  newDeadline: string
+  schedule: {
+    newDeadline: string
+    newOpeningAt: string | null
+    newTradingAt: string | null
+  },
+  lots: AmendLotInput[]
 ) =>
   mutate(
     api.POST("/api/v1/tenders/{id}/amendments", {
       params: { path: { id: tenderId } },
-      body: { summary, new_deadline: newDeadline },
+      body: {
+        summary,
+        new_deadline: schedule.newDeadline,
+        new_opening_at: schedule.newOpeningAt,
+        new_trading_at: schedule.newTradingAt,
+        lots,
+      },
     })
   )
 

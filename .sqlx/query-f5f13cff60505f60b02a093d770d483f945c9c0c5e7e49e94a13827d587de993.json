@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,\n                                    base_rate_monthly, rate_calculation, guarantee_fee)\n             VALUES ($1, 3, $2, 'кофеостровок', 12, 32113.00, '{}'::jsonb, 32113.00)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f5f13cff60505f60b02a093d770d483f945c9c0c5e7e49e94a13827d587de993"
+}

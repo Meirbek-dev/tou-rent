@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT opening_at AS \"opening_at!\", trading_at AS \"trading_at!\"\n           FROM core.tenders WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "opening_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "opening_at"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "trading_at!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "trading_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "3ff984f0c6c162310496549742546a0da0cd4d6c6a8d9ce23a412129a0793306"
+}

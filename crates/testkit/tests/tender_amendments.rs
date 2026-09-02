@@ -3,12 +3,15 @@
 //!
 //! Проверяется то, что делает БД сама: окно изменения п. 27 (не позже чем
 //! за два календарных дня до дедлайна, продление не менее чем на десять),
-//! продление срока приема следствием редакции, отмена только с основанием
-//! и до заключения договора, освобождение объекта отмененного лота (FR-103).
+//! продление срока приема следствием редакции, переназначение вскрытия и
+//! торгов той же редакцией и нумерация добавленных ею лотов, отмена только
+//! с основанием и до заключения договора, освобождение объекта отмененного
+//! лота (FR-103).
 //!
 //! Подключение - TESTKIT_DATABASE_URL (A-021).
 
 use sqlx::Acquire as _;
+use time::OffsetDateTime;
 use uuid::Uuid;
 
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
@@ -327,4 +330,166 @@ async fn cancelled_lot_frees_its_object() {
     .await
     .expect("статус объекта");
     assert_eq!(after, "free", "объект отмененного лота свободен (FR-103)");
+}
+
+/// Редакция переназначает вскрытие и торги (FR-304, п. 27). Порядок здесь
+/// тот же, что в `amendments::amend`: AFTER-триггер продления отрабатывает
+/// на INSERT редакции, а явно заданные даты ложатся следом - и перекрывают
+/// автосдвиг. Пустое поле формы приходит как NULL и означает «оставить как
+/// есть», а не «сбросить».
+#[tokio::test]
+async fn amendment_reassigns_opening_and_trading() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, 20).await.expect("фикстура");
+
+    amendment!(f.tender_id, 30)
+        .execute(&mut *tx)
+        .await
+        .expect("редакция документации");
+
+    let shifted = sqlx::query_scalar!(
+        r#"SELECT opening_at AS "opening_at!" FROM core.tenders WHERE id = $1"#,
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("вскрытие после автосдвига");
+
+    let keep: Option<OffsetDateTime> = None;
+    sqlx::query!(
+        "UPDATE core.tenders
+         SET opening_at = coalesce($2, opening_at),
+             trading_at = coalesce($3, trading_at)
+         WHERE id = $1",
+        f.tender_id,
+        keep,
+        keep
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("редакция без новых дат");
+
+    let untouched = sqlx::query_scalar!(
+        r#"SELECT opening_at AS "opening_at!" FROM core.tenders WHERE id = $1"#,
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("тендер");
+    assert_eq!(untouched, shifted, "NULL оставляет автосдвиг нетронутым");
+
+    // Отметки времени - из БД, а не с часов хоста (ADR-0005)
+    let planned = sqlx::query!(
+        r#"SELECT core.now() + interval '40 days' AS "opening!",
+                  core.now() + interval '41 days' AS "trading!""#
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("новые даты вскрытия и торгов");
+
+    sqlx::query!(
+        "UPDATE core.tenders
+         SET opening_at = coalesce($2, opening_at),
+             trading_at = coalesce($3, trading_at)
+         WHERE id = $1",
+        f.tender_id,
+        Some(planned.opening),
+        Some(planned.trading)
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("переназначение вскрытия и торгов");
+
+    let after = sqlx::query!(
+        r#"SELECT opening_at AS "opening_at!", trading_at AS "trading_at!"
+           FROM core.tenders WHERE id = $1"#,
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("тендер");
+    assert!(
+        after.opening_at > shifted,
+        "явно назначенное вскрытие перекрывает автосдвиг"
+    );
+    assert!(
+        after.trading_at > after.opening_at,
+        "торги назначаются после вскрытия (п. 59, 62)"
+    );
+}
+
+/// Лоты, добавленные опубликованной редакцией, нумеруются подряд за уже
+/// объявленными (FR-304): `UNIQUE (tender_id, seq)` не оставляет места
+/// для догадок, поэтому номер считается от max(seq), а не от длины списка.
+#[tokio::test]
+async fn amendment_appends_lots_after_existing() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, 20).await.expect("фикстура");
+
+    let first_seq = sqlx::query_scalar!(
+        r#"SELECT coalesce(max(seq), 0) + 1 AS "first_seq!"
+           FROM core.lots WHERE tender_id = $1"#,
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("следующий номер лота");
+    assert_eq!(first_seq, 2, "в фикстуре один лот");
+
+    for (offset, purpose) in ["буфет кампуса", "кабинет стоматолога"]
+        .into_iter()
+        .enumerate()
+    {
+        let object = sqlx::query_scalar!(
+            "INSERT INTO core.objects (kind, name, address, area_m2)
+             VALUES ('premises', 'Т27 объект редакции', 'адрес', 43.70) RETURNING id"
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("объект нового лота");
+
+        sqlx::query!(
+            "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                                    base_rate_monthly, rate_calculation, guarantee_fee)
+             VALUES ($1, $2, $3, $4, 12, 63439.00, '{}'::jsonb, 63439.00)",
+            f.tender_id,
+            first_seq + i32::try_from(offset).expect("номер лота"),
+            object,
+            purpose
+        )
+        .execute(&mut *tx)
+        .await
+        .expect("лот новой редакции");
+    }
+
+    let seqs = sqlx::query_scalar!(
+        "SELECT seq FROM core.lots WHERE tender_id = $1 ORDER BY seq",
+        f.tender_id
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .expect("лоты тендера");
+    assert_eq!(seqs, vec![1, 2, 3], "нумерация продолжается без разрывов");
+
+    let taken = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', 'Т27 дубль', 'адрес', 9.00) RETURNING id"
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("объект");
+    let duplicate = rejected!(
+        tx,
+        sqlx::query!(
+            "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                                    base_rate_monthly, rate_calculation, guarantee_fee)
+             VALUES ($1, 3, $2, 'кофеостровок', 12, 32113.00, '{}'::jsonb, 32113.00)",
+            f.tender_id,
+            taken
+        ),
+        "второй лот с занятым номером обязан быть отклонен"
+    );
+    assert!(duplicate.contains("lots_tender_id_seq_key"), "{duplicate}");
 }

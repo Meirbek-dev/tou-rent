@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce(max(seq), 0) + 1 AS \"first_seq!\"\n                 FROM core.lots WHERE tender_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "first_seq!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "efccc64187b5158c1bc6f94ccbcc9ff5762c26867d66c2497b8f3d10d0ae54bb"
+}

@@ -46,6 +46,7 @@ import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge, trimZeros } from "@/lib/format"
 import {
   fromAlmatyInput,
+  objectsQuery,
   organizerTendersQuery,
   toAlmatyInput,
 } from "@/lib/organizer"
@@ -72,6 +73,10 @@ export const Route = createFileRoute("/app/organizer/tenders/$tenderId")({
       context.queryClient.ensureQueryData(
         tenderDocumentsQuery(params.tenderId)
       ),
+      // Справочник объектов нужен вкладке изменений: лоты новой редакции
+      // выбираются из него (FR-304). Запрос общий на весь кабинет, поэтому
+      // на других вкладках он берется из кеша
+      context.queryClient.ensureQueryData(objectsQuery),
       ...tender.lots.map((lot) =>
         context.queryClient.ensureQueryData(objectQuery(lot.object_id))
       ),
@@ -549,7 +554,13 @@ function ManageTender({
           {tab === "changes" && (
             <div>
               {["draft", "announced", "accepting"].includes(tender.status) ? (
-                <TenderChangesPanel tenderId={tenderId} onChanged={refresh} />
+                <TenderChangesPanel
+                  tenderId={tenderId}
+                  lotCount={tender.lots.length}
+                  openingAt={tender.opening_at ?? null}
+                  tradingAt={tender.trading_at ?? null}
+                  onChanged={refresh}
+                />
               ) : (
                 <p className="text-muted-foreground">
                   {m.tender_changes_closed()}
