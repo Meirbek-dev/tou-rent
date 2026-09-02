@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT o.id, o.name, o.name_kk, o.kind::text AS \"kind!\", o.area_m2, o.created_at,\n                  (SELECT count(DISTINCT lo.tender_id) FROM core.lots lo WHERE lo.object_id = o.id)\n                    AS \"tenders!\"\n           FROM core.objects o\n           ORDER BY o.id DESC\n           LIMIT $1",
+  "query": "SELECT id, name AS \"title!\", name_kk AS \"title_kk?\",\n                      kind::text || ' · ' || address AS \"details?\", created_at AS \"created_at?\"\n               FROM core.objects ORDER BY id DESC LIMIT $1",
   "describe": {
     "columns": [
       {
@@ -16,7 +16,7 @@
       },
       {
         "ordinal": 1,
-        "name": "name",
+        "name": "title!",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -27,7 +27,7 @@
       },
       {
         "ordinal": 2,
-        "name": "name_kk",
+        "name": "title_kk?",
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -38,24 +38,13 @@
       },
       {
         "ordinal": 3,
-        "name": "kind!",
+        "name": "details?",
         "type_info": "Text",
         "origin": "Expression"
       },
       {
         "ordinal": 4,
-        "name": "area_m2",
-        "type_info": "Numeric",
-        "origin": {
-          "Table": {
-            "table": "core.objects",
-            "name": "area_m2"
-          }
-        }
-      },
-      {
-        "ordinal": 5,
-        "name": "created_at",
+        "name": "created_at?",
         "type_info": "Timestamptz",
         "origin": {
           "Table": {
@@ -63,12 +52,6 @@
             "name": "created_at"
           }
         }
-      },
-      {
-        "ordinal": 6,
-        "name": "tenders!",
-        "type_info": "Int8",
-        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -81,10 +64,8 @@
       false,
       false,
       null,
-      false,
-      false,
-      null
+      false
     ]
   },
-  "hash": "1f39600987a0e294571d07afae83abdf8350b89cc5eb9aba78cdc80e98201de3"
+  "hash": "bf858e2968eab0aaed4c89aeb37e7796205956169a056c4091943669847fc34f"
 }

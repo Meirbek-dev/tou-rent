@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT lp.id, coalesce(lp.cadastral_number, o.name) AS \"title!\",\n                      o.name_kk AS \"title_kk?\", lp.designation AS \"details?\",\n                      lp.created_at AS \"created_at?\"\n               FROM core.land_plots lp JOIN core.objects o ON o.id = lp.object_id\n               ORDER BY lp.id DESC LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.land_plots",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "title_kk?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.objects",
+            "name": "name_kk"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "details?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.land_plots",
+            "name": "designation"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.land_plots",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f6859bfc741595cd3b8935510f8696ddc81094cdb6c583bf87c5eb61757a97b1"
+}

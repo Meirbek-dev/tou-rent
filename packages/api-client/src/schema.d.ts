@@ -90,15 +90,54 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Массовая очистка: весь стенд либо все записи одной области - тендеры,
-         *     объекты, особый порядок, участки, уведомления - со всем, что на них
-         *     держится, одной транзакцией.
+         * Массовая очистка: весь стенд либо все записи одного вида со всем, что
+         *     на них держится, одной транзакцией.
          * @description Учетные записи, роли, состав комиссии, объявление на главной, справочники
          *     и журнал аудита остаются. Файлы в `dossiers` тоже: бакет под Object Lock
          *     (INV-042), а без строки метаданных объект недостижим (A-095).
          */
         post: operations["purge_data"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data/records": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Записи одного вида, свежие сверху, - для точечного удаления. */
+        get: operations["list_records"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data/records/{kind}/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Удаление одной записи любого вида со всем, что на ней держится: заявка
+         *     уносит файлы, цену, журнал, голоса, торги и договор по ней; лот -
+         *     заявки и торги; объект - тендеры, где он выставлен лотом. Слова
+         *     подтверждения нет - его роль играет диалог в кабинете; рубеж намерения
+         *     (`ALLOW_DATA_PURGE`) действует и здесь.
+         */
+        delete: operations["purge_record"];
         options?: never;
         head?: never;
         patch?: never;
@@ -125,29 +164,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/objects/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Удаление одного объекта вместе с тендерами, где он выставлен лотом
-         *     (с их заявками, протоколами, торгами и договорами), участками и
-         *     заявками особого порядка по нему. В отличие от `DELETE /objects/{id}`
-         *     организатора, занятость объекта не останавливает: это административная
-         *     очистка, а не ход реестра (FR-101).
-         */
-        delete: operations["purge_object"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/site-announcement": {
         parameters: {
             query?: never;
@@ -161,28 +177,6 @@ export interface paths {
         put: operations["save"];
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/tenders/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /**
-         * Удаление одного тендера со всем, что на нем висит: лоты, заявки, журнал,
-         *     заседания, протоколы, торги, договоры, акты, проводки, обязательства,
-         *     материалы досье. Объекты остаются. В отличие от `DELETE /tenders/{id}`,
-         *     статус не важен - это административная очистка, а не ход процедуры.
-         */
-        delete: operations["purge_tender"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3167,19 +3161,11 @@ export interface components {
         };
         AdminDataOverviewDto: {
             counts: components["schemas"]["AdminDataCountsDto"];
-            /** @description Все объекты стенда, свежие сверху */
-            objects: components["schemas"]["AdminObjectDto"][];
-            /** @description Перечень объектов обрезан потолком строк */
-            objects_truncated: boolean;
             /**
              * @description Очистка разрешена конфигурацией стенда (`ALLOW_DATA_PURGE`); без нее
              *     кнопки в кабинете не действуют, а маршруты отказывают
              */
             purge_enabled: boolean;
-            /** @description Все тендеры стенда в любом статусе, свежие сверху */
-            tenders: components["schemas"]["AdminTenderDto"][];
-            /** @description Перечень тендеров обрезан потолком строк */
-            tenders_truncated: boolean;
         };
         AdminDemoAccountsDto: {
             /**
@@ -3187,23 +3173,6 @@ export interface components {
              * @description Сколько демо-учеток отключено
              */
             deactivated: number;
-        };
-        /** @description Объект в перечне на удаление. */
-        AdminObjectDto: {
-            /** @example 42.00 */
-            area_m2: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: uuid */
-            id: string;
-            kind: components["schemas"]["ObjectKindDto"];
-            name: string;
-            name_kk: string;
-            /**
-             * Format: int64
-             * @description Тендеров, где объект выставлен лотом, - уйдут вместе с ним
-             */
-            tenders: number;
         };
         AdminPurgeRequest: {
             /**
@@ -3221,25 +3190,31 @@ export interface components {
             };
         };
         /**
-         * @description Область массовой очистки: с какого вида данных начинается удаление.
-         *     Все, что держится на удаляемых записях, уходит с ними.
+         * @description Область очистки: весь стенд либо вид данных вкладки «Данные». Удаляемая
+         *     запись уносит все, что на ней держится по внешним ключам.
          * @enum {string}
          */
-        AdminPurgeScope: "everything" | "tenders" | "objects" | "special_requests" | "land_plots" | "notifications";
-        /** @description Тендер в перечне на удаление. */
-        AdminTenderDto: {
-            /**
-             * Format: int64
-             * @description Заявок по тендеру - уйдут вместе с ним
-             */
-            applications: number;
+        AdminPurgeScope: "everything" | "objects" | "tenders" | "lots" | "applications" | "protocols" | "auctions" | "contracts" | "acts" | "ledger_entries" | "special_requests" | "land_plots" | "investment_contracts" | "dossier_items" | "public_records" | "obligations" | "notifications";
+        /** @description Запись вида данных в перечне на удаление: чем ее опознать. */
+        AdminRecordDto: {
             /** Format: date-time */
-            created_at: string;
+            created_at?: string | null;
+            /**
+             * @description Контекст: чей, по какому тендеру или договору, в каком статусе -
+             *     коды статусов как в БД
+             */
+            details?: string | null;
             /** Format: uuid */
             id: string;
-            status: components["schemas"]["TenderStatusDto"];
+            /** @description Главная строка: заголовок, имя, номер, вид */
             title: string;
-            title_kk: string;
+            /** @description Казахский вариант заголовка, если он хранится */
+            title_kk?: string | null;
+        };
+        AdminRecordPageDto: {
+            items: components["schemas"]["AdminRecordDto"][];
+            /** @description Перечень обрезан потолком строк */
+            truncated: boolean;
         };
         AdvanceRequest: {
             /** @description Шаг конвейера: `handed_to_tenant`, `tenant_signed`, … (п. 110–115) */
@@ -5409,6 +5384,99 @@ export interface operations {
             };
         };
     };
+    list_records: {
+        parameters: {
+            query: {
+                /** @description Вид данных; `everything` перечнем не является */
+                kind: components["schemas"]["AdminPurgeScope"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Перечень записей вида */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminRecordPageDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `everything` перечнем не является */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    purge_record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Вид данных */
+                kind: components["schemas"]["AdminPurgeScope"];
+                /** @description Запись */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Запись удалена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPurgeResultDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Запись не найдена */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Очистка выключена или вид без записей */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     deactivate_demo_accounts: {
         parameters: {
             query?: never;
@@ -5429,56 +5497,6 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    purge_object: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Объект */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Объект удален */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminPurgeResultDto"];
-                };
-            };
-            /** @description Недостаточно прав */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Объект не найден */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Очистка выключена */
-            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5558,56 +5576,6 @@ export interface operations {
                 };
             };
             /** @description Некорректный заголовок или текст */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-        };
-    };
-    purge_tender: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Тендер */
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Тендер удален */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminPurgeResultDto"];
-                };
-            };
-            /** @description Недостаточно прав */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Тендер не найден */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Problem"];
-                };
-            };
-            /** @description Очистка выключена */
             422: {
                 headers: {
                     [name: string]: unknown;

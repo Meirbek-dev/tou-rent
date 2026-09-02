@@ -10,9 +10,10 @@ export type CoefficientVersionDto =
   components["schemas"]["CoefficientVersionDto"]
 export type SiteAnnouncementDto = components["schemas"]["SiteAnnouncementDto"]
 export type AdminDataOverviewDto = components["schemas"]["AdminDataOverviewDto"]
-export type AdminTenderDto = components["schemas"]["AdminTenderDto"]
-export type AdminObjectDto = components["schemas"]["AdminObjectDto"]
 export type AdminPurgeScope = components["schemas"]["AdminPurgeScope"]
+/** Вид данных вкладки «Данные»: любая область, кроме полной очистки. */
+export type AdminDataKind = Exclude<AdminPurgeScope, "everything">
+export type AdminRecordDto = components["schemas"]["AdminRecordDto"]
 
 /** Роли, назначаемые админом (FR-1503): `guest` - аноним, он не хранится. */
 export const GRANTABLE_ROLES = [
@@ -149,27 +150,36 @@ export const purgeData = async (
   return data
 }
 
-/** Удаление одного тендера со всем, что на нем висит; объекты остаются. */
-export const purgeTender = async (tenderId: string) => {
-  const { data, error } = await api.DELETE("/api/v1/admin/tenders/{id}", {
-    params: { path: { id: tenderId } },
+/**
+ * Записи одного вида для точечного удаления, свежие сверху. Ключ включает
+ * вид: смена вида в селекторе - другой запрос, а не перерисовка старого.
+ */
+export const recordsQuery = (kind: AdminDataKind) =>
+  queryOptions({
+    queryKey: ["admin", "data", "records", kind],
+    queryFn: async () => {
+      const { data, error } = await api.GET("/api/v1/admin/data/records", {
+        params: { query: { kind } },
+      })
+      if (error !== undefined || data === undefined) {
+        throw (error as unknown) ?? new Error("failed to load records")
+      }
+      return data
+    },
   })
-  if (error !== undefined || data === undefined) {
-    throw (error as unknown) ?? new Error("tender purge failed")
-  }
-  return data
-}
 
 /**
- * Удаление одного объекта вместе с тендерами, где он выставлен лотом,
- * участками и заявками особого порядка по нему.
+ * Удаление одной записи любого вида со всем, что на ней держится: заявка
+ * уносит файлы, цену, журнал, торги и договор по ней, лот - заявки и
+ * торги, объект - тендеры по нему.
  */
-export const purgeObject = async (objectId: string) => {
-  const { data, error } = await api.DELETE("/api/v1/admin/objects/{id}", {
-    params: { path: { id: objectId } },
-  })
+export const purgeRecord = async (kind: AdminDataKind, id: string) => {
+  const { data, error } = await api.DELETE(
+    "/api/v1/admin/data/records/{kind}/{id}",
+    { params: { path: { kind, id } } }
+  )
   if (error !== undefined || data === undefined) {
-    throw (error as unknown) ?? new Error("object purge failed")
+    throw (error as unknown) ?? new Error("record purge failed")
   }
   return data
 }
