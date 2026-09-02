@@ -1,6 +1,6 @@
 import { m } from "#/paraglide/messages"
 import blueLogoUrl from "../../res/logo-blue.webp?url"
-import whiteLogoUrl from "../../res/logo-white.webp?url"
+import whiteLogoUrl from "../../res/logo-white.png?url"
 
 /**
  * Знак портала.
