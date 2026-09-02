@@ -23,6 +23,9 @@ x-rust-workspace: &rust-workspace
     TESTKIT_DATABASE_URL: postgres://tou_rent:tou_rent_dev@postgres:5432/tou_rent
     REDIS_URL: redis://redis:6379
     RUST_LOG: info
+    # Дев-стенд без SMTP и SMS-шлюза: код подтверждения регистрации
+    # печатается в журнал api (FR-1501), иначе регистрация отвечает 503
+    VERIFICATION_LOG_CODES: "1"
     CARGO_TARGET_DIR: /target
     # Файлы заявок/протоколов (Т8+): RustFS по S3 API (dev-only ключи)
     S3_ENDPOINT: http://rustfs:9000
