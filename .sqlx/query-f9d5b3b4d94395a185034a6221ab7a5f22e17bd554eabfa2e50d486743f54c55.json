@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.lots\n           (tender_id, seq, object_id, purpose, purpose_kk, lease_months,\n            base_rate_monthly, guarantee_fee, rate_calculation)\n         VALUES ($1, 1, $2, 'проба очистки', 'тазалау сынағы', 12,\n                 1000.00, 1000.00, '{}'::jsonb)\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f9d5b3b4d94395a185034a6221ab7a5f22e17bd554eabfa2e50d486743f54c55"
+}

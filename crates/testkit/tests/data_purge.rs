@@ -4,10 +4,12 @@
 //! Проверяется то, что нельзя закрепить типом: что `core.purge_data()`
 //! проходит сквозь append-only сторожей и возвращает их на место, что
 //! чужой тендер и объект остаются, что след ложится в ту же hash-цепочку
-//! (INV-A01), что после очистки сторожа снова отбивают прямое удаление и
-//! что объект уносит тендеры, где он выставлен лотом. Отдельно - полнота
+//! (INV-A01), что после очистки сторожа снова отбивают прямое удаление,
+//! что объект уносит тендеры, где он выставлен лотом, а точечное удаление
+//! лота или материала досье не трогает их тендер. Отдельно - полнота
 //! перечня: каждая таблица схемы `core` либо в порядке удаления функции,
-//! либо в явном перечне оставляемых, третьего нет.
+//! либо в явном перечне оставляемых, третьего нет; и у каждого вида
+//! данных кабинета есть перечень записей.
 //!
 //! Подключение - TESTKIT_DATABASE_URL (A-021).
 
@@ -53,7 +55,7 @@ const KEPT: [&str; 7] = [
 
 /// Порядок удаления из текста функции: строки шагов вида `['table', '...']`.
 fn purged_tables() -> BTreeSet<&'static str> {
-    include_str!("../../db/migrations/20260902110000_admin_data_purge_scopes.sql")
+    include_str!("../../db/migrations/20260902120000_admin_data_purge_kinds.sql")
         .lines()
         .filter_map(|line| {
             let rest = line.trim().strip_prefix("['")?;
@@ -63,7 +65,8 @@ fn purged_tables() -> BTreeSet<&'static str> {
         .collect()
 }
 
-/// Каждая таблица `core` либо стирается, либо названа оставляемой.
+/// Каждая таблица `core` либо стирается, либо названа оставляемой, а
+/// каждый вид данных кабинета - одна из стираемых таблиц.
 ///
 /// Новая таблица следующей миграции сюда не попадет сама: тест заставит
 /// решить, уходит она при очистке или остается, - молча остаться с данными
@@ -103,6 +106,26 @@ async fn purge_covers_every_core_table() {
         missing.is_empty(),
         "шаги очистки ссылаются на несуществующие таблицы: {missing:?}"
     );
+
+    for kind in PurgeScope::KINDS {
+        assert!(
+            purged.contains(kind.as_str()),
+            "вид данных {} не входит в порядок удаления",
+            kind.as_str()
+        );
+    }
+}
+
+/// У каждого вида данных есть перечень записей - запрос отрабатывает на
+/// живой схеме, а не только компилируется по слепку.
+#[tokio::test]
+async fn every_kind_lists_its_records() {
+    let db = require_db!();
+    for kind in PurgeScope::KINDS {
+        tou_db::purge::list_records(&db, kind)
+            .await
+            .unwrap_or_else(|e| panic!("перечень {}: {e}", kind.as_str()));
+    }
 }
 
 /// Хеш пароля здесь не настоящий: проверяется очистка, а не вход.
@@ -112,6 +135,7 @@ struct Fixture {
     actor: Uuid,
     object: Uuid,
     tender: Uuid,
+    lot: Uuid,
     dossier_item: Uuid,
 }
 
@@ -148,16 +172,17 @@ async fn fixture(db: &tou_db::Db, tag: &str) -> Result<Fixture, sqlx::Error> {
     .fetch_one(db)
     .await?;
 
-    sqlx::query!(
+    let lot = sqlx::query_scalar!(
         "INSERT INTO core.lots
            (tender_id, seq, object_id, purpose, purpose_kk, lease_months,
             base_rate_monthly, guarantee_fee, rate_calculation)
          VALUES ($1, 1, $2, 'проба очистки', 'тазалау сынағы', 12,
-                 1000.00, 1000.00, '{}'::jsonb)",
+                 1000.00, 1000.00, '{}'::jsonb)
+         RETURNING id",
         tender,
         object
     )
-    .execute(db)
+    .fetch_one(db)
     .await?;
 
     let dossier_item = sqlx::query_scalar!(
@@ -172,25 +197,13 @@ async fn fixture(db: &tou_db::Db, tag: &str) -> Result<Fixture, sqlx::Error> {
         actor,
         object,
         tender,
+        lot,
         dossier_item,
     })
 }
 
-async fn tender_exists(db: &tou_db::Db, id: Uuid) -> Result<bool, sqlx::Error> {
-    tou_db::purge::tender_exists(db, id).await
-}
-
-async fn object_exists(db: &tou_db::Db, id: Uuid) -> Result<bool, sqlx::Error> {
-    tou_db::purge::object_exists(db, id).await
-}
-
-async fn dossier_item_exists(db: &tou_db::Db, id: Uuid) -> Result<bool, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"SELECT EXISTS (SELECT 1 FROM core.dossier_items WHERE id = $1) AS "exists!""#,
-        id
-    )
-    .fetch_one(db)
-    .await
+async fn exists(db: &tou_db::Db, kind: PurgeScope, id: Uuid) -> Result<bool, sqlx::Error> {
+    tou_db::purge::record_exists(db, kind, id).await
 }
 
 /// Уборка того, что очистка оставляет по замыслу: объект и пользователь.
@@ -243,22 +256,22 @@ async fn purge_removes_a_tender_and_restores_the_guards() {
     );
 
     assert!(
-        !tender_exists(&db, target.tender)
+        !exists(&db, PurgeScope::Tenders, target.tender)
             .await
             .expect("проверка тендера")
     );
     assert!(
-        !dossier_item_exists(&db, target.dossier_item)
+        !exists(&db, PurgeScope::DossierItems, target.dossier_item)
             .await
             .expect("проверка материала досье")
     );
     assert!(
-        object_exists(&db, target.object)
+        exists(&db, PurgeScope::Objects, target.object)
             .await
             .expect("проверка объекта")
     );
     assert!(
-        tender_exists(&db, control.tender)
+        exists(&db, PurgeScope::Tenders, control.tender)
             .await
             .expect("проверка тендера"),
         "чужой тендер не тронут"
@@ -313,7 +326,7 @@ async fn purge_removes_a_tender_and_restores_the_guards() {
         "прямое удаление материала досье должно отбиваться"
     );
     assert!(
-        dossier_item_exists(&db, control.dossier_item)
+        exists(&db, PurgeScope::DossierItems, control.dossier_item)
             .await
             .expect("проверка материала досье")
     );
@@ -367,22 +380,22 @@ async fn purge_object_takes_its_tenders_along() {
     );
 
     assert!(
-        !object_exists(&db, target.object)
+        !exists(&db, PurgeScope::Objects, target.object)
             .await
             .expect("проверка объекта")
     );
     assert!(
-        !tender_exists(&db, target.tender)
+        !exists(&db, PurgeScope::Tenders, target.tender)
             .await
             .expect("проверка тендера")
     );
     assert!(
-        object_exists(&db, control.object)
+        exists(&db, PurgeScope::Objects, control.object)
             .await
             .expect("проверка объекта")
     );
     assert!(
-        tender_exists(&db, control.tender)
+        exists(&db, PurgeScope::Tenders, control.tender)
             .await
             .expect("проверка тендера")
     );
@@ -402,6 +415,62 @@ async fn purge_object_takes_its_tenders_along() {
             .await
             .expect("уборка пользователя");
     }
+}
+
+/// Точечное удаление идет вниз по графу, но не вверх: лот и материал досье
+/// уходят по одному, а их тендер остается на месте.
+#[tokio::test]
+async fn point_deletion_keeps_the_parent() {
+    let db = require_db!();
+    let f = fixture(&db, "point").await.expect("тендер с лотом и досье");
+
+    let deleted = tou_db::purge::purge(
+        &db,
+        f.actor,
+        PurgeScope::DossierItems,
+        Some(&[f.dossier_item]),
+    )
+    .await
+    .expect("удаление материала досье");
+    assert_eq!(deleted.len(), 1, "ушел только материал досье: {deleted:?}");
+    assert_eq!(deleted.get("dossier_items"), Some(&1));
+
+    let deleted = tou_db::purge::purge(&db, f.actor, PurgeScope::Lots, Some(&[f.lot]))
+        .await
+        .expect("удаление лота");
+    assert_eq!(deleted.get("lots"), Some(&1), "{deleted:?}");
+    assert!(
+        !deleted.contains_key("tenders"),
+        "тендер при удалении лота остается: {deleted:?}"
+    );
+
+    assert!(
+        exists(&db, PurgeScope::Tenders, f.tender)
+            .await
+            .expect("проверка тендера")
+    );
+    assert!(
+        !exists(&db, PurgeScope::Lots, f.lot)
+            .await
+            .expect("проверка лота")
+    );
+    assert!(
+        !exists(&db, PurgeScope::DossierItems, f.dossier_item)
+            .await
+            .expect("проверка материала досье")
+    );
+    assert!(
+        !exists(&db, PurgeScope::Everything, f.tender)
+            .await
+            .expect("у полной очистки перечня нет"),
+        "everything не вид данных"
+    );
+
+    // Уборка: тендер - очисткой, остальное - руками
+    tou_db::purge::purge(&db, f.actor, PurgeScope::Tenders, Some(&[f.tender]))
+        .await
+        .expect("уборка тендера");
+    cleanup(&db, &[&f]).await.expect("уборка");
 }
 
 /// Без актора очистка отказывает целиком: событие без автора в аудите
@@ -425,6 +494,8 @@ async fn purge_refuses_without_an_actor_or_with_an_unknown_scope() {
         "отказ должен называть причину, а не падать на чем-то еще: {message}"
     );
 
+    // Актор проверяется первым: вызов мимо http-слоя не должен узнавать
+    // о перечне областей раньше, чем о запрете
     let bogus = sqlx::query_scalar!(
         r#"SELECT core.purge_data('everything-and-more', NULL::uuid[]) AS "deleted!""#
     )
@@ -434,17 +505,13 @@ async fn purge_refuses_without_an_actor_or_with_an_unknown_scope() {
         Ok(_) => panic!("неизвестная область прошла"),
         Err(e) => e.to_string(),
     };
-    // Актора нет и здесь, но область проверяется первой? Нет: первым стоит
-    // актор, поэтому отказ обязан быть про него, а не про область, - иначе
-    // вызов мимо http-слоя узнавал бы о перечне областей раньше, чем о
-    // запрете. Область проверяется под актором ниже.
     assert!(message.contains("актора"), "{message}");
 
-    let with_actor = sqlx::query_scalar!(
+    let under_actor = sqlx::query_scalar!(
         r#"SELECT core.purge_data('everything-and-more', NULL::uuid[]) AS "deleted!""#
     );
     let rejected = tou_db::with_actor(&db, Uuid::now_v7(), async |tx| {
-        with_actor.fetch_one(&mut *tx).await
+        under_actor.fetch_one(&mut *tx).await
     })
     .await;
     let message = match rejected {

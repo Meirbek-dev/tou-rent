@@ -6,7 +6,6 @@ import { getLocale } from "#/paraglide/runtime"
 import { ConfirmAction } from "@/components/confirm-action"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
-import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -44,8 +43,8 @@ import {
   grantRole,
   mrpQuery,
   purgeData,
-  purgeObject,
-  purgeTender,
+  purgeRecord,
+  recordsQuery,
   removeHoliday,
   resetPassword,
   revokeRole,
@@ -54,21 +53,21 @@ import {
   saveSiteAnnouncement,
   usersQuery,
 } from "@/lib/admin"
-import { localizedTenderTitle } from "@/lib/api"
 import { meQuery, problemMessage } from "@/lib/auth"
-import { formatDateTime, formatTenge, trimZeros } from "@/lib/format"
+import { formatDateTime, formatTenge } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { tabSearch } from "@/lib/tabs"
 
 import type {
-  AdminObjectDto,
+  AdminDataKind,
+  AdminDataOverviewDto,
   AdminPurgeScope,
+  AdminRecordDto,
   GrantableRole,
   SiteAnnouncementDto,
   UserDto,
 } from "@/lib/admin"
-import type { ObjectKind } from "@/lib/api"
 
 // Кабинет департамента цифрового развития (М15, ТЗ § 3): пользователи и роли
 // (FR-1503, FR-1902) и справочники расчета - МРП, коэффициенты Прил. 4,
@@ -146,19 +145,111 @@ function AdminHome() {
   )
 }
 
+/** Вид данных вкладки: область очистки, подпись и счетчик в обзоре. */
+type DataKindRow = {
+  scope: AdminDataKind
+  label: () => string
+  count: (counts: AdminDataOverviewDto["counts"]) => number
+}
+
+/**
+ * Виды данных в порядке от корней графа процедур к листьям: так же они
+ * идут в таблице обзора и в селекторе записей. Подпись - та же, что у
+ * счетчика: у одного вида одно имя во всех местах вкладки.
+ */
+const DATA_KINDS: DataKindRow[] = [
+  {
+    scope: "objects",
+    label: m.admin_data_count_objects,
+    count: (c) => c.objects,
+  },
+  {
+    scope: "tenders",
+    label: m.admin_data_count_tenders,
+    count: (c) => c.tenders,
+  },
+  { scope: "lots", label: m.admin_data_count_lots, count: (c) => c.lots },
+  {
+    scope: "applications",
+    label: m.admin_data_count_applications,
+    count: (c) => c.applications,
+  },
+  {
+    scope: "protocols",
+    label: m.admin_data_count_protocols,
+    count: (c) => c.protocols,
+  },
+  {
+    scope: "auctions",
+    label: m.admin_data_count_auctions,
+    count: (c) => c.auctions,
+  },
+  {
+    scope: "contracts",
+    label: m.admin_data_count_contracts,
+    count: (c) => c.contracts,
+  },
+  { scope: "acts", label: m.admin_data_count_acts, count: (c) => c.acts },
+  {
+    scope: "ledger_entries",
+    label: m.admin_data_count_ledger_entries,
+    count: (c) => c.ledger_entries,
+  },
+  {
+    scope: "special_requests",
+    label: m.admin_data_count_special_requests,
+    count: (c) => c.special_requests,
+  },
+  {
+    scope: "land_plots",
+    label: m.admin_data_count_land_plots,
+    count: (c) => c.land_plots,
+  },
+  {
+    scope: "investment_contracts",
+    label: m.admin_data_count_investment_contracts,
+    count: (c) => c.investment_contracts,
+  },
+  {
+    scope: "dossier_items",
+    label: m.admin_data_count_dossier_items,
+    count: (c) => c.dossier_items,
+  },
+  {
+    scope: "public_records",
+    label: m.admin_data_count_public_records,
+    count: (c) => c.public_records,
+  },
+  {
+    scope: "obligations",
+    label: m.admin_data_count_obligations,
+    count: (c) => c.obligations,
+  },
+  {
+    scope: "notifications",
+    label: m.admin_data_count_notifications,
+    count: (c) => c.notifications,
+  },
+]
+
+function kindLabel(kind: AdminDataKind): string {
+  return DATA_KINDS.find((row) => row.scope === kind)?.label() ?? kind
+}
+
 /**
  * Очистка данных стенда (М15). Стенд, наполненный сидом под демонстрацию,
  * становится рабочим: демо-тендеры, объекты, заявки и протоколы должны уйти
  * до прихода настоящих процедур. Само удаление живет в БД одной транзакцией
  * со следом в аудите; здесь - обзор того, что уйдет, и действия за
- * подтверждением: построчно (тендер, объект), по видам данных и весь стенд
- * разом. Без `ALLOW_DATA_PURGE` на стороне api кнопки удаления не
- * действуют, и панель говорит об этом прямо, а не молчит серой кнопкой.
+ * подтверждением: точечно по одной записи любого вида, все записи вида и
+ * весь стенд разом. Без `ALLOW_DATA_PURGE` на стороне api кнопки удаления
+ * не действуют, и панель говорит об этом прямо, а не молчит серой кнопкой.
  */
 function DataPanel() {
   const queryClient = useQueryClient()
   const { data: overview } = useQuery(dataOverviewQuery)
   const [phrase, setPhrase] = useState("")
+  const [kind, setKind] = useState<AdminDataKind>("tenders")
 
   // После очистки устаревает все, что кабинеты успели закешировать:
   // реестры, карточки тендеров, уведомления - кеш сбрасывается целиком
@@ -177,18 +268,18 @@ function DataPanel() {
     },
     onError: (error: unknown) => notifyError(problemMessage(error)),
   })
-  const purgeOneTender = useMutation({
-    mutationFn: (tenderId: string) => purgeTender(tenderId),
-    onSuccess: async () => {
-      notifySuccess(m.admin_data_tender_deleted_toast())
-      await refresh()
-    },
-    onError: (error: unknown) => notifyError(problemMessage(error)),
-  })
-  const purgeOneObject = useMutation({
-    mutationFn: (objectId: string) => purgeObject(objectId),
-    onSuccess: async () => {
-      notifySuccess(m.admin_data_object_deleted_toast())
+  const purgeOne = useMutation({
+    mutationFn: ({
+      recordKind,
+      id,
+    }: {
+      recordKind: AdminDataKind
+      id: string
+    }) => purgeRecord(recordKind, id),
+    onSuccess: async (result) => {
+      notifySuccess(
+        m.admin_data_record_deleted_toast({ rows: deletedRows(result.deleted) })
+      )
       await refresh()
     },
     onError: (error: unknown) => notifyError(problemMessage(error)),
@@ -210,56 +301,6 @@ function DataPanel() {
   // Слово набрано целиком: массовые кнопки спят до этого момента, а
   // подтверждение в диалоге - второй рубеж, не единственный
   const armed = enabled && phrase.trim() === PURGE_CONFIRMATION
-
-  // Виды данных: у корней процедур - своя кнопка «удалить все», остальные
-  // уходят вместе с тем, к чему привязаны, и кнопки не имеют
-  const kinds: { label: string; count: number; scope?: AdminPurgeScope }[] = [
-    {
-      label: m.admin_data_count_objects(),
-      count: counts.objects,
-      scope: "objects",
-    },
-    {
-      label: m.admin_data_count_tenders(),
-      count: counts.tenders,
-      scope: "tenders",
-    },
-    { label: m.admin_data_count_lots(), count: counts.lots },
-    { label: m.admin_data_count_applications(), count: counts.applications },
-    { label: m.admin_data_count_protocols(), count: counts.protocols },
-    { label: m.admin_data_count_auctions(), count: counts.auctions },
-    { label: m.admin_data_count_contracts(), count: counts.contracts },
-    { label: m.admin_data_count_acts(), count: counts.acts },
-    {
-      label: m.admin_data_count_ledger_entries(),
-      count: counts.ledger_entries,
-    },
-    {
-      label: m.admin_data_count_special_requests(),
-      count: counts.special_requests,
-      scope: "special_requests",
-    },
-    {
-      label: m.admin_data_count_land_plots(),
-      count: counts.land_plots,
-      scope: "land_plots",
-    },
-    {
-      label: m.admin_data_count_investment_contracts(),
-      count: counts.investment_contracts,
-    },
-    { label: m.admin_data_count_dossier_items(), count: counts.dossier_items },
-    {
-      label: m.admin_data_count_public_records(),
-      count: counts.public_records,
-    },
-    { label: m.admin_data_count_obligations(), count: counts.obligations },
-    {
-      label: m.admin_data_count_notifications(),
-      count: counts.notifications,
-      scope: "notifications",
-    },
-  ]
 
   return (
     <div className="flex flex-col gap-6">
@@ -297,51 +338,55 @@ function DataPanel() {
           <div className="overflow-x-auto">
             <Table data-testid="admin-data-counts">
               <TableBody>
-                {kinds.map((kind) => (
-                  <TableRow key={kind.label}>
-                    <TableCell className="text-muted-foreground">
-                      {kind.label}
-                    </TableCell>
-                    <TableCell className="font-medium tabular-nums">
-                      {kind.count}
-                    </TableCell>
-                    <TableCell>
-                      {kind.scope === undefined ? (
-                        <span className="text-xs text-muted-foreground">
-                          {m.admin_data_goes_with_parent()}
-                        </span>
-                      ) : (
-                        <ConfirmAction
-                          title={m.admin_data_kind_confirm_title({
-                            kind: kind.label,
-                          })}
-                          description={m.admin_data_kind_confirm_description({
-                            kind: kind.label,
-                            count: kind.count,
-                          })}
-                          confirmLabel={m.admin_data_delete_all()}
-                          disabled={
-                            !armed || kind.count === 0 || purge.isPending
-                          }
-                          onConfirm={() => {
-                            if (kind.scope !== undefined) {
-                              purge.mutate(kind.scope)
+                {DATA_KINDS.map((row) => {
+                  const count = row.count(counts)
+                  return (
+                    <TableRow key={row.scope}>
+                      <TableCell className="text-muted-foreground">
+                        {row.label()}
+                      </TableCell>
+                      <TableCell className="font-medium tabular-nums">
+                        {count}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Перечень записей вида - ниже, в панели записей:
+                              кнопка лишь переключает ее на этот вид */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            data-testid={`show-kind-${row.scope}`}
+                            disabled={count === 0}
+                            onClick={() => setKind(row.scope)}
+                          >
+                            {m.admin_data_show()}
+                          </Button>
+                          <ConfirmAction
+                            title={m.admin_data_kind_confirm_title({
+                              kind: row.label(),
+                            })}
+                            description={m.admin_data_kind_confirm_description({
+                              kind: row.label(),
+                              count,
+                            })}
+                            confirmLabel={m.admin_data_delete_all()}
+                            disabled={!armed || count === 0 || purge.isPending}
+                            onConfirm={() => purge.mutate(row.scope)}
+                            trigger={
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                data-testid={`purge-kind-${row.scope}`}
+                              >
+                                {m.admin_data_delete_all()}
+                              </Button>
                             }
-                          }}
-                          trigger={
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              data-testid={`purge-kind-${kind.scope}`}
-                            >
-                              {m.admin_data_delete_all()}
-                            </Button>
-                          }
-                        />
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
                 <TableRow>
                   <TableCell className="font-medium">
                     {m.admin_data_everything()}
@@ -376,165 +421,13 @@ function DataPanel() {
         </div>
       </Panel>
 
-      <Panel
-        title={m.admin_data_tenders_title()}
-        description={m.admin_data_tenders_hint()}
-      >
-        {overview.tenders.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {m.admin_data_tenders_empty()}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table data-testid="admin-data-tenders">
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col">{m.admin_data_tender()}</TableHead>
-                  <TableHead scope="col">
-                    {m.admin_data_tender_status()}
-                  </TableHead>
-                  <TableHead scope="col">
-                    {m.admin_data_tender_created()}
-                  </TableHead>
-                  <TableHead scope="col">
-                    {m.admin_data_tender_applications()}
-                  </TableHead>
-                  <TableHead scope="col">
-                    <span className="sr-only">
-                      {m.admin_data_delete_tender()}
-                    </span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {overview.tenders.map((tender) => (
-                  <TableRow key={tender.id}>
-                    <TableCell className="font-medium">
-                      {localizedTenderTitle(tender)}
-                    </TableCell>
-                    <TableCell>
-                      <TenderStatusBadge status={tender.status} />
-                    </TableCell>
-                    <TableCell suppressHydrationWarning>
-                      {formatDateTime(tender.created_at)}
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      {tender.applications}
-                    </TableCell>
-                    <TableCell>
-                      <ConfirmAction
-                        title={m.admin_data_delete_tender_confirm_title()}
-                        description={m.admin_data_delete_tender_confirm_description(
-                          {
-                            title: localizedTenderTitle(tender),
-                            applications: tender.applications,
-                          }
-                        )}
-                        confirmLabel={m.admin_data_delete_tender()}
-                        disabled={!enabled || purgeOneTender.isPending}
-                        onConfirm={() => purgeOneTender.mutate(tender.id)}
-                        trigger={
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            data-testid={`purge-tender-${tender.id}`}
-                          >
-                            {m.admin_data_delete_tender()}
-                          </Button>
-                        }
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-        {overview.tenders_truncated && (
-          <p className="mt-3 text-sm text-muted-foreground">
-            {m.admin_data_tenders_truncated()}
-          </p>
-        )}
-      </Panel>
-
-      <Panel
-        title={m.admin_data_objects_title()}
-        description={m.admin_data_objects_hint()}
-      >
-        {overview.objects.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {m.admin_data_objects_empty()}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <Table data-testid="admin-data-objects">
-              <TableHeader>
-                <TableRow>
-                  <TableHead scope="col">{m.admin_data_object()}</TableHead>
-                  <TableHead scope="col">
-                    {m.admin_data_object_kind()}
-                  </TableHead>
-                  <TableHead scope="col">
-                    {m.admin_data_object_area()}
-                  </TableHead>
-                  <TableHead scope="col">
-                    {m.admin_data_object_tenders()}
-                  </TableHead>
-                  <TableHead scope="col">
-                    <span className="sr-only">
-                      {m.admin_data_delete_object()}
-                    </span>
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {overview.objects.map((object) => (
-                  <TableRow key={object.id}>
-                    <TableCell className="font-medium">
-                      {localizedObjectName(object)}
-                    </TableCell>
-                    <TableCell>{OBJECT_KIND_LABELS[object.kind]()}</TableCell>
-                    <TableCell className="tabular-nums">
-                      {trimZeros(object.area_m2)}
-                    </TableCell>
-                    <TableCell className="tabular-nums">
-                      {object.tenders}
-                    </TableCell>
-                    <TableCell>
-                      <ConfirmAction
-                        title={m.admin_data_delete_object_confirm_title()}
-                        description={m.admin_data_delete_object_confirm_description(
-                          {
-                            name: localizedObjectName(object),
-                            tenders: object.tenders,
-                          }
-                        )}
-                        confirmLabel={m.admin_data_delete_object()}
-                        disabled={!enabled || purgeOneObject.isPending}
-                        onConfirm={() => purgeOneObject.mutate(object.id)}
-                        trigger={
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            data-testid={`purge-object-${object.id}`}
-                          >
-                            {m.admin_data_delete_object()}
-                          </Button>
-                        }
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-        {overview.objects_truncated && (
-          <p className="mt-3 text-sm text-muted-foreground">
-            {m.admin_data_objects_truncated()}
-          </p>
-        )}
-      </Panel>
+      <RecordsPanel
+        kind={kind}
+        onKindChange={setKind}
+        enabled={enabled}
+        pending={purgeOne.isPending}
+        onDelete={(id) => purgeOne.mutate({ recordKind: kind, id })}
+      />
 
       <Panel
         title={m.admin_data_demo_title()}
@@ -562,19 +455,134 @@ function DataPanel() {
   )
 }
 
-/** Вид объекта в интерфейсе: значения enum контракта, перевод - Paraglide. */
-const OBJECT_KIND_LABELS: Record<ObjectKind, () => string> = {
-  building: m.object_kind_building,
-  premises: m.object_kind_premises,
-  structure: m.object_kind_structure,
-  land_plot: m.object_kind_land_plot,
+/**
+ * Записи одного вида с кнопкой удаления у каждой. Свой компонент, потому
+ * что перечень ходит в сеть сам: вид меняется селектором, и запрос за
+ * записями не должен тянуть за собой перерисовку обзора.
+ */
+function RecordsPanel({
+  kind,
+  onKindChange,
+  enabled,
+  pending,
+  onDelete,
+}: {
+  kind: AdminDataKind
+  onKindChange: (kind: AdminDataKind) => void
+  enabled: boolean
+  pending: boolean
+  onDelete: (id: string) => void
+}) {
+  const { data: page } = useQuery(recordsQuery(kind))
+  const label = kindLabel(kind)
+
+  return (
+    <Panel
+      title={m.admin_data_records_title()}
+      description={m.admin_data_records_hint()}
+    >
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="records-kind">
+            {m.admin_data_records_kind_label()}
+          </Label>
+          <NativeSelect
+            id="records-kind"
+            className="max-w-xs"
+            value={kind}
+            onChange={(event) => {
+              const next = DATA_KINDS.find(
+                (row) => row.scope === event.target.value
+              )
+              if (next !== undefined) onKindChange(next.scope)
+            }}
+          >
+            {DATA_KINDS.map((row) => (
+              <NativeSelectOption key={row.scope} value={row.scope}>
+                {row.label()}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+        </div>
+        {page === undefined ? null : page.items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {m.admin_data_records_empty()}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table data-testid="admin-data-records">
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col">{m.admin_data_record()}</TableHead>
+                  <TableHead scope="col">
+                    {m.admin_data_record_details()}
+                  </TableHead>
+                  <TableHead scope="col">
+                    {m.admin_data_record_created()}
+                  </TableHead>
+                  <TableHead scope="col">
+                    <span className="sr-only">
+                      {m.admin_data_delete_record()}
+                    </span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((record) => {
+                  const title = localizedRecordTitle(record)
+                  return (
+                    <TableRow key={record.id}>
+                      <TableCell className="font-medium">{title}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {record.details ?? ""}
+                      </TableCell>
+                      <TableCell suppressHydrationWarning>
+                        {formatDateTime(record.created_at) ?? ""}
+                      </TableCell>
+                      <TableCell>
+                        <ConfirmAction
+                          title={m.admin_data_delete_record_confirm_title()}
+                          description={m.admin_data_delete_record_confirm_description(
+                            { title, kind: label }
+                          )}
+                          confirmLabel={m.admin_data_delete_record()}
+                          disabled={!enabled || pending}
+                          onConfirm={() => onDelete(record.id)}
+                          trigger={
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              data-testid={`purge-record-${record.id}`}
+                            >
+                              {m.admin_data_delete_record()}
+                            </Button>
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        {page?.truncated === true && (
+          <p className="text-sm text-muted-foreground">
+            {m.admin_data_records_truncated()}
+          </p>
+        )}
+      </div>
+    </Panel>
+  )
 }
 
-/** Сохраненная локализованная строка без машинного перевода. */
-function localizedObjectName(
-  object: Pick<AdminObjectDto, "name" | "name_kk">
+/** Сохраненная казахская строка, если она есть; машинного перевода нет. */
+function localizedRecordTitle(
+  record: Pick<AdminRecordDto, "title" | "title_kk">
 ): string {
-  return getLocale() === "kk" ? object.name_kk : object.name
+  return getLocale() === "kk" && record.title_kk != null
+    ? record.title_kk
+    : record.title
 }
 
 /** Сумма удаленных строк по таблицам - для одной строки тоста. */

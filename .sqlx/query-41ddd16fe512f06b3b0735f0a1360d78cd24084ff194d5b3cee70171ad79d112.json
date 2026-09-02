@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id, coalesce(c.reg_number, c.id::text) AS \"title!\", NULL::text AS \"title_kk?\",\n                      u.full_name || ' · ' || c.status::text || ' · ' || c.monthly_rate::text\n                        AS \"details?\",\n                      c.created_at AS \"created_at?\"\n               FROM core.contracts c JOIN core.users u ON u.id = c.tenant_id\n               ORDER BY c.id DESC LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "title_kk?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "details?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "41ddd16fe512f06b3b0735f0a1360d78cd24084ff194d5b3cee70171ad79d112"
+}
