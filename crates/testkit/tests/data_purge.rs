@@ -4,14 +4,16 @@
 //! Проверяется то, что нельзя закрепить типом: что `core.purge_data()`
 //! проходит сквозь append-only сторожей и возвращает их на место, что
 //! чужой тендер и объект остаются, что след ложится в ту же hash-цепочку
-//! (INV-A01) и что после очистки сторожа снова отбивают прямое удаление.
-//! Отдельно - полнота перечня: каждая таблица схемы `core` либо в порядке
-//! удаления функции, либо в явном перечне оставляемых, третьего нет.
+//! (INV-A01), что после очистки сторожа снова отбивают прямое удаление и
+//! что объект уносит тендеры, где он выставлен лотом. Отдельно - полнота
+//! перечня: каждая таблица схемы `core` либо в порядке удаления функции,
+//! либо в явном перечне оставляемых, третьего нет.
 //!
 //! Подключение - TESTKIT_DATABASE_URL (A-021).
 
 use std::collections::BTreeSet;
 
+use tou_db::purge::PurgeScope;
 use uuid::Uuid;
 
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
@@ -51,7 +53,7 @@ const KEPT: [&str; 7] = [
 
 /// Порядок удаления из текста функции: строки шагов вида `['table', '...']`.
 fn purged_tables() -> BTreeSet<&'static str> {
-    include_str!("../../db/migrations/20260902100000_admin_data_purge.sql")
+    include_str!("../../db/migrations/20260902110000_admin_data_purge_scopes.sql")
         .lines()
         .filter_map(|line| {
             let rest = line.trim().strip_prefix("['")?;
@@ -113,8 +115,8 @@ struct Fixture {
     dossier_item: Uuid,
 }
 
-/// Организатор, объект и тендер с материалом досье - самой строгой из
-/// append-only таблиц (INV-042): ее и стирает очистка.
+/// Организатор, объект и тендер с лотом на этом объекте и материалом досье -
+/// самой строгой из append-only таблиц (INV-042): ее и стирает очистка.
 async fn fixture(db: &tou_db::Db, tag: &str) -> Result<Fixture, sqlx::Error> {
     let nonce = Uuid::now_v7().simple();
     let actor = sqlx::query_scalar!(
@@ -146,6 +148,18 @@ async fn fixture(db: &tou_db::Db, tag: &str) -> Result<Fixture, sqlx::Error> {
     .fetch_one(db)
     .await?;
 
+    sqlx::query!(
+        "INSERT INTO core.lots
+           (tender_id, seq, object_id, purpose, purpose_kk, lease_months,
+            base_rate_monthly, guarantee_fee, rate_calculation)
+         VALUES ($1, 1, $2, 'проба очистки', 'тазалау сынағы', 12,
+                 1000.00, 1000.00, '{}'::jsonb)",
+        tender,
+        object
+    )
+    .execute(db)
+    .await?;
+
     let dossier_item = sqlx::query_scalar!(
         "INSERT INTO core.dossier_items (tender_id, kind, source_table, source_id, title)
          VALUES ($1, 'test', 'core.tenders', $1, 'Проба очистки') RETURNING id",
@@ -166,6 +180,10 @@ async fn tender_exists(db: &tou_db::Db, id: Uuid) -> Result<bool, sqlx::Error> {
     tou_db::purge::tender_exists(db, id).await
 }
 
+async fn object_exists(db: &tou_db::Db, id: Uuid) -> Result<bool, sqlx::Error> {
+    tou_db::purge::object_exists(db, id).await
+}
+
 async fn dossier_item_exists(db: &tou_db::Db, id: Uuid) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar!(
         r#"SELECT EXISTS (SELECT 1 FROM core.dossier_items WHERE id = $1) AS "exists!""#,
@@ -173,6 +191,19 @@ async fn dossier_item_exists(db: &tou_db::Db, id: Uuid) -> Result<bool, sqlx::Er
     )
     .fetch_one(db)
     .await
+}
+
+/// Уборка того, что очистка оставляет по замыслу: объект и пользователь.
+async fn cleanup(db: &tou_db::Db, fixtures: &[&Fixture]) -> Result<(), sqlx::Error> {
+    for f in fixtures {
+        sqlx::query!("DELETE FROM core.objects WHERE id = $1", f.object)
+            .execute(db)
+            .await?;
+        sqlx::query!("DELETE FROM core.users WHERE id = $1", f.actor)
+            .execute(db)
+            .await?;
+    }
+    Ok(())
 }
 
 /// Удаление тендера уносит его append-only хвост, не задевая соседей,
@@ -183,13 +214,23 @@ async fn purge_removes_a_tender_and_restores_the_guards() {
     let target = fixture(&db, "target").await.expect("тендер на удаление");
     let control = fixture(&db, "control").await.expect("контрольный тендер");
 
-    let deleted = tou_db::purge::purge(&db, target.actor, Some(&[target.tender]))
-        .await
-        .expect("очистка одного тендера");
+    let deleted = tou_db::purge::purge(
+        &db,
+        target.actor,
+        PurgeScope::Tenders,
+        Some(&[target.tender]),
+    )
+    .await
+    .expect("очистка одного тендера");
     assert_eq!(
         deleted.get("tenders"),
         Some(&1),
         "удален ровно один тендер: {deleted:?}"
+    );
+    assert_eq!(
+        deleted.get("lots"),
+        Some(&1),
+        "лот ушел с тендером: {deleted:?}"
     );
     assert_eq!(
         deleted.get("dossier_items"),
@@ -212,20 +253,21 @@ async fn purge_removes_a_tender_and_restores_the_guards() {
             .expect("проверка материала досье")
     );
     assert!(
+        object_exists(&db, target.object)
+            .await
+            .expect("проверка объекта")
+    );
+    assert!(
         tender_exists(&db, control.tender)
             .await
             .expect("проверка тендера"),
         "чужой тендер не тронут"
     );
-    assert!(
-        dossier_item_exists(&db, control.dossier_item)
-            .await
-            .expect("проверка материала досье")
-    );
 
     // След: сводное событие с актором в той же цепочке, и цепочка цела
     let event = sqlx::query!(
-        r#"SELECT actor_id, payload -> 'old' -> 'tender_ids' AS "tender_ids!"
+        r#"SELECT actor_id, payload -> 'old' ->> 'scope' AS "scope!",
+                  payload -> 'old' -> 'tender_ids' AS "tender_ids!"
            FROM audit.log WHERE table_name = 'core.data_purge'
            ORDER BY id DESC LIMIT 1"#
     )
@@ -233,6 +275,7 @@ async fn purge_removes_a_tender_and_restores_the_guards() {
     .await
     .expect("событие очистки");
     assert_eq!(event.actor_id, Some(target.actor));
+    assert_eq!(event.scope, "tenders");
     assert_eq!(
         event.tender_ids,
         serde_json::json!([target.tender]),
@@ -276,35 +319,103 @@ async fn purge_removes_a_tender_and_restores_the_guards() {
     );
 
     // Уборка: контрольный тендер уходит той же очисткой, остальное - руками
-    tou_db::purge::purge(&db, control.actor, Some(&[control.tender]))
+    tou_db::purge::purge(
+        &db,
+        control.actor,
+        PurgeScope::Tenders,
+        Some(&[control.tender]),
+    )
+    .await
+    .expect("уборка контрольного тендера");
+    cleanup(&db, &[&target, &control]).await.expect("уборка");
+}
+
+/// Объект уносит тендеры, где он выставлен лотом, а соседний объект с его
+/// тендером остается: область `objects` идет от объекта к процедурам.
+#[tokio::test]
+async fn purge_object_takes_its_tenders_along() {
+    let db = require_db!();
+    let target = fixture(&db, "obj-target")
         .await
-        .expect("уборка контрольного тендера");
-    for object in [target.object, control.object] {
-        sqlx::query!("DELETE FROM core.objects WHERE id = $1", object)
+        .expect("объект на удаление");
+    let control = fixture(&db, "obj-control")
+        .await
+        .expect("контрольный объект");
+
+    let deleted = tou_db::purge::purge(
+        &db,
+        target.actor,
+        PurgeScope::Objects,
+        Some(&[target.object]),
+    )
+    .await
+    .expect("очистка одного объекта");
+    assert_eq!(
+        deleted.get("objects"),
+        Some(&1),
+        "удален ровно один объект: {deleted:?}"
+    );
+    assert_eq!(
+        deleted.get("tenders"),
+        Some(&1),
+        "тендер по объекту ушел с ним: {deleted:?}"
+    );
+    assert_eq!(
+        deleted.get("lots"),
+        Some(&1),
+        "лот ушел с тендером: {deleted:?}"
+    );
+
+    assert!(
+        !object_exists(&db, target.object)
+            .await
+            .expect("проверка объекта")
+    );
+    assert!(
+        !tender_exists(&db, target.tender)
+            .await
+            .expect("проверка тендера")
+    );
+    assert!(
+        object_exists(&db, control.object)
+            .await
+            .expect("проверка объекта")
+    );
+    assert!(
+        tender_exists(&db, control.tender)
+            .await
+            .expect("проверка тендера")
+    );
+
+    // Уборка: контрольный объект - той же областью, пользователи - руками
+    tou_db::purge::purge(
+        &db,
+        control.actor,
+        PurgeScope::Objects,
+        Some(&[control.object]),
+    )
+    .await
+    .expect("уборка контрольного объекта");
+    for actor in [target.actor, control.actor] {
+        sqlx::query!("DELETE FROM core.users WHERE id = $1", actor)
             .execute(&db)
             .await
-            .expect("уборка объекта");
+            .expect("уборка пользователя");
     }
-    sqlx::query!(
-        "DELETE FROM core.users WHERE id = ANY($1)",
-        &[target.actor, control.actor]
-    )
-    .execute(&db)
-    .await
-    .expect("уборка пользователей");
 }
 
 /// Без актора очистка отказывает целиком: событие без автора в аудите
 /// недопустимо, а транзакция без `app.user_id` - это и есть вызов мимо
-/// http-слоя.
+/// http-слоя. Неизвестная область отказывает так же вслух - до того, как
+/// хоть один сторож будет снят.
 #[tokio::test]
-async fn purge_refuses_without_an_actor() {
+async fn purge_refuses_without_an_actor_or_with_an_unknown_scope() {
     let db = require_db!();
 
-    let refused = sqlx::query_scalar!(r#"SELECT core.purge_data(ARRAY[]::uuid[]) AS "deleted!""#)
-        .fetch_one(&db)
-        .await;
-
+    let refused =
+        sqlx::query_scalar!(r#"SELECT core.purge_data('tenders', ARRAY[]::uuid[]) AS "deleted!""#)
+            .fetch_one(&db)
+            .await;
     let message = match refused {
         Ok(_) => panic!("очистка без актора прошла"),
         Err(e) => e.to_string(),
@@ -313,4 +424,32 @@ async fn purge_refuses_without_an_actor() {
         message.contains("актора"),
         "отказ должен называть причину, а не падать на чем-то еще: {message}"
     );
+
+    let bogus = sqlx::query_scalar!(
+        r#"SELECT core.purge_data('everything-and-more', NULL::uuid[]) AS "deleted!""#
+    )
+    .fetch_one(&db)
+    .await;
+    let message = match bogus {
+        Ok(_) => panic!("неизвестная область прошла"),
+        Err(e) => e.to_string(),
+    };
+    // Актора нет и здесь, но область проверяется первой? Нет: первым стоит
+    // актор, поэтому отказ обязан быть про него, а не про область, - иначе
+    // вызов мимо http-слоя узнавал бы о перечне областей раньше, чем о
+    // запрете. Область проверяется под актором ниже.
+    assert!(message.contains("актора"), "{message}");
+
+    let with_actor = sqlx::query_scalar!(
+        r#"SELECT core.purge_data('everything-and-more', NULL::uuid[]) AS "deleted!""#
+    );
+    let rejected = tou_db::with_actor(&db, Uuid::now_v7(), async |tx| {
+        with_actor.fetch_one(&mut *tx).await
+    })
+    .await;
+    let message = match rejected {
+        Ok(_) => panic!("неизвестная область прошла под актором"),
+        Err(e) => e.to_string(),
+    };
+    assert!(message.contains("неизвестная область"), "{message}");
 }

@@ -7,13 +7,15 @@
 //! append-only (FR-702, INV-042), у роли приложения нет права DELETE на них.
 //!
 //! Поэтому само удаление живет в БД - `core.purge_data()` под владельцем
-//! схемы (миграция `20260902100000_admin_data_purge.sql`): сторожа append-only
-//! снимаются на одну транзакцию, аудит-триггеры остаются, и сверху ложится
-//! сводное событие `core.data_purge`. Здесь - только вызов и обзор того,
-//! что уйдет. Разрешение на вызов дает http-слой (`ALLOW_DATA_PURGE`).
+//! схемы (миграция `20260902110000_admin_data_purge_scopes.sql`): сторожа
+//! append-only снимаются на одну транзакцию, аудит-триггеры остаются, и
+//! сверху ложится сводное событие `core.data_purge`. Здесь - только вызов
+//! и обзор того, что уйдет. Разрешение на вызов дает http-слой
+//! (`ALLOW_DATA_PURGE`).
 
 use std::collections::BTreeMap;
 
+use rust_decimal::Decimal;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -22,6 +24,40 @@ use crate::{Db, MAX_ROWS, Page};
 /// Домен демо-учеток `api seed` (Прил. Б): один пароль на всех, и на рабочем
 /// стенде такие записи должны быть отключены до первого настоящего входа.
 pub const DEMO_EMAIL_SUFFIX: &str = "@tou.demo";
+
+/// Область очистки: с какого вида данных начинается удаление. Все, что
+/// держится на удаляемых записях, уходит с ними по внешним ключам.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PurgeScope {
+    /// Все процедуры и объекты стенда
+    Everything,
+    /// Тендеры со всем, что на них висит; объекты остаются
+    Tenders,
+    /// Объекты вместе с тендерами, где они выставлены лотом, участками
+    /// и заявками особого порядка по ним
+    Objects,
+    /// Заявки особого порядка с заключениями, решениями, досье и
+    /// инвестиционными договорами
+    SpecialRequests,
+    /// Земельные участки с заявками, решениями и договорами по ним
+    LandPlots,
+    /// Уведомления - все, чьи бы ни были
+    Notifications,
+}
+
+impl PurgeScope {
+    /// Имя области для БД - совпадает с проверкой внутри `core.purge_data`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PurgeScope::Everything => "everything",
+            PurgeScope::Tenders => "tenders",
+            PurgeScope::Objects => "objects",
+            PurgeScope::SpecialRequests => "special_requests",
+            PurgeScope::LandPlots => "land_plots",
+            PurgeScope::Notifications => "notifications",
+        }
+    }
+}
 
 /// Сколько строк каждого вида лежит на стенде - что именно уйдет при очистке.
 #[derive(Debug, Clone, Copy, Default)]
@@ -128,9 +164,51 @@ pub async fn list_tenders(db: &Db) -> Result<Page<AdminTenderRecord>, sqlx::Erro
     Ok(page)
 }
 
+/// Объект в перечне на удаление: имя, вид, площадь и сколько тендеров
+/// уйдет вместе с ним (те, где он выставлен лотом).
+#[derive(Debug, Clone)]
+pub struct AdminObjectRecord {
+    pub id: Uuid,
+    pub name: String,
+    pub name_kk: String,
+    pub kind: String,
+    pub area_m2: Decimal,
+    pub created_at: OffsetDateTime,
+    pub tenders: i64,
+}
+
+/// Все объекты стенда, свежие сверху.
+pub async fn list_objects(db: &Db) -> Result<Page<AdminObjectRecord>, sqlx::Error> {
+    let rows = sqlx::query_as!(
+        AdminObjectRecord,
+        r#"SELECT o.id, o.name, o.name_kk, o.kind::text AS "kind!", o.area_m2, o.created_at,
+                  (SELECT count(DISTINCT lo.tender_id) FROM core.lots lo WHERE lo.object_id = o.id)
+                    AS "tenders!"
+           FROM core.objects o
+           ORDER BY o.id DESC
+           LIMIT $1"#,
+        crate::probe_limit(MAX_ROWS)
+    )
+    .fetch_all(db)
+    .await?;
+
+    let page = Page::probe(rows, MAX_ROWS);
+    crate::warn_if_truncated(page.truncated, "purge::list_objects");
+    Ok(page)
+}
+
 pub async fn tender_exists(db: &Db, id: Uuid) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar!(
         r#"SELECT EXISTS (SELECT 1 FROM core.tenders WHERE id = $1) AS "exists!""#,
+        id
+    )
+    .fetch_one(db)
+    .await
+}
+
+pub async fn object_exists(db: &Db, id: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM core.objects WHERE id = $1) AS "exists!""#,
         id
     )
     .fetch_one(db)
@@ -141,8 +219,9 @@ pub async fn tender_exists(db: &Db, id: Uuid) -> Result<bool, sqlx::Error> {
 /// в перечень не попадают.
 pub type Deleted = BTreeMap<String, i64>;
 
-/// Очистка: `None` - все процедуры и объекты стенда, `Some(ids)` - только
-/// перечисленные тендеры со всем, что на них висит (объекты остаются).
+/// Очистка области: `ids = None` - все записи области, `Some(ids)` - только
+/// перечисленные (для [`PurgeScope::Everything`] и
+/// [`PurgeScope::Notifications`] перечень не нужен).
 ///
 /// Одна транзакция под актором: построчные события удалений и сводное
 /// `core.data_purge` уходят в аудит с тем же `actor_id`. Отказ функции
@@ -150,12 +229,14 @@ pub type Deleted = BTreeMap<String, i64>;
 pub async fn purge(
     db: &Db,
     actor: Uuid,
-    tender_ids: Option<&[Uuid]>,
+    scope: PurgeScope,
+    ids: Option<&[Uuid]>,
 ) -> Result<Deleted, sqlx::Error> {
     let deleted = crate::with_actor(db, actor, async |tx| {
         sqlx::query_scalar!(
-            r#"SELECT core.purge_data($1::uuid[]) AS "deleted!""#,
-            tender_ids
+            r#"SELECT core.purge_data($1, $2::uuid[]) AS "deleted!""#,
+            scope.as_str(),
+            ids
         )
         .fetch_one(&mut *tx)
         .await

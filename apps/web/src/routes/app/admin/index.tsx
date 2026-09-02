@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
+import { getLocale } from "#/paraglide/runtime"
 import { ConfirmAction } from "@/components/confirm-action"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
@@ -42,7 +43,8 @@ import {
   deactivateDemoAccounts,
   grantRole,
   mrpQuery,
-  purgeAllData,
+  purgeData,
+  purgeObject,
   purgeTender,
   removeHoliday,
   resetPassword,
@@ -54,12 +56,19 @@ import {
 } from "@/lib/admin"
 import { localizedTenderTitle } from "@/lib/api"
 import { meQuery, problemMessage } from "@/lib/auth"
-import { formatDateTime, formatTenge } from "@/lib/format"
+import { formatDateTime, formatTenge, trimZeros } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { tabSearch } from "@/lib/tabs"
 
-import type { GrantableRole, SiteAnnouncementDto, UserDto } from "@/lib/admin"
+import type {
+  AdminObjectDto,
+  AdminPurgeScope,
+  GrantableRole,
+  SiteAnnouncementDto,
+  UserDto,
+} from "@/lib/admin"
+import type { ObjectKind } from "@/lib/api"
 
 // Кабинет департамента цифрового развития (М15, ТЗ § 3): пользователи и роли
 // (FR-1503, FR-1902) и справочники расчета - МРП, коэффициенты Прил. 4,
@@ -141,8 +150,9 @@ function AdminHome() {
  * Очистка данных стенда (М15). Стенд, наполненный сидом под демонстрацию,
  * становится рабочим: демо-тендеры, объекты, заявки и протоколы должны уйти
  * до прихода настоящих процедур. Само удаление живет в БД одной транзакцией
- * со следом в аудите; здесь - обзор того, что уйдет, и три действия за
- * подтверждением. Без `ALLOW_DATA_PURGE` на стороне api кнопки удаления не
+ * со следом в аудите; здесь - обзор того, что уйдет, и действия за
+ * подтверждением: построчно (тендер, объект), по видам данных и весь стенд
+ * разом. Без `ALLOW_DATA_PURGE` на стороне api кнопки удаления не
  * действуют, и панель говорит об этом прямо, а не молчит серой кнопкой.
  */
 function DataPanel() {
@@ -154,21 +164,31 @@ function DataPanel() {
   // реестры, карточки тендеров, уведомления - кеш сбрасывается целиком
   const refresh = () => queryClient.invalidateQueries()
 
-  const purgeAll = useMutation({
-    mutationFn: () => purgeAllData(phrase),
-    onSuccess: async (result) => {
-      setPhrase("")
+  const purge = useMutation({
+    mutationFn: (scope: AdminPurgeScope) => purgeData(scope, phrase),
+    onSuccess: async (result, scope) => {
+      const rows = deletedRows(result.deleted)
       notifySuccess(
-        m.admin_data_purged_toast({ rows: deletedRows(result.deleted) })
+        scope === "everything"
+          ? m.admin_data_purged_toast({ rows })
+          : m.admin_data_kind_deleted_toast({ rows })
       )
       await refresh()
     },
     onError: (error: unknown) => notifyError(problemMessage(error)),
   })
-  const purgeOne = useMutation({
+  const purgeOneTender = useMutation({
     mutationFn: (tenderId: string) => purgeTender(tenderId),
     onSuccess: async () => {
       notifySuccess(m.admin_data_tender_deleted_toast())
+      await refresh()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
+  })
+  const purgeOneObject = useMutation({
+    mutationFn: (objectId: string) => purgeObject(objectId),
+    onSuccess: async () => {
+      notifySuccess(m.admin_data_object_deleted_toast())
       await refresh()
     },
     onError: (error: unknown) => notifyError(problemMessage(error)),
@@ -187,24 +207,58 @@ function DataPanel() {
   if (overview === undefined) return null
   const enabled = overview.purge_enabled
   const { counts } = overview
+  // Слово набрано целиком: массовые кнопки спят до этого момента, а
+  // подтверждение в диалоге - второй рубеж, не единственный
+  const armed = enabled && phrase.trim() === PURGE_CONFIRMATION
 
-  const rows: [string, number][] = [
-    [m.admin_data_count_objects(), counts.objects],
-    [m.admin_data_count_tenders(), counts.tenders],
-    [m.admin_data_count_lots(), counts.lots],
-    [m.admin_data_count_applications(), counts.applications],
-    [m.admin_data_count_protocols(), counts.protocols],
-    [m.admin_data_count_auctions(), counts.auctions],
-    [m.admin_data_count_contracts(), counts.contracts],
-    [m.admin_data_count_acts(), counts.acts],
-    [m.admin_data_count_ledger_entries(), counts.ledger_entries],
-    [m.admin_data_count_special_requests(), counts.special_requests],
-    [m.admin_data_count_land_plots(), counts.land_plots],
-    [m.admin_data_count_investment_contracts(), counts.investment_contracts],
-    [m.admin_data_count_dossier_items(), counts.dossier_items],
-    [m.admin_data_count_public_records(), counts.public_records],
-    [m.admin_data_count_obligations(), counts.obligations],
-    [m.admin_data_count_notifications(), counts.notifications],
+  // Виды данных: у корней процедур - своя кнопка «удалить все», остальные
+  // уходят вместе с тем, к чему привязаны, и кнопки не имеют
+  const kinds: { label: string; count: number; scope?: AdminPurgeScope }[] = [
+    {
+      label: m.admin_data_count_objects(),
+      count: counts.objects,
+      scope: "objects",
+    },
+    {
+      label: m.admin_data_count_tenders(),
+      count: counts.tenders,
+      scope: "tenders",
+    },
+    { label: m.admin_data_count_lots(), count: counts.lots },
+    { label: m.admin_data_count_applications(), count: counts.applications },
+    { label: m.admin_data_count_protocols(), count: counts.protocols },
+    { label: m.admin_data_count_auctions(), count: counts.auctions },
+    { label: m.admin_data_count_contracts(), count: counts.contracts },
+    { label: m.admin_data_count_acts(), count: counts.acts },
+    {
+      label: m.admin_data_count_ledger_entries(),
+      count: counts.ledger_entries,
+    },
+    {
+      label: m.admin_data_count_special_requests(),
+      count: counts.special_requests,
+      scope: "special_requests",
+    },
+    {
+      label: m.admin_data_count_land_plots(),
+      count: counts.land_plots,
+      scope: "land_plots",
+    },
+    {
+      label: m.admin_data_count_investment_contracts(),
+      count: counts.investment_contracts,
+    },
+    { label: m.admin_data_count_dossier_items(), count: counts.dossier_items },
+    {
+      label: m.admin_data_count_public_records(),
+      count: counts.public_records,
+    },
+    { label: m.admin_data_count_obligations(), count: counts.obligations },
+    {
+      label: m.admin_data_count_notifications(),
+      count: counts.notifications,
+      scope: "notifications",
+    },
   ]
 
   return (
@@ -224,22 +278,102 @@ function DataPanel() {
 
       <Panel
         title={m.admin_data_counts_title()}
-        description={m.admin_data_counts_hint()}
+        description={m.admin_data_mass_hint()}
       >
-        <dl
-          data-testid="admin-data-counts"
-          className="grid grid-cols-1 gap-x-8 gap-y-1 text-sm sm:grid-cols-2 lg:grid-cols-3"
-        >
-          {rows.map(([label, value]) => (
-            <div
-              key={label}
-              className="flex items-baseline justify-between gap-3 border-b py-1.5"
-            >
-              <dt className="text-muted-foreground">{label}</dt>
-              <dd className="font-medium tabular-nums">{value}</dd>
-            </div>
-          ))}
-        </dl>
+        <div className="flex flex-col gap-4">
+          <Field>
+            <FieldLabel htmlFor="purge-phrase">
+              {m.admin_data_purge_phrase_label({ phrase: PURGE_CONFIRMATION })}
+            </FieldLabel>
+            <Input
+              id="purge-phrase"
+              className="max-w-xs"
+              value={phrase}
+              autoComplete="off"
+              disabled={!enabled}
+              onChange={(event) => setPhrase(event.target.value)}
+            />
+          </Field>
+          <div className="overflow-x-auto">
+            <Table data-testid="admin-data-counts">
+              <TableBody>
+                {kinds.map((kind) => (
+                  <TableRow key={kind.label}>
+                    <TableCell className="text-muted-foreground">
+                      {kind.label}
+                    </TableCell>
+                    <TableCell className="font-medium tabular-nums">
+                      {kind.count}
+                    </TableCell>
+                    <TableCell>
+                      {kind.scope === undefined ? (
+                        <span className="text-xs text-muted-foreground">
+                          {m.admin_data_goes_with_parent()}
+                        </span>
+                      ) : (
+                        <ConfirmAction
+                          title={m.admin_data_kind_confirm_title({
+                            kind: kind.label,
+                          })}
+                          description={m.admin_data_kind_confirm_description({
+                            kind: kind.label,
+                            count: kind.count,
+                          })}
+                          confirmLabel={m.admin_data_delete_all()}
+                          disabled={
+                            !armed || kind.count === 0 || purge.isPending
+                          }
+                          onConfirm={() => {
+                            if (kind.scope !== undefined) {
+                              purge.mutate(kind.scope)
+                            }
+                          }}
+                          trigger={
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              data-testid={`purge-kind-${kind.scope}`}
+                            >
+                              {m.admin_data_delete_all()}
+                            </Button>
+                          }
+                        />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                <TableRow>
+                  <TableCell className="font-medium">
+                    {m.admin_data_everything()}
+                  </TableCell>
+                  <TableCell />
+                  <TableCell>
+                    <ConfirmAction
+                      title={m.admin_data_purge_confirm_title()}
+                      description={m.admin_data_purge_confirm_description({
+                        tenders: counts.tenders,
+                        objects: counts.objects,
+                        applications: counts.applications,
+                      })}
+                      confirmLabel={m.admin_data_purge_button()}
+                      disabled={!armed || purge.isPending}
+                      onConfirm={() => purge.mutate("everything")}
+                      trigger={
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          data-testid="purge-all"
+                        >
+                          {m.admin_data_purge_button()}
+                        </Button>
+                      }
+                    />
+                  </TableCell>
+                </TableRow>
+              </TableBody>
+            </Table>
+          </div>
+        </div>
       </Panel>
 
       <Panel
@@ -297,8 +431,8 @@ function DataPanel() {
                           }
                         )}
                         confirmLabel={m.admin_data_delete_tender()}
-                        disabled={!enabled || purgeOne.isPending}
-                        onConfirm={() => purgeOne.mutate(tender.id)}
+                        disabled={!enabled || purgeOneTender.isPending}
+                        onConfirm={() => purgeOneTender.mutate(tender.id)}
                         trigger={
                           <Button
                             variant="destructive"
@@ -324,48 +458,82 @@ function DataPanel() {
       </Panel>
 
       <Panel
-        title={m.admin_data_purge_title()}
-        description={m.admin_data_purge_hint()}
+        title={m.admin_data_objects_title()}
+        description={m.admin_data_objects_hint()}
       >
-        <div className="flex flex-col gap-4">
-          <Field>
-            <FieldLabel htmlFor="purge-phrase">
-              {m.admin_data_purge_phrase_label({ phrase: PURGE_CONFIRMATION })}
-            </FieldLabel>
-            <Input
-              id="purge-phrase"
-              className="max-w-xs"
-              value={phrase}
-              autoComplete="off"
-              disabled={!enabled}
-              onChange={(event) => setPhrase(event.target.value)}
-            />
-          </Field>
-          <div>
-            {/* Кнопка спит, пока слово не набрано целиком: подтверждение
-                в диалоге - второй рубеж, а не единственный */}
-            <ConfirmAction
-              title={m.admin_data_purge_confirm_title()}
-              description={m.admin_data_purge_confirm_description({
-                tenders: counts.tenders,
-                objects: counts.objects,
-                applications: counts.applications,
-              })}
-              confirmLabel={m.admin_data_purge_button()}
-              disabled={
-                !enabled ||
-                phrase.trim() !== PURGE_CONFIRMATION ||
-                purgeAll.isPending
-              }
-              onConfirm={() => purgeAll.mutate()}
-              trigger={
-                <Button variant="destructive" data-testid="purge-all">
-                  {m.admin_data_purge_button()}
-                </Button>
-              }
-            />
+        {overview.objects.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {m.admin_data_objects_empty()}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table data-testid="admin-data-objects">
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col">{m.admin_data_object()}</TableHead>
+                  <TableHead scope="col">
+                    {m.admin_data_object_kind()}
+                  </TableHead>
+                  <TableHead scope="col">
+                    {m.admin_data_object_area()}
+                  </TableHead>
+                  <TableHead scope="col">
+                    {m.admin_data_object_tenders()}
+                  </TableHead>
+                  <TableHead scope="col">
+                    <span className="sr-only">
+                      {m.admin_data_delete_object()}
+                    </span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {overview.objects.map((object) => (
+                  <TableRow key={object.id}>
+                    <TableCell className="font-medium">
+                      {localizedObjectName(object)}
+                    </TableCell>
+                    <TableCell>{OBJECT_KIND_LABELS[object.kind]()}</TableCell>
+                    <TableCell className="tabular-nums">
+                      {trimZeros(object.area_m2)}
+                    </TableCell>
+                    <TableCell className="tabular-nums">
+                      {object.tenders}
+                    </TableCell>
+                    <TableCell>
+                      <ConfirmAction
+                        title={m.admin_data_delete_object_confirm_title()}
+                        description={m.admin_data_delete_object_confirm_description(
+                          {
+                            name: localizedObjectName(object),
+                            tenders: object.tenders,
+                          }
+                        )}
+                        confirmLabel={m.admin_data_delete_object()}
+                        disabled={!enabled || purgeOneObject.isPending}
+                        onConfirm={() => purgeOneObject.mutate(object.id)}
+                        trigger={
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            data-testid={`purge-object-${object.id}`}
+                          >
+                            {m.admin_data_delete_object()}
+                          </Button>
+                        }
+                      />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
-        </div>
+        )}
+        {overview.objects_truncated && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {m.admin_data_objects_truncated()}
+          </p>
+        )}
       </Panel>
 
       <Panel
@@ -392,6 +560,21 @@ function DataPanel() {
       </Panel>
     </div>
   )
+}
+
+/** Вид объекта в интерфейсе: значения enum контракта, перевод - Paraglide. */
+const OBJECT_KIND_LABELS: Record<ObjectKind, () => string> = {
+  building: m.object_kind_building,
+  premises: m.object_kind_premises,
+  structure: m.object_kind_structure,
+  land_plot: m.object_kind_land_plot,
+}
+
+/** Сохраненная локализованная строка без машинного перевода. */
+function localizedObjectName(
+  object: Pick<AdminObjectDto, "name" | "name_kk">
+): string {
+  return getLocale() === "kk" ? object.name_kk : object.name
 }
 
 /** Сумма удаленных строк по таблицам - для одной строки тоста. */

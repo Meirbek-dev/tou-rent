@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 use axum::extract::State;
 use axum::http::StatusCode;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tou_domain::policy::Action;
@@ -21,7 +22,7 @@ use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 use crate::auth::UserDto;
-use crate::dto::TenderStatusDto;
+use crate::dto::{ObjectKindDto, TenderStatusDto};
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path, Query};
@@ -412,6 +413,22 @@ pub struct AdminTenderDto {
     pub applications: i64,
 }
 
+/// Объект в перечне на удаление.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AdminObjectDto {
+    pub id: Uuid,
+    pub name: String,
+    pub name_kk: String,
+    pub kind: ObjectKindDto,
+    #[schema(value_type = String, example = "42.00")]
+    pub area_m2: Decimal,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: OffsetDateTime,
+    /// Тендеров, где объект выставлен лотом, - уйдут вместе с ним
+    pub tenders: i64,
+}
+
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AdminDataOverviewDto {
     /// Очистка разрешена конфигурацией стенда (`ALLOW_DATA_PURGE`); без нее
@@ -420,19 +437,60 @@ pub struct AdminDataOverviewDto {
     pub counts: AdminDataCountsDto,
     /// Все тендеры стенда в любом статусе, свежие сверху
     pub tenders: Vec<AdminTenderDto>,
-    /// Перечень обрезан потолком строк
+    /// Перечень тендеров обрезан потолком строк
     pub tenders_truncated: bool,
+    /// Все объекты стенда, свежие сверху
+    pub objects: Vec<AdminObjectDto>,
+    /// Перечень объектов обрезан потолком строк
+    pub objects_truncated: bool,
 }
 
-/// Слово, которым подтверждается полная очистка. Одно на все локали:
+/// Слово, которым подтверждается массовая очистка. Одно на все локали:
 /// его вводят с клавиатуры, и оно должно совпасть с тем, что просит экран.
 pub const PURGE_CONFIRMATION: &str = "purge";
+
+/// Область массовой очистки: с какого вида данных начинается удаление.
+/// Все, что держится на удаляемых записях, уходит с ними.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AdminPurgeScope {
+    /// Все процедуры и объекты стенда
+    #[default]
+    Everything,
+    /// Все тендеры; объекты остаются
+    Tenders,
+    /// Все объекты вместе с тендерами, участками и заявками особого порядка по ним
+    Objects,
+    /// Все заявки особого порядка с решениями, досье и инвестиционными договорами
+    SpecialRequests,
+    /// Все земельные участки с заявками, решениями и договорами по ним
+    LandPlots,
+    /// Все уведомления
+    Notifications,
+}
+
+impl From<AdminPurgeScope> for tou_db::purge::PurgeScope {
+    fn from(scope: AdminPurgeScope) -> Self {
+        use tou_db::purge::PurgeScope as S;
+        match scope {
+            AdminPurgeScope::Everything => S::Everything,
+            AdminPurgeScope::Tenders => S::Tenders,
+            AdminPurgeScope::Objects => S::Objects,
+            AdminPurgeScope::SpecialRequests => S::SpecialRequests,
+            AdminPurgeScope::LandPlots => S::LandPlots,
+            AdminPurgeScope::Notifications => S::Notifications,
+        }
+    }
+}
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct AdminPurgeRequest {
     /// Слово подтверждения - ровно [`PURGE_CONFIRMATION`]
     #[schema(example = "purge")]
     pub confirmation: String,
+    /// Что стирать; без поля - весь стенд
+    #[serde(default)]
+    pub scope: AdminPurgeScope,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -479,12 +537,30 @@ pub async fn data_overview(
             })
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
+    let page = tou_db::purge::list_objects(&state.db).await?;
+    let objects_truncated = page.truncated;
+    let objects = page
+        .into_iter()
+        .map(|o| {
+            Ok(AdminObjectDto {
+                id: o.id,
+                name: o.name,
+                name_kk: o.name_kk,
+                kind: ObjectKindDto::from_db(&o.kind)?,
+                area_m2: o.area_m2,
+                created_at: o.created_at,
+                tenders: o.tenders,
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
 
     Ok(Json(AdminDataOverviewDto {
         purge_enabled: state.data_purge_enabled,
         counts: counts.into(),
         tenders,
         tenders_truncated,
+        objects,
+        objects_truncated,
     }))
 }
 
@@ -501,8 +577,9 @@ fn require_purge_enabled(state: &AppState) -> Result<(), ApiError> {
     }
 }
 
-/// Полная очистка: все тендеры, объекты, заявки, торги, протоколы, договоры,
-/// книга проводок, особый порядок, участки и уведомления - одной транзакцией.
+/// Массовая очистка: весь стенд либо все записи одной области - тендеры,
+/// объекты, особый порядок, участки, уведомления - со всем, что на них
+/// держится, одной транзакцией.
 ///
 /// Учетные записи, роли, состав комиссии, объявление на главной, справочники
 /// и журнал аудита остаются. Файлы в `dossiers` тоже: бакет под Object Lock
@@ -513,7 +590,7 @@ fn require_purge_enabled(state: &AppState) -> Result<(), ApiError> {
     tag = "admin",
     request_body = AdminPurgeRequest,
     responses(
-        (status = 200, description = "Стенд очищен", body = AdminPurgeResultDto),
+        (status = 200, description = "Область очищена", body = AdminPurgeResultDto),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
         (status = 422, description = "Очистка выключена или слово подтверждения не совпало",
          body = crate::error::Problem),
@@ -532,8 +609,47 @@ pub async fn purge_data(
         )));
     }
 
-    let deleted = tou_db::purge::purge(&state.db, user.id(), None).await?;
-    tracing::warn!(actor = %user.id(), ?deleted, "стенд очищен администратором");
+    let deleted = tou_db::purge::purge(&state.db, user.id(), body.scope.into(), None).await?;
+    tracing::warn!(actor = %user.id(), scope = ?body.scope, ?deleted, "массовая очистка администратором");
+    Ok(Json(AdminPurgeResultDto { deleted }))
+}
+
+/// Удаление одного объекта вместе с тендерами, где он выставлен лотом
+/// (с их заявками, протоколами, торгами и договорами), участками и
+/// заявками особого порядка по нему. В отличие от `DELETE /objects/{id}`
+/// организатора, занятость объекта не останавливает: это административная
+/// очистка, а не ход реестра (FR-101).
+#[utoipa::path(
+    delete,
+    path = "/api/v1/admin/objects/{id}",
+    tag = "admin",
+    params(("id" = Uuid, Path, description = "Объект")),
+    responses(
+        (status = 200, description = "Объект удален", body = AdminPurgeResultDto),
+        (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
+        (status = 404, description = "Объект не найден", body = crate::error::Problem),
+        (status = 422, description = "Очистка выключена", body = crate::error::Problem),
+    )
+)]
+pub async fn purge_object(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<AdminPurgeResultDto>, ApiError> {
+    user.require(Action::DataPurge)?;
+    require_purge_enabled(&state)?;
+    if !tou_db::purge::object_exists(&state.db, id).await? {
+        return Err(ApiError::NotFound);
+    }
+
+    let deleted = tou_db::purge::purge(
+        &state.db,
+        user.id(),
+        tou_db::purge::PurgeScope::Objects,
+        Some(&[id]),
+    )
+    .await?;
+    tracing::warn!(actor = %user.id(), object_id = %id, ?deleted, "объект удален администратором");
     Ok(Json(AdminPurgeResultDto { deleted }))
 }
 
@@ -566,7 +682,13 @@ pub async fn purge_tender(
         return Err(ApiError::NotFound);
     }
 
-    let deleted = tou_db::purge::purge(&state.db, user.id(), Some(&[id])).await?;
+    let deleted = tou_db::purge::purge(
+        &state.db,
+        user.id(),
+        tou_db::purge::PurgeScope::Tenders,
+        Some(&[id]),
+    )
+    .await?;
     tracing::warn!(actor = %user.id(), tender_id = %id, ?deleted, "тендер удален администратором");
     Ok(Json(AdminPurgeResultDto { deleted }))
 }
@@ -713,6 +835,7 @@ mod tests {
             "/api/v1/admin/data",
             "/api/v1/admin/data/purge",
             "/api/v1/admin/tenders/{id}",
+            "/api/v1/admin/objects/{id}",
             "/api/v1/admin/demo-accounts/deactivate",
         ] {
             assert!(json.contains(path), "маршрут {path} не попал в контракт");
@@ -721,6 +844,30 @@ mod tests {
             json.contains("AdminDataOverviewDto") && json.contains("AdminPurgeResultDto"),
             "схемы очистки не попали в контракт"
         );
+    }
+
+    /// Область очистки на проводе: без поля - весь стенд, имена областей
+    /// совпадают с проверкой внутри `core.purge_data`.
+    #[test]
+    fn purge_scope_defaults_to_everything_and_matches_db_names() {
+        let request: AdminPurgeRequest =
+            serde_json::from_str(r#"{"confirmation":"purge"}"#).expect("тело без области");
+        assert_eq!(request.scope, AdminPurgeScope::Everything);
+
+        for (wire, expected) in [
+            ("everything", "everything"),
+            ("tenders", "tenders"),
+            ("objects", "objects"),
+            ("special_requests", "special_requests"),
+            ("land_plots", "land_plots"),
+            ("notifications", "notifications"),
+        ] {
+            let request: AdminPurgeRequest =
+                serde_json::from_str(&format!(r#"{{"confirmation":"purge","scope":"{wire}"}}"#))
+                    .expect("тело с областью");
+            let scope: tou_db::purge::PurgeScope = request.scope.into();
+            assert_eq!(scope.as_str(), expected);
+        }
     }
 
     /// Очистка данных - право одного admin (INV-POL-01): организатор ведет

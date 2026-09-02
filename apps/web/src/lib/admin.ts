@@ -11,6 +11,8 @@ export type CoefficientVersionDto =
 export type SiteAnnouncementDto = components["schemas"]["SiteAnnouncementDto"]
 export type AdminDataOverviewDto = components["schemas"]["AdminDataOverviewDto"]
 export type AdminTenderDto = components["schemas"]["AdminTenderDto"]
+export type AdminObjectDto = components["schemas"]["AdminObjectDto"]
+export type AdminPurgeScope = components["schemas"]["AdminPurgeScope"]
 
 /** Роли, назначаемые админом (FR-1503): `guest` - аноним, он не хранится. */
 export const GRANTABLE_ROLES = [
@@ -130,13 +132,16 @@ export const dataOverviewQuery = queryOptions({
 })
 
 /**
- * Полная очистка стенда: все процедуры и объекты одной транзакцией.
- * Необратима; сервер сверяет слово подтверждения сам - кнопка лишь не
- * дает нажать раньше, чем оно набрано.
+ * Массовая очистка: весь стенд либо все записи одной области со всем, что
+ * на них держится, одной транзакцией. Необратима; сервер сверяет слово
+ * подтверждения сам - кнопки лишь не дают нажать раньше, чем оно набрано.
  */
-export const purgeAllData = async (confirmation: string) => {
+export const purgeData = async (
+  scope: AdminPurgeScope,
+  confirmation: string
+) => {
   const { data, error } = await api.POST("/api/v1/admin/data/purge", {
-    body: { confirmation },
+    body: { confirmation, scope },
   })
   if (error !== undefined || data === undefined) {
     throw (error as unknown) ?? new Error("purge failed")
@@ -151,6 +156,20 @@ export const purgeTender = async (tenderId: string) => {
   })
   if (error !== undefined || data === undefined) {
     throw (error as unknown) ?? new Error("tender purge failed")
+  }
+  return data
+}
+
+/**
+ * Удаление одного объекта вместе с тендерами, где он выставлен лотом,
+ * участками и заявками особого порядка по нему.
+ */
+export const purgeObject = async (objectId: string) => {
+  const { data, error } = await api.DELETE("/api/v1/admin/objects/{id}", {
+    params: { path: { id: objectId } },
+  })
+  if (error !== undefined || data === undefined) {
+    throw (error as unknown) ?? new Error("object purge failed")
   }
   return data
 }

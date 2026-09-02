@@ -120,6 +120,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::data_overview))
         .routes(routes!(admin::purge_data))
         .routes(routes!(admin::purge_tender))
+        .routes(routes!(admin::purge_object))
         .routes(routes!(admin::deactivate_demo_accounts))
         .routes(routes!(site_announcements::published))
         .routes(routes!(
