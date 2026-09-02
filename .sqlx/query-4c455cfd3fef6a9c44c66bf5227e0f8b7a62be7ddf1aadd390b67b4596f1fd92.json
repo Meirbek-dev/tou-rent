@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT actor_id, payload -> 'old' -> 'tender_ids' AS \"tender_ids!\"\n           FROM audit.log WHERE table_name = 'core.data_purge'\n           ORDER BY id DESC LIMIT 1",
+  "query": "SELECT actor_id, payload -> 'old' ->> 'scope' AS \"scope!\",\n                  payload -> 'old' -> 'tender_ids' AS \"tender_ids!\"\n           FROM audit.log WHERE table_name = 'core.data_purge'\n           ORDER BY id DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -16,6 +16,12 @@
       },
       {
         "ordinal": 1,
+        "name": "scope!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
         "name": "tender_ids!",
         "type_info": "Jsonb",
         "origin": "Expression"
@@ -26,8 +32,9 @@
     },
     "nullable": [
       true,
+      null,
       null
     ]
   },
-  "hash": "006a0ec49825fd307f14534ec32d1a00327bc3fe0d0b74a7ff5a63cb9742094a"
+  "hash": "4c455cfd3fef6a9c44c66bf5227e0f8b7a62be7ddf1aadd390b67b4596f1fd92"
 }

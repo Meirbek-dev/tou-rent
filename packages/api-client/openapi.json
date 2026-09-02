@@ -169,7 +169,7 @@
         "tags": [
           "admin"
         ],
-        "summary": "Полная очистка: все тендеры, объекты, заявки, торги, протоколы, договоры,\nкнига проводок, особый порядок, участки и уведомления - одной транзакцией.",
+        "summary": "Массовая очистка: весь стенд либо все записи одной области - тендеры,\nобъекты, особый порядок, участки, уведомления - со всем, что на них\nдержится, одной транзакцией.",
         "description": "Учетные записи, роли, состав комиссии, объявление на главной, справочники\nи журнал аудита остаются. Файлы в `dossiers` тоже: бакет под Object Lock\n(INV-042), а без строки метаданных объект недостижим (A-095).",
         "operationId": "purge_data",
         "requestBody": {
@@ -184,7 +184,7 @@
         },
         "responses": {
           "200": {
-            "description": "Стенд очищен",
+            "description": "Область очищена",
             "content": {
               "application/json": {
                 "schema": {
@@ -236,6 +236,69 @@
           },
           "403": {
             "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/objects/{id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Удаление одного объекта вместе с тендерами, где он выставлен лотом\n(с их заявками, протоколами, торгами и договорами), участками и\nзаявками особого порядка по нему. В отличие от `DELETE /objects/{id}`\nорганизатора, занятость объекта не останавливает: это административная\nочистка, а не ход реестра (FR-101).",
+        "operationId": "purge_object",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Объект",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Объект удален",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPurgeResultDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Объект не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Очистка выключена",
             "content": {
               "application/json": {
                 "schema": {
@@ -8831,11 +8894,24 @@
           "purge_enabled",
           "counts",
           "tenders",
-          "tenders_truncated"
+          "tenders_truncated",
+          "objects",
+          "objects_truncated"
         ],
         "properties": {
           "counts": {
             "$ref": "#/components/schemas/AdminDataCountsDto"
+          },
+          "objects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminObjectDto"
+            },
+            "description": "Все объекты стенда, свежие сверху"
+          },
+          "objects_truncated": {
+            "type": "boolean",
+            "description": "Перечень объектов обрезан потолком строк"
           },
           "purge_enabled": {
             "type": "boolean",
@@ -8850,7 +8926,7 @@
           },
           "tenders_truncated": {
             "type": "boolean",
-            "description": "Перечень обрезан потолком строк"
+            "description": "Перечень тендеров обрезан потолком строк"
           }
         }
       },
@@ -8868,6 +8944,47 @@
           }
         }
       },
+      "AdminObjectDto": {
+        "type": "object",
+        "description": "Объект в перечне на удаление.",
+        "required": [
+          "id",
+          "name",
+          "name_kk",
+          "kind",
+          "area_m2",
+          "created_at",
+          "tenders"
+        ],
+        "properties": {
+          "area_m2": {
+            "type": "string",
+            "example": "42.00"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/ObjectKindDto"
+          },
+          "name": {
+            "type": "string"
+          },
+          "name_kk": {
+            "type": "string"
+          },
+          "tenders": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Тендеров, где объект выставлен лотом, - уйдут вместе с ним"
+          }
+        }
+      },
       "AdminPurgeRequest": {
         "type": "object",
         "required": [
@@ -8878,6 +8995,10 @@
             "type": "string",
             "description": "Слово подтверждения - ровно [`PURGE_CONFIRMATION`]",
             "example": "purge"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/AdminPurgeScope",
+            "description": "Что стирать; без поля - весь стенд"
           }
         }
       },
@@ -8899,6 +9020,18 @@
             }
           }
         }
+      },
+      "AdminPurgeScope": {
+        "type": "string",
+        "description": "Область массовой очистки: с какого вида данных начинается удаление.\nВсе, что держится на удаляемых записях, уходит с ними.",
+        "enum": [
+          "everything",
+          "tenders",
+          "objects",
+          "special_requests",
+          "land_plots",
+          "notifications"
+        ]
       },
       "AdminTenderDto": {
         "type": "object",
