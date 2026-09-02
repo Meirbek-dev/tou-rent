@@ -14,6 +14,10 @@ export type AdminPurgeScope = components["schemas"]["AdminPurgeScope"]
 /** Вид данных вкладки «Данные»: любая область, кроме полной очистки. */
 export type AdminDataKind = Exclude<AdminPurgeScope, "everything">
 export type AdminRecordDto = components["schemas"]["AdminRecordDto"]
+export type AdminTenderScheduleDto =
+  components["schemas"]["AdminTenderScheduleDto"]
+export type AdminTenderScheduleRequest =
+  components["schemas"]["AdminTenderScheduleRequest"]
 
 /** Роли, назначаемые админом (FR-1503): `guest` - аноним, он не хранится. */
 export const GRANTABLE_ROLES = [
@@ -180,6 +184,42 @@ export const purgeRecord = async (kind: AdminDataKind, id: string) => {
   )
   if (error !== undefined || data === undefined) {
     throw (error as unknown) ?? new Error("record purge failed")
+  }
+  return data
+}
+
+/**
+ * Тендеры стенда со сроками - вкладка «Сроки тендеров» (М15). Ключ лежит
+ * под `["admin", …]`, но сроки читают и публичный реестр, и карточки, и
+ * кабинеты, поэтому после сохранения сбрасывается весь кеш, а не эта ветка.
+ */
+export const tenderSchedulesQuery = queryOptions({
+  queryKey: ["admin", "schedules"],
+  queryFn: async () => {
+    const { data, error } = await api.GET("/api/v1/admin/tenders/schedule")
+    if (error !== undefined || data === undefined) {
+      throw (error as unknown) ?? new Error("failed to load tender schedules")
+    }
+    return data
+  },
+})
+
+/**
+ * Правка сроков тендера в обход процедуры: все четыре отметки целиком,
+ * `null` - отметка не назначена. Порядок отметок (FR-303) и рубеж
+ * `ALLOW_DATA_PURGE` сверяет сервер; форма лишь подставляет текущие
+ * значения, чтобы отметку нельзя было стереть, забыв поле.
+ */
+export const setTenderSchedule = async (
+  id: string,
+  body: AdminTenderScheduleRequest
+) => {
+  const { data, error } = await api.PUT("/api/v1/admin/tenders/{id}/schedule", {
+    params: { path: { id } },
+    body,
+  })
+  if (error !== undefined || data === undefined) {
+    throw (error as unknown) ?? new Error("tender schedule update failed")
   }
   return data
 }

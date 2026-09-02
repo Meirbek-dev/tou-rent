@@ -6,10 +6,12 @@
 //! `refdata.tender_status_transitions` - рассинхрон typestate ↔ БД невозможен
 //! незаметно (INV-021). В рантайме переходы дополнительно охраняет триггер БД.
 
+use std::fmt;
 use std::marker::PhantomData;
 
 use serde::{Deserialize, Serialize};
 
+use crate::amendment::Instant;
 use crate::ids::TenderId;
 
 /// Статусы жизненного цикла (FR-302). Snake_case на проводе и в БД
@@ -63,6 +65,140 @@ impl TenderStatus {
     pub fn can_transition(from: TenderStatus, to: TenderStatus) -> bool {
         TRANSITIONS.contains(&(from, to))
     }
+
+    /// Статус из значения БД (`core.tender_status`); `None` - рассинхрон
+    /// перечислений, а не пользовательская ошибка.
+    pub fn parse(raw: &str) -> Option<TenderStatus> {
+        TenderStatus::ALL
+            .into_iter()
+            .find(|status| status.as_str() == raw)
+    }
+
+    /// Сроки объявления обязаны быть заданы: тендер прошел публикацию, а
+    /// публикуется он только с ними (FR-303). Отмененный - исключение:
+    /// отменяется и черновик (п. 78), у которого сроков могло не быть.
+    pub fn requires_schedule(self) -> bool {
+        !matches!(self, TenderStatus::Draft | TenderStatus::Cancelled)
+    }
+}
+
+/// Отметка сроков тендера - в порядке процедуры (п. 5–6, 36, 50, 59).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScheduleMark {
+    /// Публикация объявления (п. 5–6)
+    AnnouncedAt,
+    /// Окончание приема заявок (п. 36–39)
+    SubmissionDeadline,
+    /// Назначенное вскрытие конвертов (п. 50)
+    OpeningAt,
+    /// Торги (п. 59, 62)
+    TradingAt,
+}
+
+impl ScheduleMark {
+    /// Имя столбца `core.tenders` и поля DTO - одно на всех.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ScheduleMark::AnnouncedAt => "announced_at",
+            ScheduleMark::SubmissionDeadline => "submission_deadline",
+            ScheduleMark::OpeningAt => "opening_at",
+            ScheduleMark::TradingAt => "trading_at",
+        }
+    }
+}
+
+impl fmt::Display for ScheduleMark {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Сроки тендера: назначаются при публикации, переносятся редакцией
+/// документации (FR-303, FR-304), а в обход процедуры - правкой записи
+/// администратором (М15). Неназначенная отметка - `None`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Schedule {
+    pub announced_at: Option<Instant>,
+    pub submission_deadline: Option<Instant>,
+    pub opening_at: Option<Instant>,
+    pub trading_at: Option<Instant>,
+}
+
+/// Что известно о тендере помимо назначаемых сроков.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ScheduleFacts {
+    pub status: TenderStatus,
+    /// Факт вскрытия секретарем (FR-403): назначенное вскрытие - не позже него
+    pub opened_at: Option<Instant>,
+}
+
+impl Schedule {
+    /// Отметки в порядке процедуры вместе с именами.
+    fn marks(&self) -> [(ScheduleMark, Option<Instant>); 4] {
+        [
+            (ScheduleMark::AnnouncedAt, self.announced_at),
+            (ScheduleMark::SubmissionDeadline, self.submission_deadline),
+            (ScheduleMark::OpeningAt, self.opening_at),
+            (ScheduleMark::TradingAt, self.trading_at),
+        ]
+    }
+
+    /// Годятся ли сроки тендеру в таком состоянии (FR-303).
+    ///
+    /// Порядок - публикация, окончание приема, вскрытие, торги: каждая
+    /// назначенная отметка не раньше назначенных до нее. У тендера,
+    /// прошедшего публикацию, первые три обязательны - без них он не был
+    /// бы опубликован (триггер INV-021). Окно в десять календарных дней
+    /// между публикацией и вскрытием здесь не проверяется намеренно: это
+    /// условие публикации (п. 5), а не свойство записи, и правка записи
+    /// под уже вышедшее объявление обязана уметь отразить его как есть.
+    pub fn validate(&self, facts: ScheduleFacts) -> Result<(), ScheduleError> {
+        if facts.status.requires_schedule() {
+            for (mark, value) in self.marks().into_iter().take(3) {
+                if value.is_none() {
+                    return Err(ScheduleError::Missing(mark));
+                }
+            }
+        }
+
+        let mut last: Option<(ScheduleMark, Instant)> = None;
+        for (mark, value) in self.marks() {
+            let Some(at) = value else { continue };
+            if let Some((earlier, before)) = last
+                && at < before
+            {
+                return Err(ScheduleError::OutOfOrder {
+                    earlier,
+                    later: mark,
+                });
+            }
+            last = Some((mark, at));
+        }
+
+        if let (Some(opening), Some(opened)) = (self.opening_at, facts.opened_at)
+            && opened < opening
+        {
+            return Err(ScheduleError::OpeningAfterFact);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum ScheduleError {
+    #[error(
+        "{later} раньше, чем {earlier}: сроки идут в порядке процедуры - публикация, прием \
+         заявок, вскрытие, торги (п. 5–6, 36, 50, 59)"
+    )]
+    OutOfOrder {
+        earlier: ScheduleMark,
+        later: ScheduleMark,
+    },
+    #[error("у тендера, прошедшего публикацию, срок {0} обязателен (FR-303)")]
+    Missing(ScheduleMark),
+    #[error("назначенное вскрытие позже состоявшегося: конверты уже вскрыты (FR-403, п. 50)")]
+    OpeningAfterFact,
 }
 
 mod sealed {
@@ -247,5 +383,132 @@ mod tests {
         let json = serde_json::to_string(&TenderStatus::RepeatAnnounced).unwrap();
         assert_eq!(json, "\"repeat_announced\"");
         assert_eq!(TenderStatus::SummedUp.as_str(), "summed_up");
+    }
+
+    #[test]
+    fn parse_round_trips_every_status() {
+        for status in TenderStatus::ALL {
+            assert_eq!(TenderStatus::parse(status.as_str()), Some(status));
+        }
+        assert_eq!(TenderStatus::parse("published"), None);
+    }
+
+    /// Сутки в секундах: календарный день без перевода часов (NFR-03).
+    const DAY: i64 = 24 * 60 * 60;
+
+    fn day(n: i64) -> Instant {
+        crate::amendment::instant(n * DAY)
+    }
+
+    fn facts(status: TenderStatus) -> ScheduleFacts {
+        ScheduleFacts {
+            status,
+            opened_at: None,
+        }
+    }
+
+    /// Сроки объявления, как в самом объявлении: публикация, прием,
+    /// вскрытие на следующий день, торги через три дня после вскрытия.
+    fn announced_schedule() -> Schedule {
+        Schedule {
+            announced_at: Some(day(0)),
+            submission_deadline: Some(day(10)),
+            opening_at: Some(day(11)),
+            trading_at: Some(day(14)),
+        }
+    }
+
+    /// FR-303: сроки в порядке процедуры принимаются в любом статусе, а
+    /// перепутанные - называют обе отметки, чтобы админ понял, какую из
+    /// двух он перенес не туда.
+    #[test]
+    fn schedule_in_procedure_order_is_valid_and_disorder_names_the_marks() {
+        for status in TenderStatus::ALL {
+            assert_eq!(announced_schedule().validate(facts(status)), Ok(()));
+        }
+
+        let opening_before_deadline = Schedule {
+            opening_at: Some(day(9)),
+            ..announced_schedule()
+        };
+        assert_eq!(
+            opening_before_deadline.validate(facts(TenderStatus::Accepting)),
+            Err(ScheduleError::OutOfOrder {
+                earlier: ScheduleMark::SubmissionDeadline,
+                later: ScheduleMark::OpeningAt,
+            })
+        );
+
+        // Неназначенная отметка из порядка выпадает: торги сверяются
+        // с публикацией, если вскрытие еще не назначено
+        let trading_before_announcement = Schedule {
+            announced_at: Some(day(5)),
+            submission_deadline: None,
+            opening_at: None,
+            trading_at: Some(day(4)),
+        };
+        assert_eq!(
+            trading_before_announcement.validate(facts(TenderStatus::Draft)),
+            Err(ScheduleError::OutOfOrder {
+                earlier: ScheduleMark::AnnouncedAt,
+                later: ScheduleMark::TradingAt,
+            })
+        );
+
+        // Совпадающие отметки - не беспорядок: прием может закрываться
+        // в момент вскрытия (CHECK deadline_before_opening нестрогий)
+        let same_moment = Schedule {
+            opening_at: Some(day(10)),
+            trading_at: Some(day(10)),
+            ..announced_schedule()
+        };
+        assert_eq!(same_moment.validate(facts(TenderStatus::Accepting)), Ok(()));
+    }
+
+    /// FR-303: опубликованный тендер без публикации, приема или вскрытия
+    /// невозможен; черновику и отмененному сроки не обязательны.
+    #[test]
+    fn published_tender_requires_the_first_three_marks() {
+        let without_deadline = Schedule {
+            submission_deadline: None,
+            ..announced_schedule()
+        };
+        for status in TenderStatus::ALL {
+            let verdict = without_deadline.validate(facts(status));
+            if status.requires_schedule() {
+                assert_eq!(
+                    verdict,
+                    Err(ScheduleError::Missing(ScheduleMark::SubmissionDeadline)),
+                    "{status:?}"
+                );
+            } else {
+                assert_eq!(verdict, Ok(()), "{status:?}");
+            }
+        }
+        assert_eq!(
+            Schedule::default().validate(facts(TenderStatus::Draft)),
+            Ok(())
+        );
+        assert!(!TenderStatus::Draft.requires_schedule());
+        assert!(!TenderStatus::Cancelled.requires_schedule());
+        assert!(TenderStatus::Accepting.requires_schedule());
+    }
+
+    /// FR-403: конверты вскрыты - назначить вскрытие позже факта нельзя
+    /// (CHECK opened_not_before_meeting), а раньше или в тот же момент можно.
+    #[test]
+    fn opening_is_not_scheduled_after_the_fact() {
+        let opened = ScheduleFacts {
+            status: TenderStatus::Qualification,
+            opened_at: Some(day(11)),
+        };
+        assert_eq!(announced_schedule().validate(opened), Ok(()));
+
+        let later = Schedule {
+            opening_at: Some(day(12)),
+            trading_at: Some(day(14)),
+            ..announced_schedule()
+        };
+        assert_eq!(later.validate(opened), Err(ScheduleError::OpeningAfterFact));
     }
 }

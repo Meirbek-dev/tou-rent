@@ -250,7 +250,8 @@ fn record_kind(scope: AdminPurgeScope) -> Result<PurgeScope, ApiError> {
 }
 
 /// Рубеж намерения: без `ALLOW_DATA_PURGE` право роли до удаления не доводит.
-fn require_purge_enabled(state: &AppState) -> Result<(), ApiError> {
+/// Тот же рубеж - у правки сроков тендера ([`crate::admin_schedule`]).
+pub(crate) fn require_purge_enabled(state: &AppState) -> Result<(), ApiError> {
     if state.data_purge_enabled {
         Ok(())
     } else {

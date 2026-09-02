@@ -6,6 +6,7 @@ import { getLocale } from "#/paraglide/runtime"
 import { ConfirmAction } from "@/components/confirm-action"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
+import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -49,13 +50,16 @@ import {
   resetPassword,
   revokeRole,
   setMrp,
+  setTenderSchedule,
   setUserActive,
   saveSiteAnnouncement,
+  tenderSchedulesQuery,
   usersQuery,
 } from "@/lib/admin"
 import { meQuery, problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
+import { fromAlmatyInput, toAlmatyInput } from "@/lib/organizer"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { tabSearch } from "@/lib/tabs"
 
@@ -64,6 +68,7 @@ import type {
   AdminDataOverviewDto,
   AdminPurgeScope,
   AdminRecordDto,
+  AdminTenderScheduleDto,
   GrantableRole,
   SiteAnnouncementDto,
   UserDto,
@@ -77,13 +82,15 @@ import type {
 // расчета, а коэффициенты версионируются по дате вступления в силу: админ
 // добавляет версию, а не переписывает историю.
 /** Разделы кабинета: люди отдельно, справочники расчета - отдельно,
- * очистка данных стенда - в самом конце, подальше от повседневного. */
+ * правка сроков и очистка данных стенда - в самом конце, подальше от
+ * повседневного: обе идут в обход процедуры и открыты одним рубежом. */
 const TABS = [
   "users",
   "announcement",
   "mrp",
   "coefficients",
   "holidays",
+  "schedule",
   "data",
 ] as const
 
@@ -127,6 +134,7 @@ function AdminHome() {
             {m.admin_coefficients_title()}
           </TabsTrigger>
           <TabsTrigger value="holidays">{m.admin_holidays_title()}</TabsTrigger>
+          <TabsTrigger value="schedule">{m.admin_schedule_tab()}</TabsTrigger>
           <TabsTrigger value="data">{m.admin_data_tab()}</TabsTrigger>
         </TabsList>
         {/* Одна панель на выбранную вкладку: справочники ниже сами ходят
@@ -138,6 +146,7 @@ function AdminHome() {
           {tab === "mrp" && <MrpPanel />}
           {tab === "coefficients" && <CoefficientsPanel />}
           {tab === "holidays" && <HolidaysPanel />}
+          {tab === "schedule" && <TenderSchedulePanel />}
           {tab === "data" && <DataPanel />}
         </TabsContent>
       </Tabs>
@@ -590,6 +599,235 @@ function deletedRows(deleted: Record<string, unknown>): number {
   return Object.values(deleted).reduce<number>(
     (sum, value) => sum + (typeof value === "number" ? value : 0),
     0
+  )
+}
+
+/** Отметка срока в таблице и в форме: одна подпись на оба места. */
+const SCHEDULE_MARKS = [
+  { key: "announced_at", label: m.tender_announced_at },
+  { key: "submission_deadline", label: m.tender_deadline },
+  { key: "opening_at", label: m.tender_opening_at },
+  { key: "trading_at", label: m.tender_trading_at },
+] as const
+
+type ScheduleMarkKey = (typeof SCHEDULE_MARKS)[number]["key"]
+
+/**
+ * Сроки тендеров (М15): исправление записи под вышедшее объявление.
+ *
+ * Не редакция документации: та (FR-304) только продлевает прием заявок и
+ * извещает участников, а дату публикации не трогает. Здесь правится сама
+ * запись, поэтому кнопки спят без того же рубежа, что у очистки данных
+ * (`purge_enabled` обзора), а сохранение идет через диалог.
+ */
+function TenderSchedulePanel() {
+  const { data: overview } = useQuery(dataOverviewQuery)
+  const { data: page } = useQuery(tenderSchedulesQuery)
+  const [editingId, setEditingId] = useState<string | null>(null)
+
+  if (overview === undefined || page === undefined) return null
+  const enabled = overview.purge_enabled
+  const editing = page.items.find((tender) => tender.id === editingId)
+
+  return (
+    <div className="flex flex-col gap-6">
+      {!enabled && (
+        <div
+          role="alert"
+          data-testid="admin-schedule-disabled"
+          className="flex flex-col gap-1 rounded-lg border border-destructive p-3 text-sm"
+        >
+          <span className="font-medium">
+            {m.admin_schedule_disabled_title()}
+          </span>
+          <span className="text-muted-foreground">
+            {m.admin_schedule_disabled_hint()}
+          </span>
+        </div>
+      )}
+
+      <Panel
+        title={m.admin_schedule_title()}
+        description={m.admin_schedule_hint()}
+      >
+        {page.items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            {m.admin_schedule_empty()}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <Table data-testid="admin-schedules">
+              <TableHeader>
+                <TableRow>
+                  <TableHead scope="col">{m.admin_schedule_tender()}</TableHead>
+                  {SCHEDULE_MARKS.map((mark) => (
+                    <TableHead key={mark.key} scope="col">
+                      {mark.label()}
+                    </TableHead>
+                  ))}
+                  <TableHead scope="col">
+                    <span className="sr-only">{m.admin_schedule_edit()}</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {page.items.map((tender) => (
+                  <TableRow
+                    key={tender.id}
+                    data-testid={`schedule-row-${tender.id}`}
+                    data-state={
+                      tender.id === editingId ? "selected" : undefined
+                    }
+                  >
+                    <TableCell className="font-medium">
+                      <div className="flex flex-col items-start gap-1">
+                        <span>{localizedRecordTitle(tender)}</span>
+                        <TenderStatusBadge status={tender.status} />
+                      </div>
+                    </TableCell>
+                    {SCHEDULE_MARKS.map((mark) => (
+                      <TableCell key={mark.key} suppressHydrationWarning>
+                        {formatDateTime(tender[mark.key]) ??
+                          m.tender_date_tbd()}
+                      </TableCell>
+                    ))}
+                    <TableCell>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        data-testid={`edit-schedule-${tender.id}`}
+                        disabled={!enabled}
+                        aria-pressed={tender.id === editingId}
+                        onClick={() =>
+                          setEditingId(
+                            tender.id === editingId ? null : tender.id
+                          )
+                        }
+                      >
+                        {m.admin_schedule_edit()}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+        {page.truncated && (
+          <p className="mt-4 text-sm text-muted-foreground">
+            {m.admin_schedule_truncated()}
+          </p>
+        )}
+      </Panel>
+
+      {/* Форма пересобирается на другой тендер по ключу: ее состояние -
+          снимок отметок выбранной записи, а не общее поле ввода */}
+      {editing !== undefined && (
+        <ScheduleEditor
+          key={editing.id}
+          tender={editing}
+          onClose={() => setEditingId(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * Четыре отметки одного тендера по времени Астаны. Пустое поле уходит на
+ * сервер как `null` - «не назначено», а не «оставить как есть»: форма
+ * подставляет текущие значения, и стереть отметку можно только нарочно.
+ */
+function ScheduleEditor({
+  tender,
+  onClose,
+}: {
+  tender: AdminTenderScheduleDto
+  onClose: () => void
+}) {
+  const queryClient = useQueryClient()
+  const [form, setForm] = useState<Record<ScheduleMarkKey, string>>({
+    announced_at: toAlmatyInput(tender.announced_at),
+    submission_deadline: toAlmatyInput(tender.submission_deadline),
+    opening_at: toAlmatyInput(tender.opening_at),
+    trading_at: toAlmatyInput(tender.trading_at),
+  })
+  const title = localizedRecordTitle(tender)
+
+  const save = useMutation({
+    mutationFn: () =>
+      setTenderSchedule(tender.id, {
+        announced_at: fromAlmatyInput(form.announced_at),
+        submission_deadline: fromAlmatyInput(form.submission_deadline),
+        opening_at: fromAlmatyInput(form.opening_at),
+        trading_at: fromAlmatyInput(form.trading_at),
+      }),
+    onSuccess: async () => {
+      notifySuccess(m.admin_schedule_saved_toast({ title }))
+      // Сроки читают публичный реестр, карточка тендера и кабинеты:
+      // кеш сбрасывается целиком, как после очистки данных
+      await queryClient.invalidateQueries()
+      onClose()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
+  })
+
+  return (
+    <Panel
+      titleAs="h3"
+      title={m.admin_schedule_editing({ title })}
+      description={m.admin_schedule_tz_hint()}
+    >
+      <form
+        className="flex flex-col gap-4"
+        data-testid="schedule-editor"
+        onSubmit={(event) => event.preventDefault()}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          {SCHEDULE_MARKS.map((mark) => (
+            <Field key={mark.key}>
+              <FieldLabel htmlFor={`schedule-${mark.key}`}>
+                {mark.label()}
+              </FieldLabel>
+              <Input
+                id={`schedule-${mark.key}`}
+                type="datetime-local"
+                value={form[mark.key]}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    [mark.key]: event.target.value,
+                  }))
+                }
+              />
+            </Field>
+          ))}
+        </div>
+        {tender.opened_at != null && (
+          <p className="text-sm text-muted-foreground" suppressHydrationWarning>
+            {m.admin_schedule_opened_at()}: {formatDateTime(tender.opened_at)}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <ConfirmAction
+            title={m.admin_schedule_confirm_title()}
+            description={m.admin_schedule_confirm_description({ title })}
+            confirmLabel={m.admin_schedule_save()}
+            variant="default"
+            disabled={save.isPending}
+            onConfirm={() => save.mutate()}
+            trigger={
+              <Button type="button" data-testid="save-schedule">
+                {m.admin_schedule_save()}
+              </Button>
+            }
+          />
+          <Button type="button" variant="outline" onClick={onClose}>
+            {m.confirm_cancel()}
+          </Button>
+        </div>
+      </form>
+    </Panel>
   )
 }
 

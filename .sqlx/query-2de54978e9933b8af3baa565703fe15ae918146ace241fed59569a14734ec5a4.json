@@ -1,0 +1,195 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders\n         SET announced_at = $2, submission_deadline = $3, opening_at = $4, trading_at = $5\n         WHERE id = $1 RETURNING id, status::text AS \"status!\", title, title_kk, organizer_id,\n                                  announced_at, submission_deadline, opening_at, opened_at,\n                                  trading_at, zoom_url, zoom_recording_url, repeat_of,\n                                  created_at, updated_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title_kk",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "title_kk"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "organizer_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "organizer_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "announced_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "announced_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "submission_deadline",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "submission_deadline"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "opening_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "opening_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "opened_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "opened_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "trading_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "trading_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "zoom_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "zoom_url"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "zoom_recording_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "zoom_recording_url"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "repeat_of",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "repeat_of"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "updated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "2de54978e9933b8af3baa565703fe15ae918146ace241fed59569a14734ec5a4"
+}
