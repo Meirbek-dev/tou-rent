@@ -179,6 +179,89 @@ impl CreateLotRequest {
     }
 }
 
+pub(crate) struct PreparedLot {
+    object_id: Uuid,
+    purpose: String,
+    purpose_kk: String,
+    lease_months: i32,
+    base_rate_monthly: Decimal,
+    guarantee_fee: Decimal,
+    rate_calculation: serde_json::Value,
+    viewing_terms: Option<String>,
+    rate_unit: RateUnit,
+    hours_total: Option<i32>,
+}
+
+impl PreparedLot {
+    pub(crate) fn as_new_lot(&self) -> NewLot<'_> {
+        NewLot {
+            object_id: self.object_id,
+            purpose: &self.purpose,
+            purpose_kk: &self.purpose_kk,
+            lease_months: self.lease_months,
+            base_rate_monthly: self.base_rate_monthly,
+            guarantee_fee: self.guarantee_fee,
+            rate_calculation: &self.rate_calculation,
+            viewing_terms: self.viewing_terms.as_deref(),
+            rate_unit: self.rate_unit.as_str(),
+            hours_total: self.hours_total,
+        }
+    }
+}
+
+/// Снимки ставок для создания тендера и опубликованной редакции считаются
+/// одинаково: по действующим справочникам и характеристикам объекта.
+pub(crate) async fn prepare_lots(
+    state: &AppState,
+    lots: &[CreateLotRequest],
+) -> Result<Vec<PreparedLot>, ApiError> {
+    let mut prepared = Vec::with_capacity(lots.len());
+    for lot in lots {
+        let unit = lot.unit()?;
+        let object = tou_db::objects::get(&state.db, lot.object_id)
+            .await?
+            .ok_or_else(|| ApiError::Validation(format!("объект {} не найден", lot.object_id)))?;
+
+        let (base_rate, fee, rate_calculation) = match unit {
+            RateUnit::Hourly => {
+                let hours = lot.hours_total.ok_or_else(|| {
+                    ApiError::Validation(
+                        "почасовой лот задается объемом часов (FR-205, п. 97)".to_owned(),
+                    )
+                })?;
+                let rate = build_hourly_calculation(&state.db, &lot.rate_options).await?;
+                let total = rate.total_for(hours).ok_or_else(|| {
+                    ApiError::Validation("объем часов должен быть положительным".to_owned())
+                })?;
+                let json = serde_json::to_value(&rate).map_err(ApiError::internal)?;
+                (rate.hourly.amount(), total.amount(), json)
+            }
+            RateUnit::Monthly => {
+                let calc = build_calculation(&state.db, object.area_m2, &lot.rate_options).await?;
+                let json = serde_json::to_value(&calc).map_err(ApiError::internal)?;
+                (calc.monthly.amount(), calc.guarantee_fee.amount(), json)
+            }
+        };
+        prepared.push(PreparedLot {
+            object_id: lot.object_id,
+            purpose: lot.purpose.trim().to_owned(),
+            purpose_kk: lot.purpose_kk.trim().to_owned(),
+            lease_months: lot.lease_months,
+            base_rate_monthly: base_rate,
+            guarantee_fee: fee,
+            rate_calculation,
+            viewing_terms: lot
+                .viewing_terms
+                .as_deref()
+                .map(str::trim)
+                .map(str::to_owned),
+            rate_unit: unit,
+            hours_total: lot.hours_total,
+        });
+    }
+    Ok(prepared)
+}
+
 #[derive(Debug, Deserialize, garde::Validate, ToSchema)]
 pub struct CreateTenderRequest {
     #[garde(length(chars, min = 1, max = 300))]
@@ -341,54 +424,8 @@ pub async fn create_tender(
     body.validate()
         .map_err(|r| ApiError::Validation(r.to_string()))?;
 
-    // Снимки ставок до записи: любые ошибки refdata валят запрос целиком
-    let mut prepared = Vec::with_capacity(body.lots.len());
-    for lot in &body.lots {
-        let unit = lot.unit()?;
-        let object = tou_db::objects::get(&state.db, lot.object_id)
-            .await?
-            .ok_or_else(|| ApiError::Validation(format!("объект {} не найден", lot.object_id)))?;
-
-        // Почасовой лот считается по своей методике (FR-205, п. 97): база -
-        // 2 МРП за час, площадь в расчет не входит
-        let (base_rate, fee, calc_json) = match unit {
-            RateUnit::Hourly => {
-                let hours = lot.hours_total.ok_or_else(|| {
-                    ApiError::Validation(
-                        "почасовой лот задается объемом часов (FR-205, п. 97)".to_owned(),
-                    )
-                })?;
-                let rate = build_hourly_calculation(&state.db, &lot.rate_options).await?;
-                let total = rate.total_for(hours).ok_or_else(|| {
-                    ApiError::Validation("объем часов должен быть положительным".to_owned())
-                })?;
-                let json = serde_json::to_value(&rate).map_err(ApiError::internal)?;
-                (rate.hourly.amount(), total.amount(), json)
-            }
-            RateUnit::Monthly => {
-                let calc = build_calculation(&state.db, object.area_m2, &lot.rate_options).await?;
-                let json = serde_json::to_value(&calc).map_err(ApiError::internal)?;
-                (calc.monthly.amount(), calc.guarantee_fee.amount(), json)
-            }
-        };
-        prepared.push((lot, unit, base_rate, fee, calc_json));
-    }
-
-    let new_lots: Vec<NewLot<'_>> = prepared
-        .iter()
-        .map(|(lot, unit, base_rate, fee, calc_json)| NewLot {
-            object_id: lot.object_id,
-            purpose: &lot.purpose,
-            purpose_kk: &lot.purpose_kk,
-            lease_months: lot.lease_months,
-            base_rate_monthly: *base_rate,
-            guarantee_fee: *fee, // FR-206; для почасового лота пересчитает БД
-            rate_calculation: calc_json,
-            viewing_terms: lot.viewing_terms.as_deref(),
-            rate_unit: unit.as_str(),
-            hours_total: lot.hours_total,
-        })
-        .collect();
+    let prepared = prepare_lots(&state, &body.lots).await?;
+    let new_lots: Vec<NewLot<'_>> = prepared.iter().map(PreparedLot::as_new_lot).collect();
 
     // Тендер и лоты - одна транзакция: частично созданных тендеров не бывает
     let (record, lots) = tenders::create(

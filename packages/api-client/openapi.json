@@ -8529,10 +8529,33 @@
           "new_deadline"
         ],
         "properties": {
+          "lots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CreateLotRequest"
+            },
+            "description": "Новые лоты, добавляемые опубликованной редакцией документации."
+          },
           "new_deadline": {
             "type": "string",
             "format": "date-time",
             "description": "Новый срок приема заявок (п. 27: ≥ 10 календарных дней от публикации)"
+          },
+          "new_opening_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Новое время вскрытия. Если не задано, БД сдвигает прежнее вслед за дедлайном."
+          },
+          "new_trading_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Новая дата торгов; может меняться той же опубликованной редакцией."
           },
           "summary": {
             "type": "string",

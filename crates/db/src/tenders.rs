@@ -189,35 +189,48 @@ pub async fn create(
         .fetch_one(&mut *tx)
         .await?;
 
-        let mut created = Vec::with_capacity(lots.len());
-        for (idx, lot) in lots.iter().enumerate() {
-            // `$10::text::core.rate_unit`: единица приходит строкой, приведение
-            // к перечислению делает БД
-            let record = lot_query_returning!(
-                "INSERT INTO core.lots (tender_id, seq, object_id, purpose, purpose_kk, lease_months,
-                    base_rate_monthly, guarantee_fee, rate_calculation, viewing_terms,
-                    rate_unit, hours_total)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::core.rate_unit, $12)",
-                tender.id,
-                idx as i32 + 1,
-                lot.object_id,
-                lot.purpose,
-                lot.purpose_kk,
-                lot.lease_months,
-                lot.base_rate_monthly,
-                lot.guarantee_fee,
-                lot.rate_calculation,
-                lot.viewing_terms,
-                lot.rate_unit,
-                lot.hours_total
-            )
-            .fetch_one(&mut *tx)
-            .await?;
-            created.push(record);
-        }
+        let created = insert_lots_on(&mut *tx, tender.id, 1, lots).await?;
         Ok((tender, created))
     })
     .await
+}
+
+/// Добавляет лоты в уже заблокированный вызывающим тендер. Нумерацию задает
+/// вызывающий: создание начинает с 1, редакция документации — после
+/// последнего существующего лота.
+pub(crate) async fn insert_lots_on(
+    tx: &mut sqlx::PgConnection,
+    tender_id: Uuid,
+    first_seq: i32,
+    lots: &[NewLot<'_>],
+) -> Result<Vec<LotRecord>, sqlx::Error> {
+    let mut created = Vec::with_capacity(lots.len());
+    for (idx, lot) in lots.iter().enumerate() {
+        // `$11::text::core.rate_unit`: единица приходит строкой, приведение
+        // к перечислению делает БД.
+        let record = lot_query_returning!(
+            "INSERT INTO core.lots (tender_id, seq, object_id, purpose, purpose_kk, lease_months,
+                base_rate_monthly, guarantee_fee, rate_calculation, viewing_terms,
+                rate_unit, hours_total)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::core.rate_unit, $12)",
+            tender_id,
+            first_seq + idx as i32,
+            lot.object_id,
+            lot.purpose,
+            lot.purpose_kk,
+            lot.lease_months,
+            lot.base_rate_monthly,
+            lot.guarantee_fee,
+            lot.rate_calculation,
+            lot.viewing_terms,
+            lot.rate_unit,
+            lot.hours_total
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        created.push(record);
+    }
+    Ok(created)
 }
 
 #[derive(Debug, Clone)]

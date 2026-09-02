@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.tenders\n         SET opening_at = coalesce($2, opening_at),\n             trading_at = coalesce($3, trading_at)\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f638360ecbcde533db2a8aa75fda29166cd067ada18b8e507728df6a80548576"
+}

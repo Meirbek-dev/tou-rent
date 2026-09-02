@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT core.now() + interval '40 days' AS \"opening!\",\n                  core.now() + interval '41 days' AS \"trading!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "opening!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "trading!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "dcb515b4ad654c614387d50e1aeda715937ef4d6d5957f943c36b30d705e40b5"
+}

@@ -1,0 +1,202 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.lots (tender_id, seq, object_id, purpose, purpose_kk, lease_months,\n                base_rate_monthly, guarantee_fee, rate_calculation, viewing_terms,\n                rate_unit, hours_total)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::text::core.rate_unit, $12) RETURNING id, tender_id, seq, object_id, purpose, purpose_kk, lease_months,\n                                  base_rate_monthly, guarantee_fee, rate_calculation,\n                                  viewing_terms, rate_unit::text AS \"rate_unit!\", hours_total,\n                                  cancelled_at, cancel_reason",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "tender_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "object_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "object_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "purpose",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "purpose"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "purpose_kk",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "purpose_kk"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "lease_months",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "lease_months"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "base_rate_monthly",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "base_rate_monthly"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "guarantee_fee",
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "guarantee_fee"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "rate_calculation",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "rate_calculation"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "viewing_terms",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "viewing_terms"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "rate_unit!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 12,
+        "name": "hours_total",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "hours_total"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "cancelled_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "cancelled_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "cancel_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "cancel_reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4",
+        "Numeric",
+        "Numeric",
+        "Jsonb",
+        "Text",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "6b88571255ece8657da7571d1fb67b089a1ad4d2d90e0c0d34c941937f6954eb"
+}

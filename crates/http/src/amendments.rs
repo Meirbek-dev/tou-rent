@@ -9,6 +9,7 @@
 use axum::extract::State;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
+use garde::Validate as _;
 use object_store::ObjectStoreExt as _;
 use object_store::PutPayload;
 use object_store::path::Path as ObjectPath;
@@ -29,6 +30,7 @@ use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::request::{Json, Path};
 use crate::state::AppState;
+use crate::tenders::{CreateLotRequest, PreparedLot, prepare_lots};
 
 fn amendment_error(err: AmendmentError) -> ApiError {
     match err {
@@ -96,14 +98,30 @@ pub async fn tender_amendments(
     Ok(Json(records.into_iter().map(amendment_dto).collect()))
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, garde::Validate, ToSchema)]
 pub struct AmendRequest {
     /// Существо изменений - попадает в баннер и в извещение участников
+    #[garde(length(chars, min = 1, max = 1000))]
     pub summary: String,
     /// Новый срок приема заявок (п. 27: ≥ 10 календарных дней от публикации)
+    #[garde(skip)]
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub new_deadline: OffsetDateTime,
+    /// Новое время вскрытия. Если не задано, БД сдвигает прежнее вслед за дедлайном.
+    #[garde(skip)]
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub new_opening_at: Option<OffsetDateTime>,
+    /// Новая дата торгов; может меняться той же опубликованной редакцией.
+    #[garde(skip)]
+    #[serde(default, with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub new_trading_at: Option<OffsetDateTime>,
+    /// Новые лоты, добавляемые опубликованной редакцией документации.
+    #[serde(default)]
+    #[garde(length(max = 50), dive)]
+    pub lots: Vec<CreateLotRequest>,
 }
 
 /// Публикация новой редакции документации (FR-304, п. 27): срок приема
@@ -129,15 +147,46 @@ pub async fn amend_tender(
 ) -> Result<(StatusCode, Json<AmendmentDto>), ApiError> {
     user.require(Action::TenderManage)?;
 
-    if body.summary.trim().is_empty() {
+    body.validate()
+        .map_err(|report| ApiError::Validation(report.to_string()))?;
+    let current = tenders::get(&state.db, id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    if let Some(opening) = body.new_opening_at
+        && opening < body.new_deadline
+    {
         return Err(ApiError::Validation(
-            "редакция публикуется с описанием изменений (п. 27)".to_owned(),
+            "вскрытие конвертов не может быть раньше окончания приема заявок".to_owned(),
+        ));
+    }
+    let effective_opening = body.new_opening_at.or(current.opening_at);
+    if let (Some(opening), Some(trading)) = (effective_opening, body.new_trading_at)
+        && trading < opening
+    {
+        return Err(ApiError::Validation(
+            "дата торгов не может быть раньше вскрытия конвертов".to_owned(),
         ));
     }
 
-    let record = amendments::amend(&state.db, user.id(), id, &body.summary, body.new_deadline)
-        .await
-        .map_err(amendment_error)?;
+    let prepared = prepare_lots(&state, &body.lots).await?;
+    let new_lots = prepared
+        .iter()
+        .map(PreparedLot::as_new_lot)
+        .collect::<Vec<_>>();
+    let record = amendments::amend(
+        &state.db,
+        user.id(),
+        id,
+        amendments::AmendmentInput {
+            summary: &body.summary,
+            new_deadline: body.new_deadline,
+            new_opening_at: body.new_opening_at,
+            new_trading_at: body.new_trading_at,
+            lots: &new_lots,
+        },
+    )
+    .await
+    .map_err(amendment_error)?;
 
     // Печатная форма новой редакции - снимок объявления после продления срока
     let pdf_bytes = render_announcement(&state, id).await?;
@@ -168,6 +217,9 @@ pub async fn amend_tender(
             "version": record.version,
             "summary": record.summary,
             "new_deadline": rfc3339(record.new_deadline),
+            "new_opening_at": body.new_opening_at.map(rfc3339),
+            "new_trading_at": body.new_trading_at.map(rfc3339),
+            "added_lots": body.lots.len(),
             "rule_ref": "п. 26.5, 27",
         }),
     )
