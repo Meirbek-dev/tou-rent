@@ -14,7 +14,8 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use tou_db::tenders::{
-    self, DraftFields, LotRecord, NewLot, TenderDocRecord, TenderRecord, TransitionError,
+    self, DraftDeletion, DraftFields, LotRecord, NewLot, TenderDocRecord, TenderRecord,
+    TransitionError,
 };
 use tou_domain::policy::Action;
 use tou_domain::rates::RateUnit;
@@ -659,6 +660,41 @@ pub async fn update_tender(
             )),
             None => Err(ApiError::NotFound),
         },
+    }
+}
+
+/// Удаление черновика тендера (FR-301). Объявленную процедуру удалить нельзя -
+/// ее отменяют (FR-305, п. 78): материалы тендера хранятся в досье (FR-1206,
+/// FR-1602), и стирать их по кнопке в кабинете не разрешено.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/tenders/{id}",
+    tag = "tenders",
+    params(("id" = Uuid, Path, description = "Тендер")),
+    responses(
+        (status = 204, description = "Черновик удален"),
+        (status = 404, description = "Не найден", body = crate::error::Problem),
+        (status = 409, description = "Тендер объявлен - удаляется только черновик",
+         body = crate::error::Problem),
+    )
+)]
+pub async fn delete_tender(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode, ApiError> {
+    user.require(Action::TenderManage)?;
+
+    match tenders::delete_draft(&state.db, user.id(), id)
+        .await
+        .map_err(transition_error)?
+    {
+        DraftDeletion::Deleted => Ok(StatusCode::NO_CONTENT),
+        DraftDeletion::NotFound => Err(ApiError::NotFound),
+        DraftDeletion::Published => Err(ApiError::rule(
+            RuleViolation::TenderStatusTransition,
+            "объявленный тендер не удаляется - его отменяют (FR-305, п. 78)",
+        )),
     }
 }
 

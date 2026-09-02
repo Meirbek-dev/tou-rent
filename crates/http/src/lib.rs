@@ -129,7 +129,11 @@ fn api_router() -> OpenApiRouter<AppState> {
             objects::delete_object
         ))
         .routes(routes!(tenders::list_tenders, tenders::create_tender))
-        .routes(routes!(tenders::get_tender, tenders::update_tender))
+        .routes(routes!(
+            tenders::get_tender,
+            tenders::update_tender,
+            tenders::delete_tender
+        ))
         .routes(routes!(tenders::list_documents, tenders::upload_document))
         .routes(routes!(tenders::download_document))
         .routes(routes!(tenders::set_recording))

@@ -2336,7 +2336,12 @@ export interface paths {
         /** Правка черновика (даты, Zoom-ссылка). */
         put: operations["update_tender"];
         post?: never;
-        delete?: never;
+        /**
+         * Удаление черновика тендера (FR-301). Объявленную процедуру удалить нельзя -
+         *     ее отменяют (FR-305, п. 78): материалы тендера хранятся в досье (FR-1206,
+         *     FR-1602), и стирать их по кнопке в кабинете не разрешено.
+         */
+        delete: operations["delete_tender"];
         options?: never;
         head?: never;
         patch?: never;
@@ -9925,6 +9930,45 @@ export interface operations {
                 };
             };
             /** @description Тендер уже не черновик либо сроки противоречат друг другу */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_tender: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Тендер */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Черновик удален */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Тендер объявлен - удаляется только черновик */
             409: {
                 headers: {
                     [name: string]: unknown;

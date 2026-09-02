@@ -6621,6 +6621,50 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "tenders"
+        ],
+        "summary": "Удаление черновика тендера (FR-301). Объявленную процедуру удалить нельзя -\nее отменяют (FR-305, п. 78): материалы тендера хранятся в досье (FR-1206,\nFR-1602), и стирать их по кнопке в кабинете не разрешено.",
+        "operationId": "delete_tender",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Тендер",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Черновик удален"
+          },
+          "404": {
+            "description": "Не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Тендер объявлен - удаляется только черновик",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/tenders/{id}/admission-protocol": {
