@@ -2023,7 +2023,7 @@ export interface paths {
         get?: never;
         /**
          * Величина МРП на год (FR-1901). У показателя одна величина на год, поэтому
-         *     это правка значения, а не новая версия; год и положительность проверяет БД.
+         *     это правка значения, а не новая версия.
          */
         put: operations["set_mrp"];
         post?: never;
@@ -3250,9 +3250,19 @@ export interface components {
             /** @description Казахский вариант заголовка, если он хранится */
             title_kk?: string | null;
         };
+        /**
+         * @description Перечень записей одного вида - без курсора намеренно.
+         *
+         *     Вид данных выбирается заново, а строки удаляются точечно: перечень
+         *     разгружается работой, а не листанием, и продолжения у него нет.
+         *     Потолок - `tou_db::MAX_ROWS` (тысяча свежих записей); поднятый
+         *     `truncated` значит «показана не вся тысяча», и продолжить чтение
+         *     нечем - остальное видно после удаления показанного либо полной
+         *     очистки вида.
+         */
         AdminRecordPageDto: {
             items: components["schemas"]["AdminRecordDto"][];
-            /** @description Перечень обрезан потолком строк */
+            /** @description Перечень обрезан потолком строк; продолжения (курсора) у него нет */
             truncated: boolean;
         };
         /**
@@ -3293,7 +3303,12 @@ export interface components {
         };
         AdminTenderSchedulePageDto: {
             items: components["schemas"]["AdminTenderScheduleDto"][];
-            /** @description Показаны не все тендеры: перечень обрезан потолком строк */
+            /**
+             * Format: uuid
+             * @description Курсор продолжения для `after`; `null` - показаны все тендеры
+             */
+            next_after?: string | null;
+            /** @description Показаны не все тендеры: есть следующая страница */
             truncated: boolean;
         };
         /**
@@ -4473,27 +4488,24 @@ export interface components {
             /** Format: int32 */
             year: number;
         };
-        /**
-         * @description Договоры кабинета нанимателя (ТЗ § 7).
-         *
-         *     `next_after` всегда `null`: договоров у нанимателя единицы, продолжения
-         *     у выборки нет. Поле остается ради единообразия усекаемых реестров.
-         */
+        /** @description Страница договоров кабинета нанимателя (ТЗ § 7). */
         MyContractPage: {
             items: components["schemas"]["ContractDto"][];
+            /**
+             * Format: uuid
+             * @description Курсор продолжения для `after`; `null` - показаны все договоры
+             */
             next_after?: string | null;
             /** @description Показана не вся выборка */
             truncated: boolean;
         };
-        /**
-         * @description Протоколы кабинета участника (ТЗ § 7).
-         *
-         *     `next_after` всегда `null`: выборку ограничивает участие одного человека,
-         *     продолжения у нее нет. Поле остается, чтобы усекаемые реестры отвечали
-         *     одинаково и клиенту не приходилось помнить, у какого из них какая форма.
-         */
+        /** @description Страница протоколов кабинета участника (ТЗ § 7). */
         MyProtocolPage: {
             items: components["schemas"]["ProtocolDto"][];
+            /**
+             * Format: uuid
+             * @description Курсор продолжения для `after`; `null` - показаны все протоколы
+             */
             next_after?: string | null;
             /** @description Показана не вся выборка */
             truncated: boolean;
@@ -4617,14 +4629,18 @@ export interface components {
             tender_title?: string | null;
         };
         /**
-         * @description Дашборд сроков (ТЗ § 7).
+         * @description Страница дашборда сроков (ТЗ § 7): ближайший срок сверху.
          *
-         *     `next_after` всегда `null`: рабочий список разгружается работой, а не
-         *     листанием. Поднятый `truncated` здесь значит, что сроков накопилось
-         *     больше, чем дашборд показывает, - это про завал, а не про страницу.
+         *     Поднятый `truncated` значит, что сроков накопилось больше страницы, -
+         *     это и про завал работой, и про то, что есть продолжение: его адрес
+         *     приходит в `next_after`.
          */
         ObligationPage: {
             items: components["schemas"]["ObligationDto"][];
+            /**
+             * Format: uuid
+             * @description Курсор продолжения для `after`; `null` - показаны все открытые сроки
+             */
             next_after?: string | null;
             /** @description Показана не вся выборка */
             truncated: boolean;
@@ -4659,15 +4675,14 @@ export interface components {
             source_id: string;
             title: string;
         };
-        /**
-         * @description Рабочий список ожидающих публикации (ТЗ § 7).
-         *
-         *     `next_after` здесь всегда `null`: продолжения у списка нет - он не
-         *     реестр, а очередь работы, и `truncated` означает не «есть вторая
-         *     страница», а «работы накопилось больше, чем система показывает».
-         */
+        /** @description Страница рабочего списка ожидающих публикации (ТЗ § 7): старое сверху. */
         PendingPublicationPage: {
             items: components["schemas"]["PendingPublicationDto"][];
+            /**
+             * Format: uuid
+             * @description Курсор продолжения для `after` - `source_id` последней строки;
+             *     `null` - очередь показана до конца
+             */
             next_after?: string | null;
             /** @description Показана не вся выборка */
             truncated: boolean;
@@ -4820,6 +4835,14 @@ export interface components {
         RateOptionDto: {
             /** @description Код коэффициента (kt, kk, ... kv) */
             coefficient: string;
+            label_en?: string | null;
+            label_kk?: string | null;
+            /**
+             * @description Название опции из справочника (`refdata.rate_coefficients`): без него
+             *     селекты калькулятора показывали машинный код - «default (1.0000)»
+             *     вместо условия Прил. 4, по которому организатор и выбирает опцию
+             */
+            label_ru: string;
             option_code: string;
             /** @example 0.5 */
             value: string;
@@ -4922,21 +4945,62 @@ export interface components {
             email: string;
             verification_channel: components["schemas"]["VerificationChannel"];
         };
+        /**
+         * @description Ячейка реестра (арх. § 9).
+         *
+         *     Значение приходит либо подписью на трех языках (закрытые перечни -
+         *     решение, состояние договора, вид счета), либо как есть в `text_ru`
+         *     (имена, номера, суммы - они одинаковы во всех локалях), либо моментом
+         *     времени: сервер отдает ISO 8601, а кабинет печатает его своим
+         *     `formatDateTime` - в зоне отображения и с подписью зоны (NFR-03).
+         *     Сервер не печатает даты сам потому, что печатал их по-русски и в чужой
+         *     зоне: на `/en/` реестр был единственным экраном с «08.08.2026» без
+         *     признака пояса.
+         */
+        RegistryCellDto: {
+            /** @description Английский вариант; пусто - кабинет откатывается на `text_ru` */
+            text_en: string;
+            /** @description Казахский вариант; пусто - кабинет откатывается на `text_ru` */
+            text_kk: string;
+            /** @description Значение по-русски; оно же уходит в выгрузку CSV (делопроизводство) */
+            text_ru: string;
+            /**
+             * @description Моменты ячейки (ISO 8601): один - дата события, два - границы
+             *     периода. Пусто - ячейка не про время.
+             */
+            timestamps: string[];
+        };
+        /**
+         * @description Колонка реестра: машинный ключ и шапка на трех языках (NFR-01).
+         *
+         *     Ключ нужен кабинету как идентификатор колонки - раньше им служил русский
+         *     заголовок, и стоило перевести шапку, как ключ строки менялся вместе с
+         *     языком.
+         */
+        RegistryColumnDto: {
+            key: string;
+            title_en: string;
+            title_kk: string;
+            title_ru: string;
+        };
         /** @description Реестр отчетности: колонки и строки в одном порядке (арх. § 9). */
         RegistryDto: {
-            columns: string[];
+            columns: components["schemas"]["RegistryColumnDto"][];
             /** @description Курсор продолжения; `null` - реестр показан до конца */
             next_after?: string | null;
-            /** @description `decisions` | `contracts` | `receipts` */
-            registry: string;
-            /** @description Строки реестра: значения предформатированы сервером (ru, NFR-01) */
-            rows: string[][];
+            registry: components["schemas"]["ReportRegistryDto"];
+            /** @description Строки реестра в порядке колонок */
+            rows: components["schemas"]["RegistryCellDto"][][];
+            title_en: string;
+            title_kk: string;
             title_ru: string;
             /** @description Показана не вся выборка: за строками ответа есть еще */
             truncated: boolean;
         };
         RegistrySummaryDto: {
-            registry: string;
+            registry: components["schemas"]["ReportRegistryDto"];
+            title_en: string;
+            title_kk: string;
             title_ru: string;
         };
         RejectionReasonDto: {
@@ -4955,10 +5019,20 @@ export interface components {
             tender_id: string;
         };
         /**
+         * @description Реестр отчетности на проводе: перечень закрыт (арх. § 9).
+         *
+         *     Тип, а не строка: клиенту контракта нужен перечень допустимых значений,
+         *     иначе `/reports/{registry}` выглядит как «сюда можно любое слово», и
+         *     опечатка ловится только 422 в бою. Значения - те же, что у
+         *     [`Registry::as_str`]: провод не меняется.
+         * @enum {string}
+         */
+        ReportRegistryDto: "decisions" | "contracts" | "receipts";
+        /**
          * @description Причина отказа по правилу предметной области (закрытый перечень)
          * @enum {string}
          */
-        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_schedule_order" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
+        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_schedule_order" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "application_package_incomplete" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
         SaveSiteAnnouncementRequest: {
             body: string;
             body_kk: string;
@@ -4981,7 +5055,7 @@ export interface components {
         };
         SetMrpRequest: {
             /**
-             * @description Величина МРП в тенге; ограничение «больше нуля» держит и БД
+             * @description Величина МРП в тенге (> 0)
              * @example 3932
              */
             amount: string;
@@ -5303,7 +5377,80 @@ export interface components {
             year: number;
         };
     };
-    responses: never;
+    responses: {
+        /** @description Запрос не разобран: идентификатор в пути или параметр запроса неверного вида (`validation_failed`) */
+        BadRequest: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Недостаточно прав для действия (`forbidden`) либо не сошелся токен `x-csrf-token` (`csrf_rejected`) */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Запрос с тем же `Idempotency-Key` еще выполняется (`idempotency_in_flight`) */
+        IdempotencyInFlight: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Метод не поддерживается этим ресурсом (`method_not_allowed`) */
+        MethodNotAllowed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Ресурс не найден (`not_found`) */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Требуется вход: сессионной cookie `tou_session` нет либо она недействительна (`unauthorized`) */
+        Unauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Данные не прошли проверку (`validation_failed`) либо тем же `Idempotency-Key` пришел другой запрос (`idempotency_key_reuse`) */
+        Unprocessable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Тип содержимого тела запроса не поддерживается (`validation_failed`) */
+        UnsupportedMediaType: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+    };
     parameters: never;
     requestBodies: never;
     headers: never;
@@ -5332,6 +5479,9 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Печатная форма не сформирована */
             404: {
                 headers: {
@@ -5341,12 +5491,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     upload_act_scan: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Акт */
                 id: string;
@@ -5368,6 +5525,13 @@ export interface operations {
                     "application/json": components["schemas"]["ActDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Файл не приложен */
             422: {
                 headers: {
@@ -5397,6 +5561,7 @@ export interface operations {
                     "application/json": components["schemas"]["AuditChainDto"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5406,6 +5571,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     data_overview: {
@@ -5426,6 +5592,7 @@ export interface operations {
                     "application/json": components["schemas"]["AdminDataOverviewDto"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5435,12 +5602,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     purge_data: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5459,6 +5632,8 @@ export interface operations {
                     "application/json": components["schemas"]["AdminPurgeResultDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5468,6 +5643,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Очистка выключена или слово подтверждения не совпало */
             422: {
                 headers: {
@@ -5491,7 +5669,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Перечень записей вида */
+            /** @description Перечень записей вида: до 1000 свежих записей, курсора нет - продолжение читается после удаления показанного */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5500,6 +5678,8 @@ export interface operations {
                     "application/json": components["schemas"]["AdminRecordPageDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5509,6 +5689,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description `everything` перечнем не является */
             422: {
                 headers: {
@@ -5523,7 +5704,12 @@ export interface operations {
     purge_record: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Вид данных */
                 kind: components["schemas"]["AdminPurgeScope"];
@@ -5543,6 +5729,8 @@ export interface operations {
                     "application/json": components["schemas"]["AdminPurgeResultDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5561,6 +5749,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Очистка выключена или вид без записей */
             422: {
                 headers: {
@@ -5575,7 +5766,12 @@ export interface operations {
     deactivate_demo_accounts: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5590,6 +5786,8 @@ export interface operations {
                     "application/json": components["schemas"]["AdminDemoAccountsDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5599,6 +5797,10 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     current: {
@@ -5619,6 +5821,7 @@ export interface operations {
                     "application/json": components["schemas"]["SiteAnnouncementDto"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5637,12 +5840,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     save: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -5661,6 +5870,8 @@ export interface operations {
                     "application/json": components["schemas"]["SiteAnnouncementDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5670,6 +5881,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Некорректный заголовок или текст */
             422: {
                 headers: {
@@ -5683,7 +5897,12 @@ export interface operations {
     };
     list_schedules: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор: id последнего элемента предыдущей страницы (`next_after`) */
+                after?: string | null;
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5699,6 +5918,8 @@ export interface operations {
                     "application/json": components["schemas"]["AdminTenderSchedulePageDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5708,12 +5929,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     set_schedule: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -5735,6 +5963,8 @@ export interface operations {
                     "application/json": components["schemas"]["AdminTenderScheduleDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5753,6 +5983,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Сроки не в порядке процедуры (FR-303) */
             409: {
                 headers: {
@@ -5762,6 +5993,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Правка данных выключена (ALLOW_DATA_PURGE) */
             422: {
                 headers: {
@@ -5776,9 +6008,9 @@ export interface operations {
     list_users: {
         parameters: {
             query?: {
-                /** @description Cursor: id последнего элемента предыдущей страницы (uuid v7 упорядочен по времени) */
+                /** @description Курсор: id последнего элемента предыдущей страницы (uuid v7 упорядочен по времени) */
                 after?: string | null;
-                /** @description 1..=100, по умолчанию 50 */
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
                 limit?: number | null;
             };
             header?: never;
@@ -5796,6 +6028,8 @@ export interface operations {
                     "application/json": components["schemas"]["UserPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5805,12 +6039,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     set_user_active: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Пользователь */
                 user_id: string;
@@ -5830,6 +6071,8 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5848,6 +6091,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Отключение самого себя */
             422: {
                 headers: {
@@ -5862,7 +6108,12 @@ export interface operations {
     reset_password: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Пользователь */
                 user_id: string;
@@ -5880,6 +6131,8 @@ export interface operations {
                     "application/json": components["schemas"]["PasswordResetDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5898,6 +6151,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description У записи нет локального пароля */
             422: {
                 headers: {
@@ -5912,7 +6168,12 @@ export interface operations {
     grant_role: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Пользователь */
                 user_id: string;
@@ -5932,6 +6193,8 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5950,6 +6213,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Неизвестная роль */
             422: {
                 headers: {
@@ -5964,7 +6230,12 @@ export interface operations {
     revoke_role: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Пользователь */
                 user_id: string;
@@ -5982,6 +6253,8 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -5991,6 +6264,10 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Неизвестная роль */
             422: {
                 headers: {
@@ -6023,6 +6300,9 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Допсоглашение или форма не найдены */
             404: {
                 headers: {
@@ -6032,6 +6312,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     my_applications: {
@@ -6052,12 +6334,20 @@ export interface operations {
                     "application/json": components["schemas"]["ApplicationDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     decide_application: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка */
                 id: string;
@@ -6079,6 +6369,11 @@ export interface operations {
                     "application/json": components["schemas"]["ApplicationDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Голосование не завершено либо решение невозможно */
             409: {
                 headers: {
@@ -6088,6 +6383,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Отклонение без основания (п. 52) */
             422: {
                 headers: {
@@ -6102,7 +6398,12 @@ export interface operations {
     decline_amendment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка */
                 id: string;
@@ -6118,6 +6419,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка не найдена */
             404: {
                 headers: {
@@ -6127,6 +6431,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Условия тендера не изменялись */
             409: {
                 headers: {
@@ -6136,6 +6441,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     application_account: {
@@ -6159,6 +6466,9 @@ export interface operations {
                     "application/json": components["schemas"]["LedgerAccountDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Взнос не подтверждался */
             404: {
                 headers: {
@@ -6168,12 +6478,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     confirm_fee: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка */
                 id: string;
@@ -6195,6 +6512,11 @@ export interface operations {
                     "application/json": components["schemas"]["LedgerAccountDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Сумма, срок или статус заявки не позволяют */
             409: {
                 headers: {
@@ -6204,12 +6526,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     refund_fee: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка */
                 id: string;
@@ -6231,6 +6560,11 @@ export interface operations {
                     "application/json": components["schemas"]["LedgerAccountDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Возвращать нечего */
             409: {
                 headers: {
@@ -6240,6 +6574,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Основание вне перечня п. 26 */
             422: {
                 headers: {
@@ -6257,7 +6592,12 @@ export interface operations {
                 /** @description Тип обязательного документа */
                 document_kind: components["schemas"]["ApplicationDocumentKindDto"];
             };
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 id: string;
             };
@@ -6279,6 +6619,11 @@ export interface operations {
                     "application/json": components["schemas"]["ApplicationFileDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Заявка не «подана» или прием закрыт */
             409: {
                 headers: {
@@ -6288,6 +6633,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Часть `file` отсутствует */
             422: {
                 headers: {
@@ -6322,6 +6668,9 @@ export interface operations {
                     "application/octet-stream": number[];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Нет файла или нет доступа */
             404: {
                 headers: {
@@ -6331,12 +6680,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     cast_vote: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка */
                 id: string;
@@ -6358,6 +6714,8 @@ export interface operations {
                     "application/json": components["schemas"]["TallyDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Пользователь не член действующей комиссии */
             403: {
                 headers: {
@@ -6367,6 +6725,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Голосование сейчас невозможно */
             409: {
                 headers: {
@@ -6376,6 +6736,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     application_votes: {
@@ -6399,6 +6761,9 @@ export interface operations {
                     "application/json": components["schemas"]["ApplicationVotesDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка или заседание не найдены */
             404: {
                 headers: {
@@ -6408,12 +6773,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     withdraw_application: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка */
                 id: string;
@@ -6431,6 +6803,19 @@ export interface operations {
                     "application/json": components["schemas"]["ApplicationDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Своей заявки с таким id нет */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Отзыв невозможен (статус/дедлайн, INV-037) */
             409: {
                 headers: {
@@ -6440,6 +6825,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     auction_room: {
@@ -6463,6 +6850,9 @@ export interface operations {
                     "application/json": components["schemas"]["AuctionRoomDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Торги не найдены */
             404: {
                 headers: {
@@ -6472,6 +6862,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     auction_bids: {
@@ -6498,6 +6890,8 @@ export interface operations {
                     "application/json": components["schemas"]["BidDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Участник не допущен к лоту этих торгов */
             403: {
                 headers: {
@@ -6516,12 +6910,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     place_bid: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Торги */
                 id: string;
@@ -6543,6 +6944,8 @@ export interface operations {
                     "application/json": components["schemas"]["BidDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Участник не допущен к этому лоту */
             403: {
                 headers: {
@@ -6561,6 +6964,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Ставка отклонена правилами (INV-063/INV-066) */
             409: {
                 headers: {
@@ -6570,12 +6974,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     extend_auction: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Торги */
                 id: string;
@@ -6593,6 +7004,9 @@ export interface operations {
                     "application/json": components["schemas"]["AuctionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Торги не найдены */
             404: {
                 headers: {
@@ -6602,6 +7016,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Продление уже израсходовано (п. 68) */
             409: {
                 headers: {
@@ -6611,12 +7026,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     finish_auction: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Торги */
                 id: string;
@@ -6638,6 +7060,9 @@ export interface operations {
                     "application/json": components["schemas"]["AuctionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Торги не найдены */
             404: {
                 headers: {
@@ -6647,6 +7072,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Завершать нечего */
             409: {
                 headers: {
@@ -6656,12 +7082,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     mark_absent: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Торги */
                 id: string;
@@ -6681,6 +7114,9 @@ export interface operations {
                     "application/json": components["schemas"]["AuctionRoomDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Торги или участник не найдены */
             404: {
                 headers: {
@@ -6690,6 +7126,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Отметить неявку сейчас нельзя */
             409: {
                 headers: {
@@ -6699,12 +7136,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     pass_turn: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Торги */
                 id: string;
@@ -6722,6 +7166,8 @@ export interface operations {
                     "application/json": components["schemas"]["AuctionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Участник не в круге этих торгов */
             403: {
                 headers: {
@@ -6731,6 +7177,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Сейчас ход другого участника */
             409: {
                 headers: {
@@ -6740,12 +7188,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     start_auction: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Торги */
                 id: string;
@@ -6763,6 +7218,9 @@ export interface operations {
                     "application/json": components["schemas"]["AuctionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Торги не найдены */
             404: {
                 headers: {
@@ -6772,6 +7230,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Старт из этого статуса невозможен */
             409: {
                 headers: {
@@ -6781,6 +7240,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     confirm_registration: {
@@ -6803,6 +7264,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            405: components["responses"]["MethodNotAllowed"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Код неверен или истек */
             422: {
                 headers: {
@@ -6836,6 +7300,7 @@ export interface operations {
                     "application/json": components["schemas"]["UserDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             /** @description Неверные учетные данные */
             401: {
                 headers: {
@@ -6845,6 +7310,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
             /** @description Слишком много попыток */
             429: {
                 headers: {
@@ -6859,7 +7327,10 @@ export interface operations {
     logout: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -6872,6 +7343,11 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     me: {
@@ -6901,6 +7377,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     oidc_callback: {
@@ -6923,6 +7401,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             /** @description Провайдер не настроен */
             404: {
                 headers: {
@@ -6932,6 +7411,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     oidc_login: {
@@ -6959,6 +7440,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Провайдер недоступен */
             503: {
                 headers: {
@@ -6995,12 +7477,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     change_password: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7017,6 +7505,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
             /** @description Текущий пароль неверен */
             401: {
                 headers: {
@@ -7026,6 +7515,10 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -7064,6 +7557,7 @@ export interface operations {
                     "application/json": components["schemas"]["AuthProvidersDto"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     register: {
@@ -7088,6 +7582,8 @@ export interface operations {
                     "application/json": components["schemas"]["RegistrationPendingDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Email или ИИН/БИН занят */
             409: {
                 headers: {
@@ -7097,6 +7593,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -7135,6 +7632,8 @@ export interface operations {
                     "application/json": components["schemas"]["CommissionDto"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Действующей комиссии нет */
             404: {
                 headers: {
@@ -7144,12 +7643,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     approve_commission: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Комиссия */
                 id: string;
@@ -7167,6 +7672,11 @@ export interface operations {
                     "application/json": components["schemas"]["CommissionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Состав не отвечает п. 9–11 */
             409: {
                 headers: {
@@ -7176,11 +7686,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     my_contracts: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор: id последнего элемента предыдущей страницы (`next_after`) */
+                after?: string | null;
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -7196,6 +7713,11 @@ export interface operations {
                     "application/json": components["schemas"]["MyContractPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     contract_acts: {
@@ -7219,12 +7741,23 @@ export interface operations {
                     "application/json": components["schemas"]["ActDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     create_act: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7246,6 +7779,11 @@ export interface operations {
                     "application/json": components["schemas"]["ActDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Порядок актов нарушен (FR-904) */
             409: {
                 headers: {
@@ -7255,6 +7793,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Неизвестный вид акта */
             422: {
                 headers: {
@@ -7269,7 +7808,12 @@ export interface operations {
     advance_contract: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7291,6 +7835,11 @@ export interface operations {
                     "application/json": components["schemas"]["ContractDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Шаг вне очереди либо сверка не завершена */
             409: {
                 headers: {
@@ -7300,6 +7849,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Неизвестный шаг */
             422: {
                 headers: {
@@ -7332,6 +7882,9 @@ export interface operations {
                     "application/json": components["schemas"]["ContractAmendmentDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Договор не найден */
             404: {
                 headers: {
@@ -7341,12 +7894,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     create_amendment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7368,6 +7928,11 @@ export interface operations {
                     "application/json": components["schemas"]["ContractAmendmentDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Изменение невозможно (FR-901, п. 125–126) */
             409: {
                 headers: {
@@ -7377,6 +7942,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -7409,6 +7975,9 @@ export interface operations {
                     "application/json": components["schemas"]["BenefitGrantDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Льгота не применялась */
             404: {
                 headers: {
@@ -7418,12 +7987,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     grant_benefit: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7445,6 +8021,11 @@ export interface operations {
                     "application/json": components["schemas"]["BenefitGrantDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Условия льготы не выполнены (п. 95–96) */
             409: {
                 headers: {
@@ -7454,6 +8035,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -7486,12 +8068,23 @@ export interface operations {
                     "application/json": components["schemas"]["ChecklistItemDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     check_checklist_item: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7513,6 +8106,11 @@ export interface operations {
                     "application/json": components["schemas"]["ChecklistItemDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Сверка закрыта либо позиция неизвестна */
             409: {
                 headers: {
@@ -7522,6 +8120,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     contract_deposit: {
@@ -7545,6 +8145,9 @@ export interface operations {
                     "application/json": components["schemas"]["LedgerAccountDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Счет не открыт */
             404: {
                 headers: {
@@ -7554,12 +8157,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     pay_deposit: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7581,6 +8191,9 @@ export interface operations {
                     "application/json": components["schemas"]["LedgerAccountDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Договор не найден */
             404: {
                 headers: {
@@ -7590,6 +8203,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Договор не заключен либо сумма не равна депозиту */
             409: {
                 headers: {
@@ -7599,12 +8213,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     refund_deposit: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7626,6 +8247,9 @@ export interface operations {
                     "application/json": components["schemas"]["LedgerAccountDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Депозитный счет не найден */
             404: {
                 headers: {
@@ -7635,6 +8259,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Объект не возвращен либо остатка нет */
             409: {
                 headers: {
@@ -7644,12 +8269,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     declare_evasion: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7671,6 +8303,9 @@ export interface operations {
                     "application/json": components["schemas"]["DeclaredEvasionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Договор не найден */
             404: {
                 headers: {
@@ -7680,6 +8315,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Договор подписан либо уклонение уже зафиксировано */
             409: {
                 headers: {
@@ -7689,6 +8325,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Неизвестное основание */
             422: {
                 headers: {
@@ -7721,6 +8358,9 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Печатная форма не сформирована */
             404: {
                 headers: {
@@ -7730,12 +8370,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     register_contract: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7757,6 +8404,9 @@ export interface operations {
                     "application/json": components["schemas"]["ContractDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Договор не найден */
             404: {
                 headers: {
@@ -7766,6 +8416,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Не подписан, номер занят либо уже зарегистрирован */
             409: {
                 headers: {
@@ -7775,12 +8426,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     upload_scan: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Договор */
                 id: string;
@@ -7802,6 +8460,13 @@ export interface operations {
                     "application/json": components["schemas"]["ContractDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Файл не приложен */
             422: {
                 headers: {
@@ -7831,6 +8496,9 @@ export interface operations {
                     "application/json": components["schemas"]["DossierSectionDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     evader_registry: {
@@ -7838,6 +8506,7 @@ export interface operations {
             query?: {
                 /** @description Курсор следующей страницы - значение `next_after` предыдущей */
                 after?: string | null;
+                /** @description Размер страницы: от 1 до 100, по умолчанию 50 */
                 limit?: number | null;
             };
             header?: never;
@@ -7855,6 +8524,11 @@ export interface operations {
                     "application/json": components["schemas"]["EvaderPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     evasion_grounds: {
@@ -7875,6 +8549,9 @@ export interface operations {
                     "application/json": components["schemas"]["EvasionGroundDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     healthz: {
@@ -7895,6 +8572,7 @@ export interface operations {
                     "text/plain": string;
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     list_investment_contracts: {
@@ -7915,6 +8593,7 @@ export interface operations {
                     "application/json": components["schemas"]["InvestmentContractDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -7924,12 +8603,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     draft_investment_contract: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -7948,6 +8633,10 @@ export interface operations {
                     "application/json": components["schemas"]["InvestmentContractDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Заявка не удовлетворена либо срок больше семи лет (INV-094) */
             409: {
                 headers: {
@@ -7957,6 +8646,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -7989,12 +8679,23 @@ export interface operations {
                     "application/json": components["schemas"]["AcceptanceDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     accept_investment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Инвестиционный договор */
                 id: string;
@@ -8016,6 +8717,9 @@ export interface operations {
                     "application/json": components["schemas"]["AcceptanceDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Договор не найден */
             404: {
                 headers: {
@@ -8025,6 +8729,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -8059,6 +8766,9 @@ export interface operations {
                     "application/octet-stream": number[];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Документ не приложен */
             404: {
                 headers: {
@@ -8068,12 +8778,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     upload_attachment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Инвестиционный договор */
                 id: string;
@@ -8096,6 +8813,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Договор не найден */
             404: {
                 headers: {
@@ -8105,6 +8825,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Позиция вне перечня п. 91 либо часть `file` отсутствует */
             422: {
                 headers: {
@@ -8137,6 +8860,9 @@ export interface operations {
                     "application/pdf": number[];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Договор не найден */
             404: {
                 headers: {
@@ -8146,12 +8872,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     extend_investment: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Инвестиционный договор */
                 id: string;
@@ -8173,6 +8906,11 @@ export interface operations {
                     "application/json": components["schemas"]["InvestmentContractDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Условия продления не наступили (п. 93) */
             409: {
                 headers: {
@@ -8182,6 +8920,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Неизвестный способ продления */
             422: {
                 headers: {
@@ -8211,6 +8950,7 @@ export interface operations {
                     "application/json": components["schemas"]["LandApplicationDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -8220,12 +8960,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     submit_land_application: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8244,6 +8990,10 @@ export interface operations {
                     "application/json": components["schemas"]["LandApplicationDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Участок не опубликован (п. 104–105) */
             409: {
                 headers: {
@@ -8253,6 +9003,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -8282,12 +9033,20 @@ export interface operations {
                     "application/json": components["schemas"]["LandApplicationDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     decide_land_application: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка на участок */
                 id: string;
@@ -8309,6 +9068,11 @@ export interface operations {
                     "application/json": components["schemas"]["LandApplicationDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Заявка уже не рассматривается (п. 105–106) */
             409: {
                 headers: {
@@ -8318,6 +9082,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -8332,7 +9097,12 @@ export interface operations {
     withdraw_land_application: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка на участок */
                 id: string;
@@ -8350,6 +9120,9 @@ export interface operations {
                     "application/json": components["schemas"]["LandApplicationDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка не найдена или решение принято */
             404: {
                 headers: {
@@ -8359,12 +9132,21 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     draft_land_contract: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8383,6 +9165,10 @@ export interface operations {
                     "application/json": components["schemas"]["LandApplicationDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Заявка не удовлетворена (п. 106–107) */
             409: {
                 headers: {
@@ -8392,6 +9178,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -8421,12 +9208,18 @@ export interface operations {
                     "application/json": components["schemas"]["LandPlotDto"][];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     save_land_plot: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8445,6 +9238,10 @@ export interface operations {
                     "application/json": components["schemas"]["LandPlotDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Объект не является земельным участком */
             409: {
                 headers: {
@@ -8454,6 +9251,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -8468,7 +9266,12 @@ export interface operations {
     publish_land_plot: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Участок */
                 id: string;
@@ -8486,6 +9289,9 @@ export interface operations {
                     "application/json": components["schemas"]["LandPlotDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Участок не найден */
             404: {
                 headers: {
@@ -8495,6 +9301,10 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     list_accounts: {
@@ -8518,6 +9328,11 @@ export interface operations {
                     "application/json": components["schemas"]["LedgerAccountDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     account_entries: {
@@ -8525,6 +9340,7 @@ export interface operations {
             query?: {
                 /** @description Курсор следующей страницы - значение `next_after` предыдущей */
                 after?: string | null;
+                /** @description Размер страницы: от 1 до 100, по умолчанию 50 */
                 limit?: number | null;
             };
             header?: never;
@@ -8545,6 +9361,20 @@ export interface operations {
                     "application/json": components["schemas"]["LedgerEntryPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Счет не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     lot_auction: {
@@ -8568,6 +9398,9 @@ export interface operations {
                     "application/json": components["schemas"]["AuctionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Торги по лоту не открыты */
             404: {
                 headers: {
@@ -8577,12 +9410,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     schedule_auction: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Лот */
                 id: string;
@@ -8604,6 +9444,9 @@ export interface operations {
                     "application/json": components["schemas"]["AuctionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Лот не найден */
             404: {
                 headers: {
@@ -8613,6 +9456,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Нет допущенных заявок с ценой */
             409: {
                 headers: {
@@ -8622,6 +9466,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Шаг торгов вне диапазона 5-100 % */
             422: {
                 headers: {
@@ -8636,7 +9481,12 @@ export interface operations {
     cancel_lot: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Лот */
                 id: string;
@@ -8656,6 +9506,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Лот не найден */
             404: {
                 headers: {
@@ -8665,6 +9518,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Отмена невозможна (п. 78) */
             409: {
                 headers: {
@@ -8674,12 +9528,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     draft_contract: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Лот */
                 id: string;
@@ -8697,6 +9558,19 @@ export interface operations {
                     "application/json": components["schemas"]["ContractDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Лот не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Торги не завершены либо нет победителя */
             409: {
                 headers: {
@@ -8706,12 +9580,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     list_notifications: {
         parameters: {
             query?: {
                 after?: string | null;
+                /** @description Размер страницы: от 1 до 100, по умолчанию 50 */
                 limit?: number | null;
             };
             header?: never;
@@ -8729,12 +9606,22 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     mark_read: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8753,6 +9640,13 @@ export interface operations {
                     "application/json": components["schemas"]["MarkReadResponse"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     stream: {
@@ -8773,6 +9667,9 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     unread_count: {
@@ -8793,14 +9690,17 @@ export interface operations {
                     "application/json": components["schemas"]["UnreadCountDto"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     list_objects: {
         parameters: {
             query?: {
-                /** @description Cursor: id последнего элемента предыдущей страницы */
+                /** @description Курсор: id последнего элемента предыдущей страницы */
                 after?: string | null;
-                /** @description 1..=100, по умолчанию 50 */
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
                 limit?: number | null;
                 /** @description Витрина FR-102: статус объекта (вычисляемый, FR-103) */
                 status?: null | components["schemas"]["ObjectStatusDto"];
@@ -8834,12 +9734,20 @@ export interface operations {
                     "application/json": components["schemas"]["ObjectPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     create_object: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -8858,6 +9766,12 @@ export interface operations {
                     "application/json": components["schemas"]["ObjectDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -8890,6 +9804,7 @@ export interface operations {
                     "application/json": components["schemas"]["ObjectDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             /** @description Не найден */
             404: {
                 headers: {
@@ -8899,12 +9814,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     update_object: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Объект */
                 id: string;
@@ -8926,6 +9848,9 @@ export interface operations {
                     "application/json": components["schemas"]["ObjectDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Не найден */
             404: {
                 headers: {
@@ -8935,12 +9860,21 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     delete_object: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Объект */
                 id: string;
@@ -8956,6 +9890,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Не найден */
             404: {
                 headers: {
@@ -8965,6 +9902,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Используется лотами/договорами */
             409: {
                 headers: {
@@ -8974,11 +9912,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     my_obligations: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор: id последнего элемента предыдущей страницы (`next_after`) */
+                after?: string | null;
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -8994,11 +9939,21 @@ export interface operations {
                     "application/json": components["schemas"]["ObligationPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     my_protocols: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор: id последнего элемента предыдущей страницы (`next_after`) */
+                after?: string | null;
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9014,6 +9969,11 @@ export interface operations {
                     "application/json": components["schemas"]["MyProtocolPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     protocol_pdf: {
@@ -9037,6 +9997,7 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
             /** @description Протокол или форма не найдены */
             404: {
                 headers: {
@@ -9046,12 +10007,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     publish_protocol: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Протокол */
                 id: string;
@@ -9069,6 +10037,9 @@ export interface operations {
                     "application/json": components["schemas"]["ProtocolDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Протокол не найден */
             404: {
                 headers: {
@@ -9078,6 +10049,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Публикация невозможна (п. 75–76) */
             409: {
                 headers: {
@@ -9087,6 +10059,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     list_public_records: {
@@ -9094,6 +10068,7 @@ export interface operations {
             query?: {
                 /** @description Курсор следующей страницы - значение `next_after` предыдущей */
                 after?: string | null;
+                /** @description Размер страницы: от 1 до 100, по умолчанию 50 */
                 limit?: number | null;
             };
             header?: never;
@@ -9111,12 +10086,20 @@ export interface operations {
                     "application/json": components["schemas"]["PublicRecordPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     publish_record: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9135,6 +10118,9 @@ export interface operations {
                     "application/json": components["schemas"]["PublicRecordDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Материал не найден */
             404: {
                 headers: {
@@ -9144,6 +10130,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Публикация невозможна (п. 87, 92, 97) */
             409: {
                 headers: {
@@ -9153,6 +10140,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Неизвестный вид публикации */
             422: {
                 headers: {
@@ -9166,7 +10154,12 @@ export interface operations {
     };
     pending_publications: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Курсор: id последнего элемента предыдущей страницы (`next_after`) */
+                after?: string | null;
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9182,6 +10175,8 @@ export interface operations {
                     "application/json": components["schemas"]["PendingPublicationPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -9191,6 +10186,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     public_record_pdf: {
@@ -9214,6 +10211,7 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
             /** @description Материал не найден или снят */
             404: {
                 headers: {
@@ -9223,6 +10221,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     options: {
@@ -9243,6 +10243,9 @@ export interface operations {
                     "application/json": components["schemas"]["RateOptionsCatalog"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description refdata не заведена (A-010) */
             422: {
                 headers: {
@@ -9257,7 +10260,12 @@ export interface operations {
     preview: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9276,6 +10284,12 @@ export interface operations {
                     "application/json": components["schemas"]["RateCalculationDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Нет данных refdata или неверные входы */
             422: {
                 headers: {
@@ -9290,7 +10304,12 @@ export interface operations {
     preview_hourly: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9309,6 +10328,12 @@ export interface operations {
                     "application/json": components["schemas"]["HourlyRateDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Нет данных refdata или неверные входы */
             422: {
                 headers: {
@@ -9338,6 +10363,9 @@ export interface operations {
                     "application/json": components["schemas"]["AmendableFieldDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     benefit_schemes: {
@@ -9358,6 +10386,9 @@ export interface operations {
                     "application/json": components["schemas"]["BenefitSchemeDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     list_coefficients: {
@@ -9378,6 +10409,7 @@ export interface operations {
                     "application/json": components["schemas"]["CoefficientVersionDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -9387,12 +10419,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     add_coefficient: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9411,6 +10449,8 @@ export interface operations {
                     "application/json": components["schemas"]["CoefficientVersionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -9420,6 +10460,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -9449,12 +10492,20 @@ export interface operations {
                     "application/json": components["schemas"]["HolidayDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     add_holiday: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9471,6 +10522,8 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -9480,6 +10533,9 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Пустое наименование */
             422: {
                 headers: {
@@ -9494,7 +10550,12 @@ export interface operations {
     remove_holiday: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Дата в формате YYYY-MM-DD */
                 day: string;
@@ -9510,6 +10571,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Такого дня в календаре нет */
             404: {
                 headers: {
@@ -9519,6 +10583,10 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     investment_attachments: {
@@ -9539,6 +10607,9 @@ export interface operations {
                     "application/json": components["schemas"]["InvestmentAttachmentDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     land_refdata: {
@@ -9559,6 +10630,7 @@ export interface operations {
                     "application/json": components["schemas"]["LandRefdataResponse"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     list_mrp: {
@@ -9579,6 +10651,7 @@ export interface operations {
                     "application/json": components["schemas"]["MrpDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -9588,12 +10661,18 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     set_mrp: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Год */
                 year: number;
@@ -9615,6 +10694,8 @@ export interface operations {
                     "application/json": components["schemas"]["MrpDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -9624,6 +10705,10 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Год или величина недопустимы */
             422: {
                 headers: {
@@ -9653,6 +10738,9 @@ export interface operations {
                     "application/json": components["schemas"]["RefundReasonDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     rejection_reasons: {
@@ -9673,6 +10761,9 @@ export interface operations {
                     "application/json": components["schemas"]["RejectionReasonDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     special_categories: {
@@ -9693,6 +10784,9 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialCategoryDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     list_registries: {
@@ -9713,6 +10807,9 @@ export interface operations {
                     "application/json": components["schemas"]["RegistrySummaryDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     registry: {
@@ -9724,12 +10821,13 @@ export interface operations {
                 to?: string | null;
                 /** @description Курсор следующей страницы - значение `next_after` предыдущей */
                 after?: string | null;
+                /** @description Размер страницы: от 1 до 100, по умолчанию 50 */
                 limit?: number | null;
             };
             header?: never;
             path: {
-                /** @description decisions | contracts | receipts */
-                registry: string;
+                /** @description Реестр отчетности */
+                registry: components["schemas"]["ReportRegistryDto"];
             };
             cookie?: never;
         };
@@ -9744,6 +10842,8 @@ export interface operations {
                     "application/json": components["schemas"]["RegistryDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -9753,6 +10853,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Неизвестный реестр, дата или курсор */
             422: {
                 headers: {
@@ -9774,8 +10876,8 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description decisions | contracts | receipts */
-                registry: string;
+                /** @description Реестр отчетности */
+                registry: components["schemas"]["ReportRegistryDto"];
             };
             cookie?: never;
         };
@@ -9790,8 +10892,21 @@ export interface operations {
                     "text/csv": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            /** @description Неизвестный реестр или дата периода */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9828,6 +10943,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     pending_special_requests: {
@@ -9851,6 +10967,8 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialRequestDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -9860,12 +10978,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     submit_special_request: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -9884,6 +11009,10 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialRequestDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Категория вне перечня п. 87 (INV-087) */
             409: {
                 headers: {
@@ -9893,6 +11022,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -9922,6 +11052,9 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialRequestDto"][];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
         };
     };
     get_special_request: {
@@ -9945,6 +11078,9 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialRequestDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка не найдена */
             404: {
                 headers: {
@@ -9954,6 +11090,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     special_request_pdf: {
@@ -9977,6 +11115,9 @@ export interface operations {
                     "application/pdf": number[];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка не найдена */
             404: {
                 headers: {
@@ -9986,6 +11127,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     special_competition: {
@@ -10009,6 +11152,9 @@ export interface operations {
                     "application/json": components["schemas"]["CompetitionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка не найдена */
             404: {
                 headers: {
@@ -10018,12 +11164,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     decide_special_request: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка особого порядка */
                 id: string;
@@ -10045,6 +11198,11 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialDecisionDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Нет заключения (INV-090) либо решение уже принято */
             409: {
                 headers: {
@@ -10054,6 +11212,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -10086,6 +11245,9 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Решение не принято */
             404: {
                 headers: {
@@ -10095,6 +11257,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     special_dossier: {
@@ -10118,6 +11282,8 @@ export interface operations {
                     "application/json": components["schemas"]["DossierItemDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -10127,6 +11293,17 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Заявка особого порядка не найдена */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     special_dossier_archive: {
@@ -10150,6 +11327,9 @@ export interface operations {
                     "application/zip": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка не найдена */
             404: {
                 headers: {
@@ -10159,6 +11339,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     upload_special_file: {
@@ -10167,7 +11349,12 @@ export interface operations {
                 /** @description Позиция перечня документов категории (п. 88) */
                 document_code?: string | null;
             };
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка особого порядка */
                 id: string;
@@ -10190,6 +11377,11 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialRequestFileDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Заявка не принимает документы */
             409: {
                 headers: {
@@ -10199,6 +11391,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Часть `file` отсутствует */
             422: {
                 headers: {
@@ -10233,6 +11426,9 @@ export interface operations {
                     "application/octet-stream": number[];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Нет документа или нет доступа */
             404: {
                 headers: {
@@ -10242,6 +11438,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     special_progress: {
@@ -10265,6 +11463,9 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialProgressDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка не найдена */
             404: {
                 headers: {
@@ -10274,12 +11475,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     review_special_request: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка особого порядка */
                 id: string;
@@ -10301,6 +11509,11 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialReviewDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Заявка не в состоянии «подана» либо заключение уже есть */
             409: {
                 headers: {
@@ -10310,6 +11523,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -10324,7 +11538,12 @@ export interface operations {
     withdraw_special_request: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Заявка особого порядка */
                 id: string;
@@ -10342,6 +11561,9 @@ export interface operations {
                     "application/json": components["schemas"]["SpecialRequestDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заявка не найдена или решение уже принято */
             404: {
                 headers: {
@@ -10351,6 +11573,10 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     amendment_pdf: {
@@ -10374,6 +11600,7 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
             /** @description Редакция не найдена */
             404: {
                 headers: {
@@ -10383,12 +11610,16 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     list_tenders: {
         parameters: {
             query?: {
+                /** @description Курсор: id последнего элемента предыдущей страницы */
                 after?: string | null;
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
                 limit?: number | null;
             };
             header?: never;
@@ -10406,12 +11637,20 @@ export interface operations {
                     "application/json": components["schemas"]["TenderPage"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     create_tender: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10430,6 +11669,12 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -10462,6 +11707,7 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             /** @description Не найден */
             404: {
                 headers: {
@@ -10471,12 +11717,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     update_tender: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -10498,6 +11751,9 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Не найден */
             404: {
                 headers: {
@@ -10507,6 +11763,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Тендер уже не черновик либо сроки противоречат друг другу */
             409: {
                 headers: {
@@ -10516,12 +11773,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     delete_tender: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -10537,6 +11801,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Не найден */
             404: {
                 headers: {
@@ -10546,6 +11813,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Тендер объявлен - удаляется только черновик */
             409: {
                 headers: {
@@ -10555,6 +11823,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     admission_protocol_meta: {
@@ -10578,6 +11848,9 @@ export interface operations {
                     "application/json": components["schemas"]["GeneratedProtocolDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Протокол не сформирован */
             404: {
                 headers: {
@@ -10587,12 +11860,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     generate_admission_protocol: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -10610,6 +11890,9 @@ export interface operations {
                     "application/json": components["schemas"]["GeneratedProtocolDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Вскрытие не проводилось */
             404: {
                 headers: {
@@ -10619,6 +11902,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Протокол уже сформирован */
             409: {
                 headers: {
@@ -10628,6 +11912,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     admission_protocol_pdf: {
@@ -10651,6 +11937,9 @@ export interface operations {
                     "application/pdf": number[];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Протокол не сформирован */
             404: {
                 headers: {
@@ -10660,6 +11949,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     tender_amendments: {
@@ -10683,12 +11974,29 @@ export interface operations {
                     "application/json": components["schemas"]["AmendmentDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     amend_tender: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -10710,6 +12018,9 @@ export interface operations {
                     "application/json": components["schemas"]["AmendmentDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -10719,6 +12030,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Изменение невозможно (п. 27) */
             409: {
                 headers: {
@@ -10728,6 +12040,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     announcement_pdf: {
@@ -10751,6 +12065,7 @@ export interface operations {
                     "application/pdf": number[];
                 };
             };
+            400: components["responses"]["BadRequest"];
             /** @description Не найден */
             404: {
                 headers: {
@@ -10760,6 +12075,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     tender_applications: {
@@ -10783,6 +12100,8 @@ export interface operations {
                     "application/json": components["schemas"]["ApplicationDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -10792,12 +12111,28 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     submit_application: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -10819,6 +12154,11 @@ export interface operations {
                     "application/json": components["schemas"]["ApplicationDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Прием закрыт / дубль заявки (п. 22, INV-037) */
             409: {
                 headers: {
@@ -10828,6 +12168,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
                 headers: {
@@ -10842,7 +12183,12 @@ export interface operations {
     cancel_tender: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -10862,6 +12208,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -10871,6 +12220,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Отмена невозможна (п. 78) */
             409: {
                 headers: {
@@ -10880,12 +12230,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     declare_coi: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -10905,6 +12262,8 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Пользователь не член действующей комиссии */
             403: {
                 headers: {
@@ -10914,6 +12273,11 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     tender_contracts: {
@@ -10937,12 +12301,31 @@ export interface operations {
                     "application/json": components["schemas"]["ContractDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     declare_failed: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -10960,6 +12343,9 @@ export interface operations {
                     "application/json": components["schemas"]["FailureStateDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -10969,6 +12355,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Основание п. 81 не наступило */
             409: {
                 headers: {
@@ -10978,6 +12365,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     list_documents: {
@@ -11001,6 +12390,10 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDocumentDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     upload_document: {
@@ -11008,7 +12401,12 @@ export interface operations {
             query: {
                 title: string;
             };
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11030,6 +12428,14 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDocumentDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            409: components["responses"]["IdempotencyInFlight"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     download_document: {
@@ -11055,6 +12461,10 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     tender_dossier: {
@@ -11078,6 +12488,20 @@ export interface operations {
                     "application/json": components["schemas"]["DossierItemDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     dossier_archive: {
@@ -11101,6 +12525,9 @@ export interface operations {
                     "application/zip": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -11110,6 +12537,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     tender_evasions: {
@@ -11133,12 +12562,31 @@ export interface operations {
                     "application/json": components["schemas"]["EvasionDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     generate_failed_protocol: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11156,6 +12604,9 @@ export interface operations {
                     "application/json": components["schemas"]["GeneratedProtocolDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -11165,6 +12616,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Тендер не признан несостоявшимся либо протокол уже есть */
             409: {
                 headers: {
@@ -11174,6 +12626,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     failed_protocol_pdf: {
@@ -11197,6 +12651,9 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Протокол не сформирован */
             404: {
                 headers: {
@@ -11206,6 +12663,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     failure_state: {
@@ -11229,6 +12688,9 @@ export interface operations {
                     "application/json": components["schemas"]["FailureStateDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -11238,6 +12700,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     tender_journal: {
@@ -11261,6 +12725,8 @@ export interface operations {
                     "application/json": components["schemas"]["JournalEntryDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
             /** @description Недостаточно прав */
             403: {
                 headers: {
@@ -11270,6 +12736,17 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     qualification_meeting: {
@@ -11293,6 +12770,9 @@ export interface operations {
                     "application/json": components["schemas"]["MeetingDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Заседание не назначено */
             404: {
                 headers: {
@@ -11302,12 +12782,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     record_attendance: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11329,6 +12816,11 @@ export interface operations {
                     "application/json": components["schemas"]["AttendanceRowDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Заседание уже открыто либо нет утвержденной комиссии */
             409: {
                 headers: {
@@ -11338,12 +12830,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     open_meeting: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11359,6 +12858,19 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Кворума нет либо заседание уже открыто */
             409: {
                 headers: {
@@ -11368,12 +12880,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     notify_admitted: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11391,6 +12910,9 @@ export interface operations {
                     "application/json": components["schemas"]["NotifyAdmittedResponse"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -11400,6 +12922,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Нет протокола, нет допущенных или уже разосланы */
             409: {
                 headers: {
@@ -11409,12 +12932,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     open_tender: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11432,6 +12962,11 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Вскрытие невозможно (статус/время/комиссия) */
             409: {
                 headers: {
@@ -11441,12 +12976,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     open_acceptance: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11464,6 +13006,11 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Переход отклонен (INV-021) */
             409: {
                 headers: {
@@ -11473,6 +13020,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     tender_protocols: {
@@ -11496,12 +13045,29 @@ export interface operations {
                     "application/json": components["schemas"]["ProtocolDto"][];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     publish_tender: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11519,6 +13085,11 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Переход отклонен (INV-021, FR-303) */
             409: {
                 headers: {
@@ -11528,12 +13099,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     set_recording: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11555,6 +13133,9 @@ export interface operations {
                     "application/json": components["schemas"]["TenderDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Не найден */
             404: {
                 headers: {
@@ -11564,6 +13145,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Торги еще не подведены */
             409: {
                 headers: {
@@ -11573,12 +13155,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     recuse_member: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11598,6 +13187,11 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Отвод невозможен */
             409: {
                 headers: {
@@ -11607,6 +13201,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
             /** @description Основание отвода не указано */
             422: {
                 headers: {
@@ -11621,7 +13216,12 @@ export interface operations {
     repeat_tender: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Несостоявшийся тендер */
                 id: string;
@@ -11639,6 +13239,9 @@ export interface operations {
                     "application/json": components["schemas"]["RepeatTenderDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -11648,6 +13251,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Повтор невозможен (п. 82–83) */
             409: {
                 headers: {
@@ -11657,6 +13261,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     results_protocol_meta: {
@@ -11680,6 +13286,9 @@ export interface operations {
                     "application/json": components["schemas"]["GeneratedProtocolDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Протокол не сформирован */
             404: {
                 headers: {
@@ -11689,12 +13298,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     generate_results_protocol: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11712,6 +13328,9 @@ export interface operations {
                     "application/json": components["schemas"]["GeneratedProtocolDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -11721,6 +13340,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Торги не завершены или протокол уже сформирован */
             409: {
                 headers: {
@@ -11730,6 +13350,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     results_protocol_pdf: {
@@ -11753,6 +13375,9 @@ export interface operations {
                     "application/pdf": number[];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Протокол не сформирован */
             404: {
                 headers: {
@@ -11762,12 +13387,19 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     generate_winner2_protocol: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
             path: {
                 /** @description Тендер */
                 id: string;
@@ -11785,6 +13417,9 @@ export interface operations {
                     "application/json": components["schemas"]["GeneratedProtocolDto"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Тендер не найден */
             404: {
                 headers: {
@@ -11794,6 +13429,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
             /** @description Уклонения нет либо протокол уже сформирован */
             409: {
                 headers: {
@@ -11803,6 +13439,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     winner2_protocol_pdf: {
@@ -11826,6 +13464,9 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
             /** @description Протокол не сформирован */
             404: {
                 headers: {
@@ -11835,6 +13476,8 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
 }
