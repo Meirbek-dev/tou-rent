@@ -8,7 +8,13 @@ import { cn } from "@/lib/utils"
 
 // FR-1401: статичная страница «как участвовать» (п. 5–6)
 export const Route = createFileRoute("/how-to")({
-  head: () => ({ meta: [{ title: `${m.howto_title()} - ToU Rent` }] }),
+  head: () => ({
+    meta: [
+      { title: `${m.howto_title()} - ToU Rent` },
+      { property: "og:title", content: m.howto_title() },
+      { property: "og:description", content: m.howto_intro() },
+    ],
+  }),
   component: HowToPage,
 })
 

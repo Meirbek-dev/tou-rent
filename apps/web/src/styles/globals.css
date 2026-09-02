@@ -38,6 +38,9 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-brand-accent: var(--brand-accent);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -55,15 +58,21 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* NFR-04, гейт G17: белый текст на кнопке добирает 4.5:1 только с этой
-     светлоты. Тон и насыщенность бренда не тронуты, светлота сдвинута
-     на 0.04 — измерено 4.03:1 до и 4.78:1 после */
-  --primary: oklch(0.56 0.188 259.8145);
+  /* NFR-04, гейт G17: фирменный нави ТОУ #1D3D66. Он темный настолько, что
+     один токен честно работает и заливкой, и текстом: белая подпись на
+     кнопке 10.98:1, он же текстом на фоне и на карточке 10.98:1, бейдж
+     info (подложка 10 %) 9.23:1. Прежний стоковый голубой давал 4.78:1
+     заливкой и лишь 4.38:1 текстом */
+  --primary: oklch(0.358 0.081 255.6);
   --primary-foreground: oklch(1 0 0);
   --secondary: oklch(0.967 0.001 286.375);
   --secondary-foreground: oklch(0.21 0.006 285.885);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  /* NFR-04, гейт G17: приглушенный текст лежит и на подложке --muted
+     (бейдж neutral, врезка «вопросы» на /how-to), а не только на белом.
+     На светлоте 0.556 он давал 4.73:1 на белом и лишь 4.34:1 на подложке;
+     на 0.52 - 5.5:1 и 5.05:1 */
+  --muted-foreground: oklch(0.52 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   /* Тот же рубеж для бейджа отказа: красный текст на 10-процентной
@@ -72,46 +81,60 @@
   --destructive: oklch(0.52 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
+  /* Фокус в фирменном тоне вместо серого: 4.86:1 к белому фону и 3.86:1
+     к --border — рубеж 3:1 для нефокусного элемента взят с запасом, и
+     кольцо не путается с обычной рамкой */
+  --ring: oklch(0.55 0.1 255.6);
+  /* Ступени одного фирменного тона, нави — темный конец. Оранжевый в
+     шкалу не идет: последовательная шкала читается порядком только при
+     постоянном тоне, а акцент бренда — полоса плашки, а не категория */
+  --chart-1: oklch(0.8 0.06 255.6);
+  --chart-2: oklch(0.69 0.085 255.6);
+  --chart-3: oklch(0.58 0.105 255.6);
+  --chart-4: oklch(0.47 0.1 255.6);
+  --chart-5: oklch(0.358 0.081 255.6);
   --radius: 0.625rem;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
+  --sidebar-primary: oklch(0.358 0.081 255.6);
+  --sidebar-primary-foreground: oklch(1 0 0);
   --sidebar-accent: oklch(0.97 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-ring: oklch(0.55 0.1 255.6);
+  /* Фирменная плашка ТОУ. Значения одинаковы в обеих темах: это не
+     адаптивный токен, а поверхность фирменного стиля — эмблема, иконки
+     PWA и обложка OG собраны на #1D3D66. Белое на нави 10.98:1,
+     оранжевая полоса на нави 3.33:1 (нетекстовый рубеж 3:1) */
+  --brand: oklch(0.358 0.081 255.6); /* #1D3D66 */
+  --brand-foreground: oklch(1 0 0);
+  --brand-accent: oklch(0.66 0.156 45.2); /* #DE6E35 */
 }
 
 .dark {
-  --background: color-mix(
-    in srgb,
-    var(--color-neutral-950) 95%,
-    var(--color-white)
-  );
+  /* Фон уведен в фирменный тон (хрома 0.012 — на грани заметности, темная
+     тема перестает быть безымянно-серой) и на 0.01 темнее прежнего
+     нейтрального #161616, итоговый sRGB - #101419. В theme-color он не
+     повторяется: полоса браузера в фирменном синем (см. __root.tsx) */
+  --background: oklch(0.19 0.012 255.6);
   --foreground: var(--color-neutral-100);
   --card: color-mix(in srgb, var(--background) 98%, var(--color-white));
   --card-foreground: var(--color-neutral-100);
   --popover: color-mix(in srgb, var(--background) 98%, var(--color-white));
   --popover-foreground: var(--color-neutral-100);
-  /* NFR-04, гейт G17: подпись кнопки была голубовато-белой и давала
-     4.21:1 — чистый белый на той же светлоте дает 4.78:1 */
-  --primary: oklch(0.56 0.188 259.8145);
-  --primary-foreground: oklch(1 0 0);
+  /* NFR-04, гейт G17: в темной теме фирменный цвет перевернут — светлый
+     тон нави. Текстом он дает 9.90:1 на фоне, 9.48:1 на карточке и 8.25:1
+     в бейдже info; заливкой — под темной подписью самим #1D3D66, 5.89:1.
+     Этим снята слабость круга 1 GAUNTLET: один токен работал и заливкой,
+     и текстом, из-за чего text-primary в темной теме падал до 3.79:1 */
+  --primary: oklch(0.8 0.09 255.6);
+  --primary-foreground: oklch(0.358 0.081 255.6);
   --secondary: --alpha(var(--color-white) / 4%);
   --secondary-foreground: var(--color-neutral-100);
   --muted: --alpha(var(--color-white) / 4%);
-  --muted-foreground: color-mix(
-    in srgb,
-    var(--color-neutral-500) 90%,
-    var(--color-white)
-  );
+  /* Тот же рубеж на подложке --muted: смесь neutral-500 с белым давала
+     4.7:1 на фоне и 4.4:1 на подложке; на этой светлоте - 5.5:1 и 5.2:1 */
+  --muted-foreground: oklch(0.64 0.012 255.6);
   --accent: --alpha(var(--color-white) / 4%);
   --accent-foreground: var(--color-neutral-100);
   --destructive: color-mix(
@@ -121,20 +144,28 @@
   );
   --border: --alpha(var(--color-white) / 6%);
   --input: --alpha(var(--color-white) / 8%);
-  --ring: var(--color-neutral-500);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.205 0 0);
+  /* Фокус в фирменном тоне: 5.71:1 к фону и 5.47:1 к карточке, при рубеже
+     3:1 для нефокусного элемента, и он светлее --border (белый 6 %) */
+  --ring: oklch(0.65 0.1 255.6);
+  /* Та же одноцветная шкала, что и в светлой теме, поднята по светлоте:
+     самая темная ступень держит 3.07:1 к фону */
+  --chart-1: oklch(0.86 0.055 255.6);
+  --chart-2: oklch(0.77 0.08 255.6);
+  --chart-3: oklch(0.68 0.1 255.6);
+  --chart-4: oklch(0.59 0.105 255.6);
+  --chart-5: oklch(0.5 0.1 255.6);
+  --sidebar: oklch(0.205 0.014 255.6);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-primary: oklch(0.8 0.09 255.6);
+  --sidebar-primary-foreground: oklch(0.358 0.081 255.6);
+  --sidebar-accent: oklch(0.269 0.012 255.6);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.65 0.1 255.6);
+  /* Плашка ТОУ повторяет светлую тему один в один — см. :root */
+  --brand: oklch(0.358 0.081 255.6); /* #1D3D66 */
+  --brand-foreground: oklch(1 0 0);
+  --brand-accent: oklch(0.66 0.156 45.2); /* #DE6E35 */
 }
 
 @layer base {

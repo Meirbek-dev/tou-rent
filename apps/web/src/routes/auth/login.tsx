@@ -69,7 +69,7 @@ function LoginPage() {
       >
         <div className="flex flex-col gap-6 rounded-xl border bg-card p-6 shadow-xs sm:p-8">
           <div className="flex flex-col gap-4">
-            <AppLogo />
+            <AppLogo variant="auth" />
             <div className="flex flex-col gap-2">
               <h1 className="text-2xl font-semibold tracking-tight">
                 {m.auth_login_title()}

@@ -22,7 +22,13 @@ export const Route = createFileRoute("/tenders/")({
   loaderDeps: ({ search }) => ({ after: search.after }),
   loader: ({ context, deps }) =>
     context.queryClient.ensureQueryData(tendersPageQuery(deps.after)),
-  head: () => ({ meta: [{ title: `${m.tenders_title()} - ToU Rent` }] }),
+  // og:title без суффикса: марку в карточке ссылки несет og:site_name
+  head: () => ({
+    meta: [
+      { title: `${m.tenders_title()} - ToU Rent` },
+      { property: "og:title", content: m.tenders_title() },
+    ],
+  }),
   component: TendersPage,
   pendingComponent: () => <RegistryPending title={m.tenders_title()} />,
 })

@@ -61,14 +61,18 @@ export function AppSidebar({
 
   return (
     <Sidebar collapsible="icon">
-      {/* Знак портала - в свернутом виде прячется целиком: он горизонтальный
-          и в колонку 3rem не кадрируется без потери слова */}
-      <SidebarHeader className="group-data-[collapsible=icon]:hidden">
+      {/* В свернутом виде остается одна эмблема: она вертикальная и в колонку
+          3rem входит целиком, поэтому ссылка на кабинет никуда не пропадает */}
+      <SidebarHeader className="group-data-[collapsible=icon]:px-0">
         <Link
           to="/app"
-          className="flex items-center rounded-lg px-1 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+          className="flex items-center rounded-lg px-1 outline-none group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
         >
-          <AppLogo />
+          <AppLogo className="group-data-[collapsible=icon]:hidden" />
+          <AppLogo
+            variant="compact"
+            className="hidden group-data-[collapsible=icon]:flex"
+          />
         </Link>
       </SidebarHeader>
 
