@@ -4,6 +4,7 @@ import {
   accounts,
   castVotes,
   commissionMembers,
+  confirmAction,
   decisionForm,
   loginAsUi,
   provisionDemoTender,
@@ -35,7 +36,10 @@ test("организатор: объект → расчет ставки → т�
     // Форма создания живет в диалоге - его сперва открывают кнопкой
     await page.getByTestId("open-create-object").click()
     await page.locator("#obj-name").fill(objectName)
+    // Казахское наименование и адрес обязательны: объявление двуязычное
+    await page.locator("#obj-name-kk").fill(`${objectName} (kk)`)
     await page.locator("#obj-address").fill("г. Павлодар, ул. Ломова, 64")
+    await page.locator("#obj-address-kk").fill("Павлодар қ., Ломов к., 64")
     await page.locator("#obj-area").fill("42")
     await page.getByTestId("create-object").click()
     await expect(page.getByText(objectName).first()).toBeVisible()
@@ -52,16 +56,20 @@ test("организатор: объект → расчет ставки → т�
   await test.step("тендер с лотом (FR-301)", async () => {
     await page.goto("/app/organizer/tenders/new")
     await page.locator("#tender-title").fill(tenderTitle)
+    await page.locator("#tender-title-kk").fill(`${tenderTitle} (kk)`)
     // Подпись опции - «имя - площадь м²»
     await page
       .locator("#lot-0-object")
       .selectOption({ label: `${objectName} - 42.00 м²` })
     await page.locator("#lot-0-purpose").fill("E2E назначение")
+    await page.locator("#lot-0-purpose-kk").fill("E2E мақсаты")
     await page.getByTestId("create-tender").click()
     await expect(page.getByRole("heading", { name: tenderTitle })).toBeVisible()
   })
 
   await test.step("даты и публикация (FR-303: ≥10 дней до вскрытия)", async () => {
+    // Сроки процесса живут на вкладке «Лоты и сроки»
+    await page.getByRole("tab", { name: /лоты и сроки/i }).click()
     await page.locator("#dates-deadline").fill(almatyInput(12))
     await page.locator("#dates-opening").fill(almatyInput(13))
     await page.getByTestId("save-dates").click()
@@ -248,6 +256,8 @@ test("комиссия и торги: вскрытие → допуск → ув
 
   await test.step("завершение торгов и протокол итогов (FR-606, FR-701)", async () => {
     await page.getByTestId("finish-auction").click()
+    // Завершение торгов необратимо - его подтверждают в диалоге
+    await confirmAction(page, /завершить торги/i)
     await expect(page.getByTestId("auction-winner")).toBeVisible()
 
     await page.goto(`/app/secretary/tenders/${tenderId}?tab=auction`)

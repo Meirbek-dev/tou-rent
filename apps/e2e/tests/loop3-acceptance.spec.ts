@@ -245,7 +245,10 @@ test("особый порядок: инвестор - заявка, заключ
     await guest.request.get("/")
     const portal = await guest.request.get("/api/v1/public-records")
     expect(portal.status(), "реестр публикаций портала").toBe(200)
-    const records = (await portal.json()) as { kind: string; title: string }[]
+    // Реестр отдается страницей (PublicRecordPage), а не голым массивом
+    const { items: records } = (await portal.json()) as {
+      items: { kind: string; title: string }[]
+    }
     expect(
       records.some((record) => record.kind === "decision"),
       "результат особого порядка виден публично"
@@ -354,9 +357,18 @@ test("особый порядок: почасовая - ставка от 2 МР
       "/api/v1/reports/decisions?from=" + new Date().toISOString().slice(0, 10)
     )
     expect(registry.status(), "реестр решений").toBe(200)
-    const { rows } = (await registry.json()) as { rows: string[][] }
+    // Ячейка реестра - объект с подписью на трех языках (NFR-01):
+    // делопроизводственная запись лежит в `text_ru`
+    const { rows } = (await registry.json()) as {
+      rows: { text_ru: string }[][]
+    }
     expect(
-      rows.some((row) => row.join(" ").includes("Приемка контура 3")),
+      rows.some((row) =>
+        row
+          .map((cell) => cell.text_ru)
+          .join(" ")
+          .includes("Приемка контура 3")
+      ),
       "решение попало в реестр отчетности"
     ).toBe(true)
   })

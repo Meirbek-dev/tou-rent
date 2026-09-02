@@ -158,6 +158,21 @@ function provision(subcommand: string, argument?: string): string {
   return id
 }
 
+/**
+ * Подтверждение необратимого действия (`ConfirmAction`): завершение торгов,
+ * признание уклонения, отмена тендера открывают `alertdialog`, и действие
+ * происходит только по кнопке в нем. `name` - подпись подтверждающей кнопки.
+ */
+export async function confirmAction(
+  page: Page,
+  name: RegExp | string
+): Promise<void> {
+  const dialog = page.getByRole("alertdialog")
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole("button", { name }).click()
+  await expect(dialog).toBeHidden()
+}
+
 /** Заголовок карточки заявки в решениях комиссии - по имени заявителя. */
 export function decisionForm(page: Page, applicantName: string) {
   return page.locator("form").filter({ hasText: applicantName })

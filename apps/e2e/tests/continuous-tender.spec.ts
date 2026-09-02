@@ -48,17 +48,22 @@ test("сквозной путь без вставки состояния: пуб
       // Форма создания живет в диалоге - его сперва открывают кнопкой
       await page.getByTestId("open-create-object").click()
       await page.locator("#obj-name").fill(objectName)
+      // Казахское наименование и адрес обязательны: объявление двуязычное
+      await page.locator("#obj-name-kk").fill(`${objectName} (kk)`)
       await page.locator("#obj-address").fill("г. Павлодар, ул. Ломова, 68")
+      await page.locator("#obj-address-kk").fill("Павлодар қ., Ломов к., 68")
       await page.locator("#obj-area").fill("42")
       await page.getByTestId("create-object").click()
       await expect(page.getByText(objectName).first()).toBeVisible()
 
       await page.goto("/app/organizer/tenders/new")
       await page.locator("#tender-title").fill(tenderTitle)
+      await page.locator("#tender-title-kk").fill(`${tenderTitle} (kk)`)
       await page
         .locator("#lot-0-object")
         .selectOption({ label: `${objectName} - 42.00 м²` })
       await page.locator("#lot-0-purpose").fill("T68 назначение")
+      await page.locator("#lot-0-purpose-kk").fill("T68 мақсаты")
       await page.getByTestId("create-tender").click()
       await expect(
         page.getByRole("heading", { name: tenderTitle })
@@ -69,6 +74,8 @@ test("сквозной путь без вставки состояния: пуб
 
     await test.step("публикация и открытие приема (FR-303, п. 36)", async () => {
       // Дедлайн через 11 дней, вскрытие через 12: окно FR-303 набирается
+      // Сроки процесса живут на вкладке «Лоты и сроки»
+      await page.getByRole("tab", { name: /лоты и сроки/i }).click()
       await page.locator("#dates-deadline").fill(almatyInput(11))
       await page.locator("#dates-opening").fill(almatyInput(12))
       await page.getByTestId("save-dates").click()

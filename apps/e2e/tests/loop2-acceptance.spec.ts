@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test"
 
 import {
   accounts,
+  confirmAction,
   loginAsUi,
   provisionSingleApplicationTender,
   provisionSummedUpTender,
@@ -116,7 +117,7 @@ test("полный тендер до договора: конвейер п. 110�
       .fill(new Date().toISOString().slice(0, 10))
     await acts.click()
     await expect(page.getByTestId("acts").first()).toContainText(
-      "акт приема-передачи"
+      /акт приема-передачи/i
     )
   })
 
@@ -231,11 +232,15 @@ test("победитель уклонился → № 2: удержание вз
     const select = page.getByLabel(/основание уклонения/i).first()
     await select.selectOption({ index: 1 })
     await page.getByTestId("declare-evasion").click()
+    // Признание уклонения необратимо - его подтверждают в диалоге
+    await confirmAction(page, /признать уклонившимся/i)
 
     // Договор прекращен, взнос удержан - карточка говорит об этом прямо
     await expect(page.getByTestId("contract-card").first()).toContainText(
       /взнос удержан/i
     )
+    // Реестр уклонений живет на вкладке «Риск»
+    await page.getByRole("tab", { name: /риск/i }).click()
     await expect(page.getByTestId("evasion-panel")).toBeVisible()
   })
 
@@ -283,7 +288,8 @@ test("победитель уклонился → № 2: удержание вз
   })
 
   await test.step("договор составляется с участником № 2 на его ставку (п. 117)", async () => {
-    await page.reload()
+    // Вкладка живет в адресе: после реестра уклонений возвращаемся к договорам
+    await page.goto(`/app/organizer/tenders/${tenderId}?tab=contracts`)
     await page.getByTestId("draft-contract").first().click()
 
     const cards = page.getByTestId("contract-card")
