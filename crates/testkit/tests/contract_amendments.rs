@@ -102,7 +102,7 @@ async fn fixture(tx: &mut sqlx::PgConnection, registered: bool) -> Result<Fixtur
         "INSERT INTO core.contracts
            (tender_id, object_id, tenant_id, monthly_rate, status, lease_period,
             drafted_at, tenant_signed_at, documents_received_at)
-         VALUES ($1, $2, $3, 79750, 'active',
+         VALUES ($1, $2, $3, 79750, 'draft',
                  tstzrange(now() - interval '10 days', now() + interval '350 days'),
                  core.now(), core.now(), core.now())
          RETURNING id",
@@ -116,7 +116,9 @@ async fn fixture(tx: &mut sqlx::PgConnection, registered: bool) -> Result<Fixtur
     if registered {
         // Регистрация требует завершенной сверки и обеих подписей
         // (INV-115, FR-905). Отметки ставит сервер (`core.now()`, ADR-0005):
-        // фикстура на часах процесса разошлась бы с тем, что проверяет тест
+        // фикстура на часах процесса разошлась бы с тем, что проверяет тест.
+        // Действие договора - следствие подписи, а не отдельная вставка:
+        // `active` без подписи наймодателя таблица не примет (INV-115)
         sqlx::query!(
             "INSERT INTO core.contract_checklists (contract_id, item_code, checked_at)
              VALUES ($1, 'bank_details', core.now())",
@@ -126,7 +128,8 @@ async fn fixture(tx: &mut sqlx::PgConnection, registered: bool) -> Result<Fixtur
         .await?;
         sqlx::query!(
             "UPDATE core.contracts
-             SET landlord_signed_at = core.now(), registered_at = core.now(), reg_number = $2
+             SET status = 'active', landlord_signed_at = core.now(),
+                 registered_at = core.now(), reg_number = $2
              WHERE id = $1",
             contract_id,
             format!("Д-{tag}")

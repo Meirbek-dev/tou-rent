@@ -251,21 +251,29 @@ pub async fn complete_tender(
 pub async fn for_roles(
     db: &Db,
     roles: &[Role],
+    after: Option<Uuid>,
+    limit: i64,
 ) -> Result<crate::Page<ObligationRecord>, sqlx::Error> {
     let names: Vec<String> = roles.iter().map(|r| r.as_str().to_owned()).collect();
 
+    // Порядок дашборда - по сроку, а не по id: ближайший срок сверху.
+    // Поэтому курсор идет парой (`due_at`, `id`), а сам ключ БД находит по
+    // переданному id - клиент листает, не зная состава ключа.
     let rows = obligation_query!(
         " WHERE o.assignee_role = ANY($1::text[]::core.role[])
             AND o.status IN ('pending', 'overdue')
-          ORDER BY o.due_at LIMIT $2",
+            AND ($2::uuid IS NULL
+                 OR (o.due_at, o.id)
+                    > (SELECT due_at, id FROM core.obligations WHERE id = $2))
+          ORDER BY o.due_at, o.id LIMIT $3",
         &names,
-        crate::probe_limit(crate::MAX_ROWS)
+        after,
+        crate::probe_limit(limit)
     )
     .fetch_all(db)
     .await?;
-    let page = crate::Page::probe(rows, crate::MAX_ROWS);
-    crate::warn_if_truncated(page.truncated, "obligations::for_roles");
-    page.try_map(ObligationRecord::try_from)
+    // См. `contracts::list_for_tenant`
+    crate::Page::probe(rows, limit).try_map(ObligationRecord::try_from)
 }
 
 /// Просроченное обязательство и получатель эскалации.
@@ -346,10 +354,17 @@ pub async fn take_overdue(db: &Db) -> Result<Vec<Escalation>, sqlx::Error> {
     .execute(&mut *tx)
     .await?;
 
-    // Актор записи - получатель: системного пользователя в модели нет,
-    // а доказательная база (FR-1302) требует непустого актора. Актор
-    // транзакции один на момент вставки (GUC `app.user_id`), поэтому
-    // уведомления идут пачкой на получателя, а не по одному на срок
+    // Актор записи - система, как и у самой эскалации выше (круг 2
+    // гаунтлета, G-025). Прежде уведомление писалось под актором
+    // получателя: аудит показывал, что исполнитель сам себе объявил
+    // просрочку, - ровно наоборот тому, что произошло, и рядом с
+    // системным событием о смене статуса в той же транзакции. Актор
+    // NULL в `audit.log` - это и есть «сделала система» (INV-A01);
+    // доказательная база FR-1302 держится адресатом уведомления
+    // (`user_id`), а не подставным автором.
+    //
+    // Пачка на получателя остается: одним INSERT на всех она была бы
+    // одним событием аудита о разнородных строках.
     let mut by_recipient: BTreeMap<Uuid, Vec<serde_json::Value>> = BTreeMap::new();
     for item in &rows {
         by_recipient
@@ -360,7 +375,6 @@ pub async fn take_overdue(db: &Db) -> Result<Vec<Escalation>, sqlx::Error> {
 
     let kind = NotificationKind::ObligationOverdue.as_str();
     for (recipient, payloads) in &by_recipient {
-        crate::set_actor(&mut tx, *recipient).await?;
         sqlx::query!(
             "INSERT INTO core.notifications (user_id, kind, payload)
              SELECT $1::uuid, $2::text, payload FROM unnest($3::jsonb[]) AS payload",

@@ -113,7 +113,7 @@ async fn registered_contract(tx: &mut sqlx::PgConnection) -> Result<Uuid, sqlx::
         "INSERT INTO core.contracts
            (object_id, tenant_id, monthly_rate, status, lease_period,
             drafted_at, tenant_signed_at, documents_received_at)
-         VALUES ($1, $2, 79750, 'active',
+         VALUES ($1, $2, 79750, 'draft',
                  tstzrange(now(), now() + interval '365 days'),
                  core.now(), core.now(), core.now())
          RETURNING id",
@@ -125,7 +125,9 @@ async fn registered_contract(tx: &mut sqlx::PgConnection) -> Result<Uuid, sqlx::
 
     // Регистрация требует завершенной сверки и обеих подписей (INV-115,
     // FR-905): договор доводится до нее шагами, а не рождается
-    // зарегистрированным - иначе фикстура обходит те самые сторожа
+    // зарегистрированным - иначе фикстура обходит те самые сторожа.
+    // Действующим он становится тем же шагом: `active` без подписи
+    // наймодателя таблица не примет (INV-115, круг 2 гаунтлета)
     sqlx::query!(
         "INSERT INTO core.contract_checklists (contract_id, item_code, checked_at)
          VALUES ($1, 'bank_details', core.now())",
@@ -135,7 +137,8 @@ async fn registered_contract(tx: &mut sqlx::PgConnection) -> Result<Uuid, sqlx::
     .await?;
     sqlx::query!(
         "UPDATE core.contracts
-         SET landlord_signed_at = core.now(), registered_at = core.now(), reg_number = $2
+         SET status = 'active', landlord_signed_at = core.now(),
+             registered_at = core.now(), reg_number = $2
          WHERE id = $1",
         contract,
         format!("Д-Т43-{tag}")

@@ -147,7 +147,7 @@ async fn audit_log_is_append_only() {
     rejected!("DELETE FROM audit.log WHERE id = (SELECT max(id) FROM audit.log)");
 }
 
-/// G15, обратное направление: каждая мутируемая таблица `core` аудируется.
+/// G15, обратное направление: каждая мутируемая таблица домена аудируется.
 ///
 /// Прежний G15 проверял только «у каждой таблицы перечня есть триггер», то
 /// есть таблица, забытая в перечне, оставалась зеленой навсегда. Круг 2
@@ -157,10 +157,17 @@ async fn audit_log_is_append_only() {
 ///
 /// Поэтому направление здесь обратное и не зависит от текста INVENTORY.md:
 /// перечень берется из прав роли приложения. Если роль может писать в
-/// таблицу схемы `core`, у таблицы обязан быть триггер `audit.record*` -
-/// либо она названа исключением ниже, с обоснованием.
+/// таблицу домена, у таблицы обязан быть триггер `audit.record*` - либо она
+/// названа исключением ниже, с обоснованием.
+///
+/// Схем две. `refdata` попала сюда во втором круге гаунтлета (G-031):
+/// правка справочника - такое же решение человека, как и правка объекта
+/// (FR-1901, T53), и аудируется тем же механизмом, а гейт смотрел только на
+/// `core`. Справочник, открытый роли приложения на запись без триггера,
+/// оставался бы зеленым - при том что сегодня зелен и весь `refdata`.
+/// Имя таблицы берется вместе со схемой: исключения у схем разные.
 #[tokio::test]
-async fn g15_every_mutable_core_table_is_audited() {
+async fn g15_every_mutable_domain_table_is_audited() {
     let db = require_db!();
 
     /// Осознанные исключения: не факты домена, а внутренняя механика.
@@ -168,13 +175,13 @@ async fn g15_every_mutable_core_table_is_audited() {
     /// выводится из самих записей, которые аудируются);
     /// `account_verifications` - одноразовые коды подтверждения
     /// регистрации, живут минутами и гасятся по `expires_at`.
-    const EXEMPT: [&str; 2] = ["account_verifications", "journal_counters"];
+    const EXEMPT: [&str; 2] = ["core.account_verifications", "core.journal_counters"];
 
     let unaudited = sqlx::query_scalar!(
-        r#"SELECT c.relname AS "table!"
+        r#"SELECT n.nspname || '.' || c.relname AS "table!"
            FROM pg_class c
            JOIN pg_namespace n ON n.oid = c.relnamespace
-           WHERE n.nspname = 'core' AND c.relkind = 'r'
+           WHERE n.nspname IN ('core', 'refdata') AND c.relkind = 'r'
              AND (has_table_privilege('tou_rent_app', c.oid, 'INSERT')
                OR has_table_privilege('tou_rent_app', c.oid, 'UPDATE')
                OR has_table_privilege('tou_rent_app', c.oid, 'DELETE'))
@@ -198,10 +205,13 @@ async fn g15_every_mutable_core_table_is_audited() {
 
     assert!(
         missing.is_empty(),
-        "мутируемые таблицы core без audit-триггера: {missing:?}. \
+        "мутируемые таблицы core/refdata без audit-триггера: {missing:?}. \
          Регламент А.5: каждая мутация домена пишет audit-событие. \
          Добавьте CREATE TRIGGER audit_record ... EXECUTE FUNCTION audit.record() \
+         (справочнику с естественным ключом - audit.record_natural_key()) \
          и внесите таблицу в перечень INV-AUDIT (specs/INVENTORY.md), \
-         либо назовите ее исключением в EXEMPT с обоснованием"
+         либо назовите ее исключением в EXEMPT с обоснованием. \
+         Справочнику, который приложению писать не нужно, отзовите права \
+         роли tou_rent_app - из перечня он выйдет сам"
     );
 }

@@ -85,7 +85,16 @@ async fn global_registries_run_with_cap() {
     public_records::list_public(&db, None, tou_db::MAX_ROWS)
         .await
         .expect("публикации портала");
-    public_records::pending(&db).await.expect("ждет публикации");
+    public_records::pending(&db, None, tou_db::MAX_ROWS)
+        .await
+        .expect("ждет публикации");
+    // Ветка с курсором разбирается отдельно: у нее свой набор плейсхолдеров
+    public_records::pending(&db, Some(Uuid::now_v7()), tou_db::MAX_ROWS)
+        .await
+        .expect("ждет публикации, с курсора");
+    tou_db::tenders::list_all(&db, Some(Uuid::now_v7()), tou_db::MAX_ROWS)
+        .await
+        .expect("тендеры со сроками, с курсора");
 }
 
 /// Списки по владельцу: потолок идет вторым параметром - здесь и живет
@@ -93,17 +102,24 @@ async fn global_registries_run_with_cap() {
 #[tokio::test]
 async fn per_owner_lists_run_with_cap() {
     let db = require_db!();
+    let mut conn = db.acquire().await.expect("соединение");
     let nobody = Uuid::now_v7();
 
     applications::list_own(&db, nobody)
         .await
         .expect("заявки участника");
-    contracts::list_for_tenant(&db, nobody)
+    contracts::list_for_tenant(&mut conn, nobody, None, tou_db::MAX_ROWS)
         .await
         .expect("договоры нанимателя");
-    publications::list_for_participant(&db, nobody)
+    contracts::list_for_tenant(&mut conn, nobody, Some(nobody), tou_db::MAX_ROWS)
+        .await
+        .expect("договоры нанимателя, с курсора");
+    publications::list_for_participant(&db, nobody, None, tou_db::MAX_ROWS)
         .await
         .expect("протоколы участника");
+    publications::list_for_participant(&db, nobody, Some(nobody), tou_db::MAX_ROWS)
+        .await
+        .expect("протоколы участника, с курсора");
     special::list_own(&db, nobody)
         .await
         .expect("заявки особого порядка");
@@ -122,14 +138,15 @@ async fn an_empty_selection_is_not_truncated() {
     let db = require_db!();
     let nobody = Uuid::now_v7();
 
+    let mut conn = db.acquire().await.expect("соединение");
     assert!(
-        !contracts::list_for_tenant(&db, nobody)
+        !contracts::list_for_tenant(&mut conn, nobody, None, tou_db::MAX_ROWS)
             .await
             .expect("договоры нанимателя")
             .truncated
     );
     assert!(
-        !publications::list_for_participant(&db, nobody)
+        !publications::list_for_participant(&db, nobody, None, tou_db::MAX_ROWS)
             .await
             .expect("протоколы участника")
             .truncated
@@ -147,9 +164,22 @@ async fn an_empty_selection_is_not_truncated() {
 async fn worklists_run_with_cap() {
     let db = require_db!();
 
-    obligations::for_roles(&db, &[Role::Organizer, Role::Secretary])
-        .await
-        .expect("мои сроки");
+    obligations::for_roles(
+        &db,
+        &[Role::Organizer, Role::Secretary],
+        None,
+        tou_db::MAX_ROWS,
+    )
+    .await
+    .expect("мои сроки");
+    obligations::for_roles(
+        &db,
+        &[Role::Organizer, Role::Secretary],
+        Some(Uuid::now_v7()),
+        tou_db::MAX_ROWS,
+    )
+    .await
+    .expect("мои сроки, с курсора");
     special::list_by_status(&db, &["submitted", "under_review"])
         .await
         .expect("заявки в работе");
@@ -228,7 +258,7 @@ async fn receipts_of_one_account(
         "INSERT INTO core.contracts
            (object_id, tenant_id, monthly_rate, status, lease_period,
             drafted_at, tenant_signed_at, documents_received_at)
-         VALUES ($1, $2, 1000, 'active',
+         VALUES ($1, $2, 1000, 'draft',
                  tstzrange(now(), now() + interval '365 days'),
                  core.now(), core.now(), core.now())
          RETURNING id",
@@ -238,7 +268,9 @@ async fn receipts_of_one_account(
     .fetch_one(&mut *tx)
     .await?;
 
-    // Регистрация - через сверку и подписи (INV-115, FR-905), а не одной вставкой
+    // Регистрация - через сверку и подписи (INV-115, FR-905), а не одной
+    // вставкой; действующим договор становится там же: рожденный `active`
+    // он обошел бы тот же рубеж (INV-115, круг 2 гаунтлета)
     sqlx::query!(
         "INSERT INTO core.contract_checklists (contract_id, item_code, checked_at)
          VALUES ($1, 'bank_details', core.now())",
@@ -248,7 +280,8 @@ async fn receipts_of_one_account(
     .await?;
     sqlx::query!(
         "UPDATE core.contracts
-         SET landlord_signed_at = core.now(), registered_at = core.now(), reg_number = $2
+         SET status = 'active', landlord_signed_at = core.now(),
+             registered_at = core.now(), reg_number = $2
          WHERE id = $1",
         contract,
         format!("Д-W17-{tag}")
@@ -278,6 +311,93 @@ async fn receipts_of_one_account(
     }
 
     Ok(())
+}
+
+/// `count` договоров одного нанимателя - все с одним `created_at`.
+///
+/// Одним намеренно: `now()` в транзакции один на всю транзакцию, и три
+/// договора ложатся с совпавшим временем. Курсор по голому времени такую
+/// тройку либо потеряет, либо покажет дважды - ключ должен быть парой
+/// «время + строка». Статус `draft`: договорному конвейеру здесь взяться
+/// неоткуда, а страница реестра от статуса не зависит.
+async fn contracts_of_one_tenant(
+    tx: &mut sqlx::PgConnection,
+    count: i32,
+) -> Result<Uuid, sqlx::Error> {
+    let tag = Uuid::now_v7().simple().to_string();
+
+    let tenant = sqlx::query_scalar!(
+        "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
+         VALUES ($1, 'x', 'G36 наниматель', now()) RETURNING id",
+        format!("g36-tenant-{tag}@tou.test")
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let object = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', 'G36 помещение', 'г. Павлодар, ул. Тестовая, 36', 30)
+         RETURNING id"
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    for _ in 0..count {
+        sqlx::query!(
+            "INSERT INTO core.contracts (object_id, tenant_id, monthly_rate, status, drafted_at)
+             VALUES ($1, $2, 1000, 'draft', core.now())",
+            object,
+            tenant
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    Ok(tenant)
+}
+
+/// Реестр кабинета листается своим курсором (G-036).
+///
+/// Раньше `/contracts/my` отдавал `next_after` и `truncated`, но не принимал
+/// ни `after`, ни `limit`: продолжения у усеченного ответа не было в
+/// принципе, и наниматель за потолком строк не видел ничего. Проверяется
+/// то, что курсор действительно ведет за страницу: вторая страница отдает
+/// третий договор, а не повторяет первые два.
+#[tokio::test]
+async fn a_tenant_registry_pages_with_its_cursor() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let tenant = contracts_of_one_tenant(&mut tx, 3)
+        .await
+        .expect("договоры нанимателя");
+
+    let first = contracts::list_for_tenant(&mut tx, tenant, None, 2)
+        .await
+        .expect("первая страница");
+    assert_eq!(first.len(), 2, "страница отдает ровно запрошенное");
+    assert!(first.truncated, "за страницей есть договор - и это видно");
+
+    let cursor = first.last().map(|row| row.id).expect("курсор страницы");
+    let second = contracts::list_for_tenant(&mut tx, tenant, Some(cursor), 2)
+        .await
+        .expect("вторая страница");
+
+    let first_ids: Vec<_> = first.iter().map(|row| row.id).collect();
+    assert_eq!(
+        second.len(),
+        1,
+        "третий договор достается со второй страницы"
+    );
+    assert!(
+        second.iter().all(|row| !first_ids.contains(&row.id)),
+        "курсор ведет за страницу, а не повторяет ее"
+    );
+    assert!(
+        !second.truncated,
+        "за последней страницей ничего не осталось"
+    );
+
+    tx.rollback().await.expect("rollback");
 }
 
 /// Реестр, который не поместился, так и говорит - и дает, чем продолжить.

@@ -216,6 +216,55 @@ async fn fr1702_failed_notification_leaves_the_obligation_for_the_next_pass() {
         "успешная рассылка закрывает эскалацию отметкой"
     );
 
+    // Актор эскалации - система, у обеих ее половин (круг 2 гаунтлета,
+    // G-025). Уведомление писалось под актором получателя, и аудит
+    // показывал, что исполнитель сам себе объявил просрочку, - рядом с
+    // системным событием о смене статуса в той же транзакции
+    let obligation_id = sqlx::query_scalar!(
+        "SELECT id FROM core.obligations WHERE tender_id = $1",
+        tender_id
+    )
+    .fetch_one(&db)
+    .await
+    .expect("срок");
+    let notification_id = sqlx::query_scalar!(
+        "SELECT id FROM core.notifications
+         WHERE user_id = $1 AND payload->>'tender_id' = $2::uuid::text",
+        recipient,
+        tender_id
+    )
+    .fetch_one(&db)
+    .await
+    .expect("уведомление");
+
+    let escalation_actor = sqlx::query_scalar!(
+        "SELECT actor_id FROM audit.log
+         WHERE table_name = 'core.obligations' AND row_id = $1 AND action = 'UPDATE'
+         ORDER BY id DESC LIMIT 1",
+        obligation_id
+    )
+    .fetch_one(&db)
+    .await
+    .expect("событие эскалации");
+    assert!(
+        escalation_actor.is_none(),
+        "срок просрочился сам - актор события системный (NULL)"
+    );
+
+    let notification_actor = sqlx::query_scalar!(
+        "SELECT actor_id FROM audit.log
+         WHERE table_name = 'core.notifications' AND row_id = $1 AND action = 'INSERT'
+         ORDER BY id DESC LIMIT 1",
+        notification_id
+    )
+    .fetch_one(&db)
+    .await
+    .expect("событие уведомления");
+    assert_eq!(
+        notification_actor, None,
+        "уведомление о просрочке пишет система, а не его получатель"
+    );
+
     // Уборка стенда: тест оставляет за собой только аудит
     sqlx::query!(
         "DELETE FROM core.notifications WHERE payload->>'tender_id' = $1::uuid::text",

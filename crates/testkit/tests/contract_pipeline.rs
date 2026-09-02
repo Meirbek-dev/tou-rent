@@ -360,3 +360,87 @@ async fn fr905_registration_needs_an_existing_and_unregistered_contract() {
     .expect("номер договора");
     assert_eq!(stored.as_deref(), Some(number.as_str()));
 }
+
+/// INV-115 (круг 2 гаунтлета, G-044): договор вступает в силу только
+/// подписанным наймодателем.
+///
+/// Сторож `enforce_checklist_before_signing` стерег ровно простановку
+/// `landlord_signed_at` и неподписанный договор пропускал целиком - тот
+/// переводился в `active` одной строкой, минуя и сверку, и подпись, и
+/// регистрацию. Объект при этом считался сданным, а начисления шли по
+/// договору, которого наймодатель не подписывал.
+#[tokio::test]
+async fn inv115_active_contract_requires_the_landlord_signature() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx).await.expect("фикстура");
+
+    let moved = rejected!(
+        tx,
+        sqlx::query!(
+            "UPDATE core.contracts
+             SET status = 'active',
+                 lease_period = tstzrange(core.now(), core.now() + interval '365 days')
+             WHERE id = $1",
+            f.contract_id
+        ),
+        "договор без подписи наймодателя не вступает в силу"
+    );
+    assert!(moved.contains("INV-115"), "ожидали отказ INV-115: {moved}");
+
+    // Рожденный действующим - тот же рубеж: сторожа состояния срабатывают
+    // и на INSERT (20260901180000), иначе правило звучало бы как
+    // «запрещено, если идти правильной дорогой»
+    let born = rejected!(
+        tx,
+        sqlx::query!(
+            "INSERT INTO core.contracts (object_id, tenant_id, monthly_rate, status, lease_period)
+             SELECT $1, c.tenant_id, 50000.00, 'active',
+                    tstzrange(core.now(), core.now() + interval '30 days')
+             FROM core.contracts c WHERE c.id = $2",
+            f.object_id,
+            f.contract_id
+        ),
+        "договор, рожденный действующим, обязан быть отклонен"
+    );
+    assert!(born.contains("INV-115"), "ожидали отказ INV-115: {born}");
+
+    // Сверка завершена, наймодатель подписал - тот же перевод проходит
+    sqlx::query!(
+        "UPDATE core.contract_checklists SET checked_at = core.now() WHERE contract_id = $1",
+        f.contract_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("сверка документов завершена");
+
+    sqlx::query!(
+        "UPDATE core.contracts SET landlord_signed_at = core.now() WHERE id = $1",
+        f.contract_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("подпись наймодателя после сверки");
+
+    sqlx::query!(
+        "UPDATE core.contracts
+         SET status = 'active',
+             lease_period = tstzrange(core.now(), core.now() + interval '365 days')
+         WHERE id = $1",
+        f.contract_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("подписанный договор вступает в силу");
+
+    let status = sqlx::query_scalar!(
+        r#"SELECT status::text AS "status!" FROM core.contracts WHERE id = $1"#,
+        f.contract_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("статус договора");
+    assert_eq!(status, "active");
+
+    tx.rollback().await.expect("rollback");
+}

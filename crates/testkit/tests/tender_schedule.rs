@@ -179,3 +179,101 @@ async fn disorder_is_rejected_by_the_table_as_a_rule() {
 
     tx.rollback().await.expect("rollback");
 }
+
+/// FR-303 (круг 2 гаунтлета, G-043): крайние отметки процедуры стережет
+/// сама таблица, а не только домен.
+///
+/// Порядок сроков проверял `tender::Schedule::validate`, то есть ровно один
+/// путь - вкладка «Сроки тендеров». Запись мимо него принимала объявление,
+/// «вышедшее» после окончания приема заявок, и торги, «прошедшие» до
+/// вскрытия конвертов. Здесь проверяется нижний рубеж: тот же отказ приходит
+/// от CHECK таблицы, причиной перечня, а не безымянным 23514.
+#[tokio::test]
+async fn schedule_order_is_enforced_by_the_table() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx).await.expect("фикстура");
+    tou_db::set_actor(&mut tx, f.actor).await.expect("актор");
+
+    let announced = datetime!(2026-08-31 13:06 UTC);
+    let deadline = datetime!(2026-09-10 13:00 UTC);
+    let opening = datetime!(2026-09-11 05:00 UTC);
+    let trading = datetime!(2026-09-14 12:58 UTC);
+
+    // Сроки в порядке процедуры принимаются - в том числе с торгами
+    tou_db::tenders::set_schedule_on(
+        &mut tx,
+        f.tender_id,
+        ScheduleFields {
+            announced_at: Some(announced),
+            submission_deadline: Some(deadline),
+            opening_at: Some(opening),
+            trading_at: Some(trading),
+        },
+    )
+    .await
+    .expect("сроки в порядке процедуры")
+    .expect("тендер найден");
+
+    // Правка, нарушающая порядок: отказ обязан прийти правилом
+    // «порядок сроков», а не поломкой
+    macro_rules! rejected {
+        ($fields:expr, $why:expr) => {{
+            let mut sp = tx.begin().await.expect("savepoint");
+            let err = tou_db::tenders::set_schedule_on(&mut sp, f.tender_id, $fields)
+                .await
+                .expect_err($why);
+            sp.rollback().await.expect("rollback savepoint");
+            assert!(
+                matches!(
+                    err,
+                    TransitionError::Rejected(ref rejection)
+                        if rejection.rule() == RuleViolation::TenderScheduleOrder
+                ),
+                "{}: ожидался отказ по порядку сроков, получено: {err}",
+                $why
+            );
+        }};
+    }
+
+    // Объявление после окончания приема заявок (п. 5–6, 36)
+    rejected!(
+        ScheduleFields {
+            announced_at: Some(deadline + time::Duration::days(1)),
+            submission_deadline: Some(deadline),
+            opening_at: Some(opening),
+            trading_at: Some(trading),
+        },
+        "публикация позже окончания приема заявок"
+    );
+
+    // Торги раньше вскрытия конвертов (п. 50, 59)
+    rejected!(
+        ScheduleFields {
+            announced_at: Some(announced),
+            submission_deadline: Some(deadline),
+            opening_at: Some(opening),
+            trading_at: Some(opening - time::Duration::hours(1)),
+        },
+        "торги раньше вскрытия конвертов"
+    );
+
+    // Правка не прошла: в таблице остались сроки в порядке процедуры
+    let current = tou_db::tenders::set_schedule_on(
+        &mut tx,
+        f.tender_id,
+        ScheduleFields {
+            announced_at: Some(announced),
+            submission_deadline: Some(deadline),
+            opening_at: Some(opening),
+            trading_at: Some(trading),
+        },
+    )
+    .await
+    .expect("повторная правка")
+    .expect("тендер найден");
+    assert_eq!(current.announced_at, Some(announced));
+    assert_eq!(current.trading_at, Some(trading));
+
+    tx.rollback().await.expect("rollback");
+}

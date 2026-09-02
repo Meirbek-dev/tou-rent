@@ -455,40 +455,100 @@ async fn finish_on(
 /// делал, процесс останавливался.
 ///
 /// Актор события - система: время вышло само, без человека (так же
-/// устроена эскалация просроченных сроков). Пачкой с `FOR UPDATE SKIP
-/// LOCKED`, чтобы два экземпляра воркера (NFR-12) разбирали разные торги.
+/// устроена эскалация просроченных сроков).
+///
+/// Каждые торги закрываются своей транзакцией (круг 2 гаунтлета, G-028).
+/// Раньше пачка до 32 комнат шла одной: любой отказ - лот без ставок,
+/// расходящийся с лентой итог (FR-606), сбой на записи обязательства -
+/// откатывал вместе с собой и все уже закрытые в этом проходе торги.
+/// Воркер повторял ту же выборку каждую минуту, снова упирался в те же
+/// торги и не закрывал ни одних: одна испорченная комната останавливала
+/// площадку целиком. Теперь отказавшая комната откатывается одна, пишется
+/// в лог и пропускается, а остальные закрываются.
 pub async fn finish_expired(db: &Db, limit: i64) -> Result<Vec<AuctionRecord>, TransitionError> {
-    let mut tx = db.begin().await?;
-    let finished = finish_expired_on(&mut tx, limit).await?;
-    tx.commit().await?;
-    Ok(finished)
+    // Одно соединение на весь проход: транзакции внутри открываются по
+    // одной на комнату (`Connection::begin` вне транзакции - это BEGIN)
+    let mut conn = db.acquire().await?;
+    finish_expired_on(&mut conn, limit).await
 }
 
 /// Тот же проход в транзакции вызывающего - вариант `*_on` (арх. v3 § 6):
 /// тест выполняет сценарий и откатывает его, не засоряя стенд.
+///
+/// Внутри транзакции вызывающего «своя транзакция» комнаты - это savepoint:
+/// изоляция отказа та же, а хвост теста по-прежнему откатывается целиком.
 pub async fn finish_expired_on(
-    tx: &mut sqlx::PgConnection,
+    conn: &mut sqlx::PgConnection,
     limit: i64,
 ) -> Result<Vec<AuctionRecord>, TransitionError> {
+    // Кандидаты читаются отдельно и без блокировки: удержать ее до конца
+    // прохода все равно нельзя - транзакция теперь у каждой комнаты своя
     let expired = sqlx::query_scalar!(
         "SELECT id FROM core.auctions
           WHERE status = 'running' AND ends_at IS NOT NULL AND ends_at < core.now()
           ORDER BY ends_at
-          LIMIT $1
-          FOR UPDATE SKIP LOCKED",
+          LIMIT $1",
         limit
     )
-    .fetch_all(&mut *tx)
+    .fetch_all(&mut *conn)
     .await?;
 
     let mut finished = Vec::with_capacity(expired.len());
     for id in expired {
-        // `early = false`: время вышло, а не «по общему согласию» (п. 67)
-        let (record, _outcome) = finish_on(&mut *tx, id, false).await?;
-        finished.push(record);
+        match finish_expired_one(&mut *conn, id).await {
+            Ok(Some(record)) => finished.push(record),
+            // Комнату разбирает другой экземпляр воркера (NFR-12) либо ее
+            // уже закрыл председатель - это не происшествие
+            Ok(None) => {}
+            Err(error) => tracing::error!(
+                auction_id = %id,
+                %error,
+                "торги с истекшим таймером не закрылись - пропущены, \
+                 остальные закрываются (INV-066)"
+            ),
+        }
     }
 
     Ok(finished)
+}
+
+/// Одна комната в своей транзакции. `Ok(None)` - торги достались другому
+/// экземпляру воркера или уже не идут; `Err` - отказ самих торгов, из-за
+/// которого откатываются только они.
+async fn finish_expired_one(
+    conn: &mut sqlx::PgConnection,
+    id: Uuid,
+) -> Result<Option<AuctionRecord>, TransitionError> {
+    use sqlx::Acquire as _;
+
+    let mut tx = conn.begin().await?;
+
+    // `SKIP LOCKED` под собственной блокировкой комнаты: два экземпляра
+    // воркера разбирают разные торги, а не ждут друг друга
+    let claimed = sqlx::query_scalar!(
+        "SELECT id FROM core.auctions
+          WHERE id = $1 AND status = 'running' AND ends_at IS NOT NULL AND ends_at < core.now()
+          FOR UPDATE SKIP LOCKED",
+        id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    if claimed.is_none() {
+        tx.rollback().await?;
+        return Ok(None);
+    }
+
+    // `early = false`: время вышло, а не «по общему согласию» (п. 67)
+    match finish_on(&mut tx, id, false).await {
+        Ok((record, _outcome)) => {
+            tx.commit().await?;
+            Ok(Some(record))
+        }
+        Err(error) => {
+            tx.rollback().await?;
+            Err(error)
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

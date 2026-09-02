@@ -227,3 +227,101 @@ async fn running_auction_is_left_alone() {
         "running"
     );
 }
+
+/// Одна испорченная комната не отменяет проход (круг 2 гаунтлета, G-028).
+///
+/// Раньше `finish_expired` закрывал до 32 комнат одной транзакцией: отказ
+/// на любой из них откатывал и все уже закрытые, а воркер каждую минуту
+/// подбирал ту же пачку и снова упирался в ту же комнату. Итог - площадка
+/// не закрывала торги вовсе, пока кто-нибудь не разберет испорченную
+/// строку руками.
+///
+/// Испорченная комната здесь настоящая, а не выдуманная: в ленте торгов по
+/// второму лоту лежит ставка заявки первого лота. Домен объявит ее
+/// победителем, а составной ключ `auctions_winner_application_lot_fkey`
+/// (победитель принадлежит лоту этих торгов) такую запись не примет.
+#[tokio::test]
+async fn a_poisoned_auction_does_not_take_the_batch_down_with_it() {
+    let _serialized = CLOCK.lock().await;
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+
+    let healthy = fixture(&mut tx).await.expect("исправные торги");
+
+    // Второй лот того же тендера со своими торгами. Таймер у них истекает
+    // раньше - проход дойдет до них первыми, и закрытие исправных торгов
+    // случится уже после отказа
+    let object_id = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', 'T82 объект (испорченный лот)', 'адрес', 12.00) RETURNING id"
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("объект");
+
+    let lot_id = sqlx::query_scalar!(
+        "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                                base_rate_monthly, guarantee_fee, rate_calculation)
+         VALUES ($1, 2, $2, 'склад', 12, 50000.00, 50000.00, '{}'::jsonb) RETURNING id",
+        healthy.tender_id,
+        object_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("лот");
+
+    let poisoned = sqlx::query_scalar!(
+        "INSERT INTO core.auctions (lot_id, starting_bid, bid_step, status, started_at, ends_at)
+         VALUES ($1, 55000.00, 2750.00, 'running', core.now(),
+                 core.now() + interval '30 minutes')
+         RETURNING id",
+        lot_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("испорченные торги");
+
+    // Ставка заявки чужого лота: правила ставки ее пропускают (круг не
+    // заведен), а победителем этих торгов она стать не может
+    sqlx::query!(
+        "INSERT INTO core.bids (id, auction_id, application_id, amount)
+         VALUES ($1, $2, $3, $4)",
+        Uuid::now_v7(),
+        poisoned,
+        healthy.application_id,
+        Decimal::from(57_750)
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("ставка чужого лота");
+
+    // Оба таймера вышли
+    sqlx::query!("UPDATE refdata.clock_offset SET shift = interval '2 hours' WHERE id")
+        .execute(&mut *tx)
+        .await
+        .expect("сдвиг часов");
+
+    let finished = tou_db::auctions::finish_expired_on(&mut tx, 32)
+        .await
+        .expect("отказ по одной комнате не отменяет проход");
+
+    assert!(
+        finished.iter().any(|a| a.id == healthy.auction_id),
+        "исправные торги обязаны закрыться, несмотря на соседнюю испорченную комнату"
+    );
+    assert!(
+        finished.iter().all(|a| a.id != poisoned),
+        "испорченные торги закрыться не могли"
+    );
+    assert_eq!(
+        status_of(&mut tx, healthy.auction_id)
+            .await
+            .expect("статус"),
+        "finished"
+    );
+    assert_eq!(
+        status_of(&mut tx, poisoned).await.expect("статус"),
+        "running",
+        "отказ откатывается один и не уносит с собой соседей"
+    );
+}
