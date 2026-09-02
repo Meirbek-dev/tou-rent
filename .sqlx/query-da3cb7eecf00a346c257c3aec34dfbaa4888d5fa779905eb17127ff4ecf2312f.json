@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM core.commissions\n             WHERE valid_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date\n               AND (core.now() AT TIME ZONE 'Asia/Almaty')::date < valid_until\n               AND approved_at IS NOT NULL\n             ORDER BY approved_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "da3cb7eecf00a346c257c3aec34dfbaa4888d5fa779905eb17127ff4ecf2312f"
+}

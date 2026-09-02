@@ -290,3 +290,73 @@ async fn checklist_items_come_from_the_reference_list() {
         .expect("перечень");
     assert!(count > 0, "перечень п. 113 заполнен");
 }
+
+/// Рубеж AC-2: регистрация несуществующего договора отвечала 500 - `UPDATE`
+/// не находил строки, а следом `fetch_one` за `tenant_id` падал
+/// `RowNotFound`. Повторная регистрация того же договора была еще хуже: та же
+/// нулевая правка проходила молча, и маршрут отвечал 200 со старым номером,
+/// будто регистрация состоялась заново.
+#[tokio::test]
+async fn fr905_registration_needs_an_existing_and_unregistered_contract() {
+    use tou_db::contracts::{ContractError, register_on};
+    use tou_domain::rule::RuleViolation;
+
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx).await.expect("фикстура");
+    let actor = Uuid::nil();
+
+    let missing = match register_on(&mut tx, actor, Uuid::nil(), "Д-1").await {
+        Err(error) => error,
+        Ok(_) => panic!("несуществующий договор обязан быть 404, а не поломкой"),
+    };
+    assert!(
+        matches!(missing, ContractError::NotFound),
+        "ожидали «не найден», получили: {missing:?}"
+    );
+
+    // Договор, готовый к регистрации: сверка завершена, обе подписи стоят
+    sqlx::query!(
+        "UPDATE core.contract_checklists SET checked_at = core.now() WHERE contract_id = $1",
+        f.contract_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("сверка");
+    sqlx::query!(
+        "UPDATE core.contracts SET landlord_signed_at = core.now() WHERE id = $1",
+        f.contract_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("подпись наймодателя");
+
+    let number = format!("Д-{}", Uuid::now_v7().simple());
+    let registered = register_on(&mut tx, actor, f.contract_id, &number)
+        .await
+        .expect("регистрация подписанного договора");
+    assert_eq!(registered.reg_number.as_deref(), Some(number.as_str()));
+
+    let again = match register_on(&mut tx, actor, f.contract_id, "Д-другой").await {
+        Err(error) => error,
+        Ok(_) => panic!("повторная регистрация обязана быть отклонена"),
+    };
+    match again {
+        ContractError::Rejected(reason) => assert_eq!(
+            reason.rule(),
+            RuleViolation::ContractRegistration,
+            "причина отказа названа не тем правилом"
+        ),
+        other => panic!("ожидали отказ по правилу, получили: {other:?}"),
+    }
+
+    // Номер в журнале остался первым - второй попытке верить нельзя
+    let stored = sqlx::query_scalar!(
+        "SELECT reg_number FROM core.contracts WHERE id = $1",
+        f.contract_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("номер договора");
+    assert_eq!(stored.as_deref(), Some(number.as_str()));
+}

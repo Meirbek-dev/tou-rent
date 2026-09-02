@@ -137,53 +137,6 @@ pub async fn list(
     .await
 }
 
-/// Дата/время торгов при уведомлении допущенных (FR-504, п. 59): если
-/// организатор не назначил `trading_at` заранее - 3-й рабочий день после
-/// уведомления по производственному календарю (G12). `None` - тендер не найден.
-pub async fn schedule_trading(
-    db: &Db,
-    actor: Uuid,
-    tender_id: Uuid,
-    business_days: i32,
-) -> Result<Option<OffsetDateTime>, sqlx::Error> {
-    crate::with_actor(db, actor, async |tx| {
-        let existing = sqlx::query_scalar!(
-            "SELECT trading_at FROM core.tenders WHERE id = $1",
-            tender_id
-        )
-        .fetch_optional(&mut *tx)
-        .await?;
-        let Some(current) = existing else {
-            return Ok(None);
-        };
-        if current.is_some() {
-            return Ok(current);
-        }
-
-        // TODO-ENGINEER: время начала торгов (10:00 Алматы) - плейсхолдер,
-        // источника в контуре 1 нет (п. 59 задает только день)
-        //
-        // `!` у RETURNING: столбец nullable, но присвоенное выражение NULL
-        // быть не может - оба его аргумента NOT NULL
-        let scheduled = sqlx::query_scalar!(
-            r#"UPDATE core.tenders
-               SET trading_at = (refdata.add_business_days(
-                                    (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Almaty')::date,
-                                    $2
-                                  )::timestamp
-                                 + time '10:00') AT TIME ZONE 'Asia/Almaty'
-               WHERE id = $1
-               RETURNING trading_at AS "trading_at!""#,
-            tender_id,
-            business_days
-        )
-        .fetch_one(&mut *tx)
-        .await?;
-        Ok(Some(scheduled))
-    })
-    .await
-}
-
 pub async fn lots_of(db: &Db, tender_id: Uuid) -> Result<Vec<LotRecord>, sqlx::Error> {
     lot_query!(" WHERE tender_id = $1 ORDER BY seq", tender_id)
         .fetch_all(db)
@@ -360,30 +313,57 @@ pub struct DraftFields<'a> {
     pub zoom_url: Option<&'a str>,
 }
 
+/// Отказ CHECK на правке черновика - не поломка, а перепутанные даты:
+/// `deadline_before_opening` ловит вскрытие раньше окончания приема заявок,
+/// и организатору полагается объяснение, а не 500 (FR-303, п. 27).
 pub async fn update_draft(
     db: &Db,
     actor: Uuid,
     id: Uuid,
     f: DraftFields<'_>,
-) -> Result<Option<TenderRecord>, sqlx::Error> {
-    crate::with_actor(db, actor, async |tx| {
-        tender_query_returning!(
-            "UPDATE core.tenders
-             SET title = $2, title_kk = $3, submission_deadline = $4, opening_at = $5,
-                 trading_at = $6, zoom_url = $7
-             WHERE id = $1 AND status = 'draft'",
-            id,
-            f.title,
-            f.title_kk,
-            f.submission_deadline,
-            f.opening_at,
-            f.trading_at,
-            f.zoom_url
-        )
-        .fetch_optional(&mut *tx)
-        .await
-    })
+) -> Result<Option<TenderRecord>, TransitionError> {
+    crate::with_actor(db, actor, async |tx| update_draft_on(tx, id, f).await).await
+}
+
+/// То же в транзакции вызывающего - вариант `*_on` (арх. v3 § 6): тест
+/// откатывает свои изменения, а не оставляет их на стенде.
+pub async fn update_draft_on(
+    tx: &mut sqlx::PgConnection,
+    id: Uuid,
+    f: DraftFields<'_>,
+) -> Result<Option<TenderRecord>, TransitionError> {
+    tender_query_returning!(
+        "UPDATE core.tenders
+         SET title = $2, title_kk = $3, submission_deadline = $4, opening_at = $5,
+             trading_at = $6, zoom_url = $7
+         WHERE id = $1 AND status = 'draft'",
+        id,
+        f.title,
+        f.title_kk,
+        f.submission_deadline,
+        f.opening_at,
+        f.trading_at,
+        f.zoom_url
+    )
+    .fetch_optional(&mut *tx)
     .await
+    .map_err(map_rule)
+}
+
+/// Отказ по ограничению БД - причина из перечня, все прочее - поломка.
+///
+/// `P0001` здесь наравне с `23514`: сроки тендера стережет и CHECK таблицы,
+/// и триггеры публикации, и по коду они не различимы для вызывающего.
+fn map_rule(err: sqlx::Error) -> TransitionError {
+    if let sqlx::Error::Database(db_err) = &err
+        && matches!(
+            db_err.code().as_deref(),
+            Some("P0001") | Some("23514") | Some("23503") | Some("23505")
+        )
+    {
+        return TransitionError::Rejected(crate::rule::rejection(db_err.as_ref()));
+    }
+    TransitionError::Db(err)
 }
 
 /// Ссылка на запись торгов (FR-306, п. 72): вносится после того, как торги

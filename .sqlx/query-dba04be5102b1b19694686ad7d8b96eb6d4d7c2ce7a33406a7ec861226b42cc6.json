@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.auctions\n         SET status = 'running', started_at = core.now(),\n             ends_at = core.now() + interval '1 hour'\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dba04be5102b1b19694686ad7d8b96eb6d4d7c2ce7a33406a7ec861226b42cc6"
+}

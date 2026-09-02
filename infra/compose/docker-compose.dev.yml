@@ -11,6 +11,11 @@ x-rust-workspace: &rust-workspace
   profiles: [api]
   environment:
     DATABASE_URL: postgres://tou_rent:tou_rent_dev@postgres:5432/tou_rent
+    # Макросы sqlx проверяются по offline-слепку .sqlx, как в CI и в прод-образе:
+    # живая проверка по DATABASE_URL здесь невозможна - api-migrate компилируется
+    # до того, как сам накатит миграции (курица и яйцо при новых колонках).
+    # Актуальность слепка держит CI (cargo sqlx prepare --check).
+    SQLX_OFFLINE: "true"
     # Без нее тесты testkit против живой БД (A-021) молча печатают SKIP
     # и отчитываются зеленым за 0.00s - то есть инварианты INV-037, INV-040,
     # INV-A01 и RLS на стенде не проверяет никто. В CI такая же переменная

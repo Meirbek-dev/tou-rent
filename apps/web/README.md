@@ -40,9 +40,13 @@ vp run dev        # dev-сервер на :3000 (turbo → vp dev)
   (kk/en допустим draft-перевод, регламент А.5). Сообщения - в
   `project.inlang/messages`, локаль в URL-префиксе (`/kk`, `/en`; базовая - ru)
   через `rewrite` в `router.tsx` + `paraglideMiddleware` в `src/server.ts`.
-- **env**: переменные типизируются в `src/env.ts` (T3Env + Valibot),
-  значения - в `.env.local` (`VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`,
-  `VITE_API_URL` и т.д.).
+- **env**: переменные типизируются в `src/env.ts` (T3Env + Valibot) и
+  в `src/vite-env.d.ts` - перечни обязаны совпадать; значения - в
+  `.env.local` (`VITE_SENTRY_DSN`, `VITE_POSTHOG_KEY`, `VITE_API_WS_HOST`).
+  Объявляются только те переменные, которые код действительно читает, и
+  читаются они через `env` из схемы: схема, которую не импортирует никто,
+  ничего не проверяет. Адрес api переменной не задается - на SSR это
+  `API_ORIGIN`, в браузере свой origin (`src/lib/api.ts`).
 - **shadcn/ui**: компоненты добавляются генератором и живут в
   `src/components/ui` (не выносить в packages/):
 

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.commissions (name, valid_from, valid_until)\n                 VALUES ($1, (core.now() AT TIME ZONE 'Asia/Almaty')::date, (core.now() AT TIME ZONE 'Asia/Almaty')::date + interval '1 year')\n                 RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f36b1e44dc7a56d17215eaeeb0a8c6f2d9d4b87d9a85b35fd165a5b4e29a2929"
+}

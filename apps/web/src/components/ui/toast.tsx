@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Toast as ToastPrimitive } from "@base-ui/react/toast"
 
+import { m } from "#/paraglide/messages"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import {
@@ -124,7 +125,7 @@ function ToastClose({
   return (
     <ToastPrimitive.Close
       data-slot="toast-close"
-      aria-label="Close toast"
+      aria-label={m.ui_toast_close()}
       render={render}
       className={cn(
         "relative shrink-0 text-muted-foreground after:absolute after:-inset-2 after:content-[''] hover:text-foreground",

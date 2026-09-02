@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.auctions\n         SET status = 'finished', winner_application_id = $2, winner_amount = 168000\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "35990b989fadf00110863dd191e69163d3c6f6358844d12b976abc09792b7df1"
+}

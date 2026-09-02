@@ -18,10 +18,6 @@ interface ViteTypeOptions {
 }
 
 interface ImportMetaEnv {
-  /** Заголовок приложения; пусто - значение по умолчанию из разметки */
-  readonly VITE_APP_TITLE?: string
-  /** Базовый адрес API; пусто - тот же origin через прокси */
-  readonly VITE_API_URL?: string
   /** Хост WS-комнаты торгов (FR-603); пусто - тот же origin */
   readonly VITE_API_WS_HOST?: string
   /** Пусто - Sentry не поднимается (см. instrument.server.mjs) */

@@ -83,20 +83,31 @@ function MyContractsPage() {
       <QueryBoundary
         query={contracts}
         empty={{
-          when: (items) => items.length === 0,
+          when: (page) => page.items.length === 0,
           icon: FileSignatureIcon,
           title: m.my_contracts_empty(),
           description: m.participant_contracts_empty_hint(),
         }}
       >
-        {(items) => (
-          <ul className="flex flex-col gap-6">
-            {items.map((contract) => (
-              <li key={contract.id}>
-                <ContractCard contract={contract} />
-              </li>
-            ))}
-          </ul>
+        {(page) => (
+          <>
+            {page.truncated && (
+              <p
+                role="status"
+                className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400"
+                data-testid="contracts-truncated"
+              >
+                {m.list_truncated({ count: page.items.length })}
+              </p>
+            )}
+            <ul className="flex flex-col gap-6">
+              {page.items.map((contract) => (
+                <li key={contract.id}>
+                  <ContractCard contract={contract} />
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </QueryBoundary>
     </div>

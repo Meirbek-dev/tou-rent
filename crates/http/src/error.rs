@@ -41,6 +41,13 @@ pub enum ErrorCode {
     /// Запрос с тем же `Idempotency-Key` еще выполняется (ТЗ § 7): повторять
     /// нужно после того, как завершится первый, - тогда придет его ответ
     IdempotencyInFlight,
+    /// Тем же `Idempotency-Key` пришел другой запрос (ТЗ § 7): ключ
+    /// принадлежит одной операции, и повторить им другую нельзя
+    IdempotencyKeyReuse,
+    /// HTTP-метод не поддерживается ресурсом. Свой код, а не `rule_violation`:
+    /// правила предметной области тут ни при чем, и поля `rule` у отказа нет -
+    /// клиент, который ищет по нему перевод, не находил ничего (NFR-01)
+    MethodNotAllowed,
     /// Обработка запроса не уложилась в отведенное время
     Timeout,
     Internal,
@@ -130,6 +137,11 @@ pub enum ApiError {
     /// (см. [`crate::idempotency`]).
     #[error("запрос с этим ключом идемпотентности еще выполняется")]
     IdempotencyInFlight,
+    /// Тот же `Idempotency-Key` предъявлен другому запросу: ключ уже
+    /// закреплен за первой операцией, и отдать по нему ее ответ - значит
+    /// солгать клиенту, что выполнена вторая (см. [`crate::idempotency`]).
+    #[error("ключ идемпотентности уже использован другим запросом")]
+    IdempotencyKeyReuse,
     #[error("превышено время обработки запроса")]
     Timeout,
     #[error("внутренняя ошибка")]
@@ -169,11 +181,12 @@ impl ApiError {
             ApiError::Validation(_) => ErrorCode::ValidationFailed,
             ApiError::CsrfRejected => ErrorCode::CsrfRejected,
             ApiError::NotFound => ErrorCode::NotFound,
-            ApiError::MethodNotAllowed => ErrorCode::RuleViolation,
+            ApiError::MethodNotAllowed => ErrorCode::MethodNotAllowed,
             ApiError::RuleViolation(_) => ErrorCode::RuleViolation,
             ApiError::ProviderUnavailable(_) => ErrorCode::ProviderUnavailable,
             ApiError::TooManyRequests { .. } => ErrorCode::TooManyRequests,
             ApiError::IdempotencyInFlight => ErrorCode::IdempotencyInFlight,
+            ApiError::IdempotencyKeyReuse => ErrorCode::IdempotencyKeyReuse,
             ApiError::Timeout => ErrorCode::Timeout,
             ApiError::Internal(_) => ErrorCode::Internal,
         }
@@ -189,9 +202,9 @@ impl ApiError {
             ApiError::EmailTaken | ApiError::IdNumberTaken | ApiError::IdempotencyInFlight => {
                 StatusCode::CONFLICT
             }
-            ApiError::Validation(_) | ApiError::VerificationFailed => {
-                StatusCode::UNPROCESSABLE_ENTITY
-            }
+            ApiError::Validation(_)
+            | ApiError::VerificationFailed
+            | ApiError::IdempotencyKeyReuse => StatusCode::UNPROCESSABLE_ENTITY,
             ApiError::NotFound => StatusCode::NOT_FOUND,
             ApiError::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             ApiError::RuleViolation(_) => StatusCode::CONFLICT,
@@ -203,8 +216,27 @@ impl ApiError {
     }
 }
 
+/// SQLSTATE `22003` - numeric_value_out_of_range: число не помещается в
+/// колонку (`numeric(10,2)` у площади, `numeric(14,2)` у денег).
+const NUMERIC_OUT_OF_RANGE: &str = "22003";
+
 impl From<sqlx::Error> for ApiError {
     fn from(err: sqlx::Error) -> Self {
+        // Переполнение numeric - не поломка сервера, а число, присланное
+        // клиентом: `"area_m2":"100000000.00"` давало 500 `internal` на
+        // маршруте, открытом обычному пользователю. Разбор стоит здесь, у
+        // общей воронки sqlx-ошибок, а не в `map_rule` каждого модуля и не
+        // границами `garde` у каждого денежного поля: так закрывается весь
+        // класс - любая колонка, любой маршрут, включая те, что отдают
+        // `sqlx::Error` напрямую, - а не три доказанных случая.
+        if let sqlx::Error::Database(db_err) = &err
+            && db_err.code().as_deref() == Some(NUMERIC_OUT_OF_RANGE)
+        {
+            // Какое поле не влезло, PostgreSQL не называет: подробности -
+            // дежурному в телеметрию, клиенту - машинная причина (NFR-07)
+            tracing::info!(error = %db_err, "numeric value out of range");
+            return ApiError::Validation("value_out_of_range".to_owned());
+        }
         ApiError::internal(err)
     }
 }
@@ -334,6 +366,53 @@ mod tests {
         );
     }
 
+    /// Рубеж AC-1: переполнение numeric приходит от клиента, а не от
+    /// сервера. Пока оно шло в `internal`, участник, набравший в площади
+    /// лишний ноль, получал 500 и никакого объяснения.
+    #[tokio::test]
+    async fn numeric_overflow_is_a_client_error() {
+        let problem = problem_of(database_error(NUMERIC_OUT_OF_RANGE).into()).await;
+
+        assert_eq!(problem["status"], 422);
+        assert_eq!(problem["code"], "validation_failed");
+        assert_eq!(problem["detail"], "value_out_of_range");
+    }
+
+    /// Прочие отказы БД остаются поломкой сервера: 500 без подробностей.
+    #[test]
+    fn other_database_errors_stay_internal() {
+        for err in [sqlx::Error::RowNotFound, database_error("23514")] {
+            let mapped: ApiError = err.into();
+            assert_eq!(mapped.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    /// Рубеж AC-7: 405 - не отказ по правилу предметной области. У него нет
+    /// поля `rule`, и клиент, который ищет по нему перевод, показывал вместо
+    /// него русский `detail` пользователю с локалью kk или en (NFR-01).
+    #[tokio::test]
+    async fn method_not_allowed_has_its_own_code() {
+        let problem = problem_of(ApiError::MethodNotAllowed).await;
+
+        assert_eq!(problem["status"], 405);
+        assert_eq!(problem["code"], "method_not_allowed");
+        assert!(problem.get("rule").is_none());
+    }
+
+    /// Переиспользование ключа идемпотентности - ошибка клиента (422),
+    /// со своим кодом: `rule_violation` тут не при чем.
+    #[test]
+    fn idempotency_key_reuse_maps_to_422() {
+        assert_eq!(
+            ApiError::IdempotencyKeyReuse.status(),
+            StatusCode::UNPROCESSABLE_ENTITY
+        );
+        assert_eq!(
+            ApiError::IdempotencyKeyReuse.code(),
+            ErrorCode::IdempotencyKeyReuse
+        );
+    }
+
     #[test]
     fn timeout_maps_to_504() {
         assert_eq!(ApiError::Timeout.status(), StatusCode::GATEWAY_TIMEOUT);
@@ -344,6 +423,50 @@ mod tests {
     fn problem_type_slug_is_snake_case_wire_name() {
         assert_eq!(ErrorCode::EmailTaken.slug(), "email_taken");
         assert_eq!(ErrorCode::RuleViolation.slug(), "rule_violation");
+    }
+
+    /// Отказ БД с заданным SQLSTATE. Настоящий `PgDatabaseError` собирается
+    /// только из ответа сервера и публичного конструктора не имеет, а для
+    /// разбора кода хватает самого кода.
+    #[derive(Debug)]
+    struct FakeDbError(&'static str);
+
+    impl std::fmt::Display for FakeDbError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str("numeric field overflow")
+        }
+    }
+
+    impl std::error::Error for FakeDbError {}
+
+    impl sqlx::error::DatabaseError for FakeDbError {
+        fn message(&self) -> &str {
+            "numeric field overflow"
+        }
+
+        fn code(&self) -> Option<std::borrow::Cow<'_, str>> {
+            Some(std::borrow::Cow::Borrowed(self.0))
+        }
+
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            sqlx::error::ErrorKind::Other
+        }
+    }
+
+    fn database_error(sqlstate: &'static str) -> sqlx::Error {
+        sqlx::Error::Database(Box::new(FakeDbError(sqlstate)))
     }
 
     /// Тело ответа как его увидит клиент.

@@ -19,8 +19,11 @@ export const env = createEnv({
    * сокета молча пропадали в проде.
    */
   client: {
-    VITE_APP_TITLE: v.optional(v.pipe(v.string(), v.minLength(1))),
-    VITE_API_URL: v.optional(v.pipe(v.string(), v.url())),
+    // `VITE_APP_TITLE` и `VITE_API_URL` отсюда убраны: их не читает никто.
+    // Заголовок задают `head` маршрутов, адрес api - `API_ORIGIN` на SSR
+    // и свой origin в браузере (`lib/api.ts`). Объявленная, но не читаемая
+    // переменная хуже необъявленной: она создает уверенность, что значение
+    // куда-то доедет.
     /** Хост WS-комнаты торгов (FR-603); пусто - тот же origin */
     VITE_API_WS_HOST: v.optional(v.pipe(v.string(), v.minLength(1))),
     /** Пусто - Sentry не поднимается (см. instrument.server.mjs) */

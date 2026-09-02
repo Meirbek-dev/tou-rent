@@ -33,41 +33,52 @@ export function MyProtocols() {
           </div>
         }
         empty={{
-          when: (items) => items.length === 0,
+          when: (page) => page.items.length === 0,
           icon: FileTextIcon,
           title: m.protocols_my_empty_title(),
           description: m.protocols_my_empty(),
         }}
       >
-        {(items) => (
-          <ul className="flex flex-col gap-2 text-sm">
-            {items.map((protocol) => (
-              <li
-                key={protocol.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3"
+        {(page) => (
+          <>
+            {page.truncated && (
+              <p
+                role="status"
+                className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400"
+                data-testid="protocols-truncated"
               >
-                <span className="font-medium">{protocol.tender_title}</span>
-                <span>
-                  {protocolKindLabel(protocol.kind)}
-                  {protocol.number != null && ` №${protocol.number}`}
-                </span>
-                <span
-                  className="text-muted-foreground"
-                  suppressHydrationWarning
+                {m.list_truncated({ count: page.items.length })}
+              </p>
+            )}
+            <ul className="flex flex-col gap-2 text-sm">
+              {page.items.map((protocol) => (
+                <li
+                  key={protocol.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3"
                 >
-                  {formatDateTime(protocol.generated_at)}
-                </span>
-                {protocol.has_pdf && (
-                  <a
-                    href={`/api/v1/protocols/${protocol.id}/pdf`}
-                    className="underline-offset-4 hover:underline"
+                  <span className="font-medium">{protocol.tender_title}</span>
+                  <span>
+                    {protocolKindLabel(protocol.kind)}
+                    {protocol.number != null && ` №${protocol.number}`}
+                  </span>
+                  <span
+                    className="text-muted-foreground"
+                    suppressHydrationWarning
                   >
-                    {m.protocols_pdf()}
-                  </a>
-                )}
-              </li>
-            ))}
-          </ul>
+                    {formatDateTime(protocol.generated_at)}
+                  </span>
+                  {protocol.has_pdf && (
+                    <a
+                      href={`/api/v1/protocols/${protocol.id}/pdf`}
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {m.protocols_pdf()}
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </QueryBoundary>
     </section>

@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_requests\n           (applicant_id, category, applicant_kind, purpose, investment_amount)\n         VALUES ('00000000-0000-0000-0000-000000000000', 'investment', 'individual',\n                 'AC-1', 999999999999999.99)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "70dcb06011985d1db5c8ea095b108cce0975323c5613660bc6277c9fa518dc3c"
+}

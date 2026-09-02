@@ -516,7 +516,17 @@ pub struct NewBid {
 /// Ставка участника (FR-601). Идемпотентна по `id`; правила шага и времени
 /// проверяет триггер `enforce_bid_rules` под `FOR UPDATE` на аукционе.
 pub async fn place_bid(db: &Db, actor: Uuid, new: NewBid) -> Result<BidRecord, BidError> {
-    crate::with_actor(db, actor, async |tx| {
+    crate::with_actor(db, actor, async |tx| place_bid_on(tx, actor, new).await).await
+}
+
+/// То же в транзакции вызывающего - вариант `*_on` (арх. v3 § 6): лента
+/// ставок append-only, и тест обязан откатывать свои изменения.
+pub async fn place_bid_on(
+    tx: &mut sqlx::PgConnection,
+    actor: Uuid,
+    new: NewBid,
+) -> Result<BidRecord, BidError> {
+    {
         let lot_id = sqlx::query_scalar!(
             "SELECT lot_id FROM core.auctions WHERE id = $1",
             new.auction_id
@@ -525,11 +535,11 @@ pub async fn place_bid(db: &Db, actor: Uuid, new: NewBid) -> Result<BidRecord, B
         .await?;
         let lot_id = lot_id.ok_or(BidError::NotFound)?;
 
-        // Повтор той же ставки (реконнект) - возврат уже записанной
-        if let Some(existing) = fetch_bid(&mut *tx, new.id).await? {
-            return Ok(existing);
-        }
-
+        // Допуск проверяется раньше повтора, а не после: идентификаторы ставок
+        // публичны (лента `GET /auctions/{id}/bids`), и ранний возврат по
+        // одному лишь `id` отдавал бы чужую ставку - с именем заявителя и
+        // суммой - любому, кто вправе ставить (NFR-07), а комната получала бы
+        // от хендлера рассылку фантомной ставки.
         let application_id = sqlx::query_scalar!(
             "SELECT id FROM core.applications
              WHERE participant_id = $1 AND lot_id = $2 AND status = 'admitted'",
@@ -539,6 +549,13 @@ pub async fn place_bid(db: &Db, actor: Uuid, new: NewBid) -> Result<BidRecord, B
         .fetch_optional(&mut *tx)
         .await?;
         let application_id = application_id.ok_or(BidError::NotAdmitted)?;
+
+        // Повтор той же ставки (реконнект) - возврат уже записанной. «Той же»
+        // значит своей и в этой комнате: идемпотентность подтверждает
+        // собственное действие участника, а не любое с совпавшим `id`.
+        if let Some(existing) = fetch_bid(&mut *tx, new.id, new.auction_id, application_id).await? {
+            return Ok(existing);
+        }
 
         let inserted = sqlx::query_scalar!(
             "INSERT INTO core.bids (id, auction_id, application_id, amount)
@@ -551,8 +568,15 @@ pub async fn place_bid(db: &Db, actor: Uuid, new: NewBid) -> Result<BidRecord, B
         .fetch_one(&mut *tx)
         .await
         .map_err(|err| match err {
+            // 23505 здесь наравне с остальными: клиентский `id`, уже занятый
+            // чужой ставкой, - отказ по правилу (`duplicate_record`), а не
+            // поломка сервера. Своя ставка до вставки не доходит - ее вернул
+            // бы повтор выше.
             sqlx::Error::Database(db_err)
-                if matches!(db_err.code().as_deref(), Some("23514") | Some("23503")) =>
+                if matches!(
+                    db_err.code().as_deref(),
+                    Some("23514") | Some("23503") | Some("23505")
+                ) =>
             {
                 BidError::Rejected(crate::rule::rejection(db_err.as_ref()))
             }
@@ -562,20 +586,29 @@ pub async fn place_bid(db: &Db, actor: Uuid, new: NewBid) -> Result<BidRecord, B
         // Очередь идет дальше по кругу (FR-604, п. 65)
         crate::auction_turns::advance_after_bid(&mut *tx, new.auction_id, application_id).await?;
 
-        fetch_bid(&mut *tx, inserted)
+        fetch_bid(&mut *tx, inserted, new.auction_id, application_id)
             .await?
             .ok_or(BidError::NotFound)
-    })
-    .await
+    }
 }
 
+/// Ставка по тройке «идентификатор, комната, заявка».
+///
+/// Одного `id` мало: он публичен, и по нему ставка нашлась бы кому угодно.
 async fn fetch_bid(
     conn: &mut sqlx::PgConnection,
     id: Uuid,
+    auction_id: Uuid,
+    application_id: Uuid,
 ) -> Result<Option<BidRecord>, sqlx::Error> {
-    bid_query!(" WHERE b.id = $1", id)
-        .fetch_optional(conn)
-        .await
+    bid_query!(
+        " WHERE b.id = $1 AND b.auction_id = $2 AND b.application_id = $3",
+        id,
+        auction_id,
+        application_id
+    )
+    .fetch_optional(conn)
+    .await
 }
 
 async fn require(

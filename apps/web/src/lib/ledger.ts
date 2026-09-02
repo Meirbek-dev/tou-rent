@@ -26,13 +26,12 @@ export const ledgerAccountsQuery = (kind?: string) =>
 /**
  * Выписка по счету: проводки двойной записи (INV-DB-05), первая страница.
  *
- * Маршрут отдает страницу `{ items, next_after, truncated }` (ТЗ § 7),
- * а сюда возвращаются только строки.
- * TODO-ENGINEER: экран финблока (`routes/app/finance/index.tsx`) признак
- * `truncated` пока не показывает и курсор `next_after` не листает -
- * запрос отдает `items`, чтобы экран не разошелся с контрактом. Как только
- * экран научится и тому и другому, отсюда должна возвращаться страница
- * целиком, как в `evaderRegistryQuery`.
+ * Отдается страница целиком, как в `evaderRegistryQuery`: обрезанная
+ * выписка - это недосчитанные деньги, и признак `truncated` экран финблока
+ * показывает явно.
+ *
+ * TODO-ENGINEER: курсор `next_after` экран пока не листает - за потолком
+ * выборки выписка обрывается, о чем и предупреждает признак.
  */
 export const ledgerEntriesQuery = (accountId: string) =>
   queryOptions({
@@ -45,7 +44,7 @@ export const ledgerEntriesQuery = (accountId: string) =>
       if (error !== undefined || data === undefined) {
         throw (error as unknown) ?? new Error("failed to load ledger entries")
       }
-      return data.items
+      return data
     },
   })
 

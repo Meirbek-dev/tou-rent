@@ -29,6 +29,10 @@ export const Route = createFileRoute("/")({
     ])
     return { tenders, objects, plots, announcement }
   },
+  // Единственный маршрут без своего `head` отдавал корневой запасной заголовок
+  // «ToU Rent» на всех трех локалях - вкладка и выдача поиска не говорили,
+  // что это за портал
+  head: () => ({ meta: [{ title: `${m.portal_title()} - ToU Rent` }] }),
   component: Home,
 })
 

@@ -32,7 +32,8 @@ const PREVIEW = 5
  * состояние, которого стоит бояться. Отсутствие честнее.
  */
 export function DeadlineChip() {
-  const { data: obligations } = useQuery(myObligationsQuery)
+  const { data: page } = useQuery(myObligationsQuery)
+  const obligations = page?.items
 
   if (obligations === undefined || obligations.length === 0) return null
 

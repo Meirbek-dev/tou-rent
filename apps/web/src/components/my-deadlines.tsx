@@ -35,54 +35,67 @@ export function MyDeadlines() {
           </div>
         }
         empty={{
-          when: (items) => items.length === 0,
+          when: (page) => page.items.length === 0,
           icon: CalendarCheckIcon,
           title: m.deadlines_empty_title(),
           description: m.deadlines_empty(),
         }}
       >
-        {(items) => (
-          <ul className="flex flex-col gap-2" data-testid="my-deadlines">
-            {items.map((obligation) => (
-              <li
-                key={obligation.id}
-                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3 text-sm"
+        {(page) => (
+          <>
+            {/* Обрезанная выборка сроков опаснее длинного списка: за потолком
+                остается срок, о котором пользователь так и не узнает */}
+            {page.truncated && (
+              <p
+                role="status"
+                className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400"
+                data-testid="deadlines-truncated"
               >
-                <span className="font-medium">
-                  {deadlineLabel(obligation.action)}
-                </span>
-                <span className="text-muted-foreground">
-                  {obligation.rule_ref}
-                </span>
-                {obligation.tender_id != null &&
-                  obligation.tender_title != null && (
-                    <Link
-                      to="/tenders/$tenderId"
-                      params={{ tenderId: obligation.tender_id }}
-                      className="underline-offset-4 hover:underline"
-                    >
-                      {obligation.tender_title}
-                    </Link>
-                  )}
-                <span
-                  className={
-                    obligation.status === "overdue"
-                      ? "ml-auto font-medium text-destructive"
-                      : "ml-auto text-muted-foreground"
-                  }
-                  suppressHydrationWarning
+                {m.list_truncated({ count: page.items.length })}
+              </p>
+            )}
+            <ul className="flex flex-col gap-2" data-testid="my-deadlines">
+              {page.items.map((obligation) => (
+                <li
+                  key={obligation.id}
+                  className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3 text-sm"
                 >
-                  {obligation.status === "overdue"
-                    ? m.deadline_overdue({
-                        date: formatDateTime(obligation.due_at) ?? "-",
-                      })
-                    : m.deadline_due({
-                        date: formatDateTime(obligation.due_at) ?? "-",
-                      })}
-                </span>
-              </li>
-            ))}
-          </ul>
+                  <span className="font-medium">
+                    {deadlineLabel(obligation.action)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {obligation.rule_ref}
+                  </span>
+                  {obligation.tender_id != null &&
+                    obligation.tender_title != null && (
+                      <Link
+                        to="/tenders/$tenderId"
+                        params={{ tenderId: obligation.tender_id }}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {obligation.tender_title}
+                      </Link>
+                    )}
+                  <span
+                    className={
+                      obligation.status === "overdue"
+                        ? "ml-auto font-medium text-destructive"
+                        : "ml-auto text-muted-foreground"
+                    }
+                    suppressHydrationWarning
+                  >
+                    {obligation.status === "overdue"
+                      ? m.deadline_overdue({
+                          date: formatDateTime(obligation.due_at) ?? "-",
+                        })
+                      : m.deadline_due({
+                          date: formatDateTime(obligation.due_at) ?? "-",
+                        })}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </QueryBoundary>
     </section>

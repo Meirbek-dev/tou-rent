@@ -7,6 +7,7 @@
 //! для testcontainers (A-021). Каждый тест живет в транзакции с откатом -
 //! стендовая база не засоряется.
 
+use sqlx::Acquire as _;
 use uuid::Uuid;
 
 /// `Ok(None)` - переменная не задана: тест обязан пропуститься с сообщением.
@@ -798,4 +799,191 @@ async fn withdraw(
     .execute(&mut *tx)
     .await?;
     Ok(())
+}
+
+/// INV-037: заявка после истечения срока приема отклоняется схемой.
+///
+/// Раньше стоп стоял только на `core.journal_entries`: сама заявка
+/// вставлялась и после дедлайна, а инвариант держался лишь тем, что код
+/// всегда пишет обе строки в одной транзакции - то есть жил в приложении.
+#[tokio::test]
+async fn inv037_application_rejects_submission_after_deadline() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+
+    let f = fixture(&mut tx, "-1 hour").await.expect("fixture");
+
+    let err = sqlx::query!(
+        "INSERT INTO core.applications
+           (tender_id, lot_id, participant_id, applicant_kind, applicant_details)
+         VALUES ($1, $2, $3, 'individual', '{}'::jsonb)",
+        f.tender_id,
+        f.lot_id,
+        f.participant_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect_err("заявка после дедлайна обязана быть отклонена");
+    assert!(
+        err.to_string().contains("INV-037"),
+        "ожидали отказ INV-037, получили: {err}"
+    );
+}
+
+/// INV-037: заявитель, лот, тендер и момент подачи неизменны.
+///
+/// Запись журнала регистрации append-only и ссылается на эти поля. Пока
+/// сторожа не было, подмена `participant_id` проходила - и журнал после
+/// нее утверждал неправду, а цепочка аудита оставалась целой.
+#[tokio::test]
+async fn inv037_application_identity_is_frozen() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+
+    let f = fixture(&mut tx, "1 day").await.expect("fixture");
+    let application = sqlx::query_scalar!(
+        "INSERT INTO core.applications
+           (tender_id, lot_id, participant_id, applicant_kind, applicant_details)
+         VALUES ($1, $2, $3, 'individual', '{}'::jsonb) RETURNING id",
+        f.tender_id,
+        f.lot_id,
+        f.participant_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("заявка подана");
+
+    let err = sqlx::query!(
+        "UPDATE core.applications SET participant_id = $2 WHERE id = $1",
+        application,
+        f.stranger_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect_err("подмена заявителя обязана быть отклонена");
+    assert!(
+        err.to_string().contains("INV-037"),
+        "ожидали отказ INV-037, получили: {err}"
+    );
+}
+
+/// FR-905: договор не рождается зарегистрированным.
+///
+/// Сторожа регистрации и сверки стояли только на UPDATE, поэтому строка,
+/// вставленная сразу в конечное состояние, проходила мимо них целиком.
+#[tokio::test]
+async fn fr905_contract_cannot_be_born_registered() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+
+    let f = fixture(&mut tx, "1 day").await.expect("fixture");
+    let object_id = sqlx::query_scalar!(
+        r#"SELECT object_id AS "object_id!" FROM core.lots WHERE id = $1"#,
+        f.lot_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("объект лота");
+
+    let err = sqlx::query!(
+        "INSERT INTO core.contracts
+           (object_id, tenant_id, monthly_rate, status, registered_at, reg_number)
+         VALUES ($1, $2, 150000, 'active', core.now(), 'Д-ROUND2')",
+        object_id,
+        f.participant_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect_err("договор, рожденный зарегистрированным, обязан быть отклонен");
+    assert!(
+        err.to_string().contains("FR-905"),
+        "ожидали отказ FR-905, получили: {err}"
+    );
+}
+
+/// FR-606: победителем торгов объявляется наибольшая ставка.
+///
+/// Проверялась только принадлежность пары (заявка, сумма) аукциону, но не
+/// максимальность - проигравшего можно было объявить победителем.
+#[tokio::test]
+async fn fr606_winner_must_be_the_highest_bid() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+
+    let f = fixture(&mut tx, "1 day").await.expect("fixture");
+
+    let mut application = async |participant: Uuid| -> Uuid {
+        sqlx::query_scalar!(
+            "INSERT INTO core.applications
+               (tender_id, lot_id, participant_id, applicant_kind, applicant_details)
+             VALUES ($1, $2, $3, 'individual', '{}'::jsonb) RETURNING id",
+            f.tender_id,
+            f.lot_id,
+            participant
+        )
+        .fetch_one(&mut *tx)
+        .await
+        .expect("заявка подана")
+    };
+    let low = application(f.participant_id).await;
+    let high = application(f.stranger_id).await;
+
+    let auction = sqlx::query_scalar!(
+        "INSERT INTO core.auctions (lot_id, starting_bid, bid_step, status)
+         VALUES ($1, 100000, 5000, 'running') RETURNING id",
+        f.lot_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("торги назначены");
+
+    // Оглашенные предложения: суммы литералами - макросу нужен текст запроса
+    sqlx::query!(
+        "INSERT INTO core.bids (id, auction_id, application_id, amount, announced)
+         VALUES (gen_random_uuid(), $1, $2, 168000.00, true)",
+        auction,
+        low
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("оглашенное предложение");
+    sqlx::query!(
+        "INSERT INTO core.bids (id, auction_id, application_id, amount, announced)
+         VALUES (gen_random_uuid(), $1, $2, 176000.00, true)",
+        auction,
+        high
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("оглашенное предложение");
+
+    // Отказ БД обрывает транзакцию, поэтому проба идет в точке сохранения:
+    // иначе следующий запрос упрется в «current transaction is aborted»
+    let mut sp = tx.begin().await.expect("savepoint");
+    let err = sqlx::query!(
+        "UPDATE core.auctions
+         SET status = 'finished', winner_application_id = $2, winner_amount = 168000
+         WHERE id = $1",
+        auction,
+        low
+    )
+    .execute(&mut *sp)
+    .await
+    .expect_err("проигравший в победители обязан быть отклонен");
+    assert!(
+        err.to_string().contains("FR-606"),
+        "ожидали отказ FR-606, получили: {err}"
+    );
+    sp.rollback().await.expect("откат точки сохранения");
+
+    sqlx::query!(
+        "UPDATE core.auctions
+         SET status = 'finished', winner_application_id = $2, winner_amount = 176000
+         WHERE id = $1",
+        auction,
+        high
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("наибольшая ставка объявляется победителем");
 }

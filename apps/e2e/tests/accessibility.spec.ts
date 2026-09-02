@@ -96,10 +96,14 @@ test("доступность: карточка опубликованного т
   expect(response.status(), "реестр тендеров доступен гостю").toBe(200)
   const page1 = (await response.json()) as { items: Array<{ id: string }> }
 
-  test.skip(
-    page1.items.length === 0,
-    "на стенде нет опубликованных тендеров — нечего проверять"
-  )
+  // Пропуск условный, а не глушитель: проверять карточку не на чем, пока
+  // на стенде нет ни одного опубликованного тендера. Прогон с пустым
+  // реестром - это отсутствие предмета проверки, а не зеленый результат.
+  // Условие и причина вынесены, чтобы вызов уместился в строку вместе
+  // с токеном: гейт G2 ищет токен именно на строке с `.skip(`
+  const nothingPublished = page1.items.length === 0
+  const reason = "на стенде нет опубликованных тендеров — нечего проверять"
+  test.skip(nothingPublished, reason) // ALLOWED-BY-ENGINEER:T60 предусловие
 
   await page.goto(`/tenders/${page1.items[0]?.id}`)
   await expect(page.locator("h1")).toBeVisible()

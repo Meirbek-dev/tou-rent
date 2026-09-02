@@ -167,10 +167,28 @@ pub async fn confirm_fee(
     paid_at: time::Date,
 ) -> Result<AccountRow, LedgerError> {
     crate::with_actor(db, actor, async |tx| {
+        confirm_fee_on(tx, actor, application_id, amount, paid_at).await
+    })
+    .await
+}
+
+/// То же в транзакции вызывающего - вариант `*_on` (арх. v3 § 6): тест
+/// откатывает свои изменения, а не оставляет проводку на стенде (книга
+/// append-only, удалить ее нечем).
+pub async fn confirm_fee_on(
+    tx: &mut sqlx::PgConnection,
+    actor: Uuid,
+    application_id: Uuid,
+    amount: Decimal,
+    paid_at: time::Date,
+) -> Result<AccountRow, LedgerError> {
+    {
         // Взнос лота (FR-206 = месячная ставка), участник и время заседания
         let row = sqlx::query!(
             r#"SELECT a.participant_id, a.status::text AS "status!", l.guarantee_fee,
                       t.opening_at,
+                      (t.announced_at AT TIME ZONE 'Asia/Almaty')::date AS announced_on,
+                      (core.now() AT TIME ZONE 'Asia/Almaty')::date AS "today!",
                       refdata.add_business_days($2::date, 2)
                         <= (t.opening_at AT TIME ZONE 'Asia/Almaty')::date AS in_time
                FROM core.applications a
@@ -189,6 +207,35 @@ pub async fn confirm_fee(
         let guarantee_fee = row.guarantee_fee;
         let opening_at = row.opening_at;
         let in_time = row.in_time;
+
+        // Дата поступления - выписка банка, а не свободное поле: до этой
+        // проверки принимались и `0001-01-01`, и завтрашний день, и проводка
+        // с такой датой ложилась в книгу навсегда (append-only). Деловая дата
+        // берется по Алматы из доменных часов (ADR-0005), а не из системных
+        // и не из часового пояса сессии БД.
+        if paid_at > row.today {
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::GuaranteeDeposit,
+                format!(
+                    "дата поступления {paid_at} еще не наступила (сегодня {}) - \
+                     подтверждается уже пришедший платеж (п. 23, 25)",
+                    row.today
+                ),
+            )));
+        }
+        // Раньше объявления тендера взноса по нему быть не могло: реквизиты
+        // счета публикуются вместе с извещением (п. 21, 23)
+        if let Some(announced_on) = row.announced_on
+            && paid_at < announced_on
+        {
+            return Err(LedgerError::Rejected(RuleRejection::new(
+                RuleViolation::GuaranteeDeposit,
+                format!(
+                    "дата поступления {paid_at} раньше объявления тендера {announced_on} - \
+                     взнос по необъявленному тендеру внести было некуда (п. 21, 23)"
+                ),
+            )));
+        }
 
         if status == "withdrawn" {
             return Err(LedgerError::Rejected(RuleRejection::new(
@@ -269,8 +316,7 @@ pub async fn confirm_fee(
         .map_err(map_rule)?;
 
         fetch_account(&mut *tx, account_id).await.map_err(map_rule)
-    })
-    .await
+    }
 }
 
 async fn fetch_account(

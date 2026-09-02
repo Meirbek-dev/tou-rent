@@ -596,7 +596,7 @@ pub async fn register_on(
     {
         // Период найма считается от даты заключения на срок лота: он же
         // защищает объект от пересекающихся аренд (INV-DB-02)
-        sqlx::query!(
+        let updated = sqlx::query!(
             "UPDATE core.contracts
              SET reg_number = $2, registered_at = core.now(), status = 'signing',
                  lease_period = tstzrange(core.now(),
@@ -608,6 +608,30 @@ pub async fn register_on(
         .execute(&mut *tx)
         .await
         .map_err(map_rule)?;
+
+        // Ноль строк - не «ничего не поменялось»: либо договора нет вовсе
+        // (дальше `fetch_one` за `tenant_id` падал `RowNotFound` и уезжал
+        // наружу как 500), либо он уже зарегистрирован - и тогда прежний
+        // ход возвращал 200 со старым номером, будто регистрация прошла.
+        // Дата регистрации - дата заключения, с нее считается период найма
+        // (FR-905, п. 126): переписать ее второй раз нельзя.
+        if updated.rows_affected() == 0 {
+            let exists = sqlx::query_scalar!(
+                "SELECT registered_at FROM core.contracts WHERE id = $1",
+                contract_id
+            )
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(map_rule)?;
+            return match exists {
+                None => Err(ContractError::NotFound),
+                Some(_) => Err(ContractError::Rejected(RuleRejection::new(
+                    RuleViolation::ContractRegistration,
+                    "FR-905: договор уже зарегистрирован - повторная регистрация \
+                     сдвинула бы дату заключения и период найма (п. 126)",
+                ))),
+            };
+        }
 
         // Заключение договора открывает депозитный счет и срок внесения
         // депозита: он равен месячной плате и вносится за 10 рабочих дней

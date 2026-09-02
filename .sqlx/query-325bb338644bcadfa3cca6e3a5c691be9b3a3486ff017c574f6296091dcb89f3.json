@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.price_proposals (application_id, amount)\n         VALUES ('00000000-0000-0000-0000-000000000000', 999999999999999.99)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "325bb338644bcadfa3cca6e3a5c691be9b3a3486ff017c574f6296091dcb89f3"
+}

@@ -13,6 +13,7 @@ import {
 
 import { m } from "#/paraglide/messages"
 import { Badge } from "@/components/ui/badge"
+import { useNowMs } from "@/hooks/use-now"
 
 import type { TenderStatus } from "@/lib/api"
 
@@ -58,13 +59,61 @@ export function tenderStatusLabel(status: TenderStatus): string {
   return LABELS[status]()
 }
 
-export function TenderStatusBadge({ status }: { status: TenderStatus }) {
-  const { variant, icon: Icon } = VIEWS[status]
+/**
+ * Срок вышел, а статус еще «прием заявок»: перевод статуса делает процедура,
+ * и до нее карточка утверждала два противоположных факта разом - зеленое
+ * «Прием заявок» рядом с «Прием заявок закрыт» из блока срока. Зеленого
+ * приглашения тут больше нет: подпись нейтральная, цвет серый.
+ */
+const INTAKE_OVER: StatusView = { variant: "neutral", icon: InboxIcon }
+
+function StatusBadge({ view, label }: { view: StatusView; label: string }) {
+  const { variant, icon: Icon } = view
 
   return (
     <Badge variant={variant}>
       <Icon aria-hidden="true" />
-      {tenderStatusLabel(status)}
+      {label}
     </Badge>
+  )
+}
+
+function DeadlineAwareBadge({
+  status,
+  deadline,
+}: {
+  status: TenderStatus
+  deadline: string
+}) {
+  // «Сейчас» появляется после монтирования: серверное время в разметке
+  // разошлось бы с браузерным при гидратации (NFR-03, см. useNowMs)
+  const nowMs = useNowMs()
+  const intakeOver =
+    status === "accepting" &&
+    nowMs !== null &&
+    new Date(deadline).getTime() <= nowMs
+
+  return intakeOver ? (
+    <StatusBadge view={INTAKE_OVER} label={m.tender_status_intake_over()} />
+  ) : (
+    <StatusBadge view={VIEWS[status]} label={tenderStatusLabel(status)} />
+  )
+}
+
+export function TenderStatusBadge({
+  status,
+  deadline,
+}: {
+  status: TenderStatus
+  /** Срок приема заявок; без него бейдж читает только статус */
+  deadline?: string | null | undefined
+}) {
+  // Ветка со сроком заводит ежеминутный таймер, поэтому она отдельным
+  // компонентом: реестры кабинетов рисуют бейдж десятками строк, и тик,
+  // который ничего не меняет, там не нужен ни одной
+  return deadline == null ? (
+    <StatusBadge view={VIEWS[status]} label={tenderStatusLabel(status)} />
+  ) : (
+    <DeadlineAwareBadge status={status} deadline={deadline} />
   )
 }

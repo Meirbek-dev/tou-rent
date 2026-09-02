@@ -30,13 +30,12 @@ export const tenderProtocolsQuery = (tenderId: string) =>
 /**
  * Копии протоколов в кабинете участника (FR-703, п. 56).
  *
- * TODO-ENGINEER: маршрут отдает страницу `{ items, next_after, truncated }`
- * (ТЗ § 7), сюда возвращаются только строки - панель
- * (`components/my-protocols.tsx`) признак `truncated` пока не показывает.
+ * Отдается страница целиком: протокол - доказательство хода тендера, и
+ * недосчитаться его копии участник должен не молча.
  */
 export const myProtocolsQuery = queryOptions({
   queryKey: ["protocols", "my"],
-  queryFn: async () => (await mutate(api.GET("/api/v1/protocols/my"))).items,
+  queryFn: () => mutate(api.GET("/api/v1/protocols/my")),
 })
 
 /**

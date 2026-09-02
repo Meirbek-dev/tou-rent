@@ -85,10 +85,9 @@ async fn fixture(tx: &mut sqlx::PgConnection, handed: bool) -> Result<Fixture, s
 
     let tender_id = sqlx::query_scalar!(
         "INSERT INTO core.tenders (title, status, organizer_id, announced_at,
-                                   submission_deadline, opening_at, opened_at)
+                                   submission_deadline, opening_at)
          VALUES ('Т26 тендер', 'summed_up', $1, now() - interval '30 days',
-                 now() - interval '10 days', now() - interval '9 days',
-                 now() - interval '9 days')
+                 now() + interval '1 hour', now() + interval '2 hours')
          RETURNING id",
         organizer
     )
@@ -153,6 +152,19 @@ async fn fixture(tx: &mut sqlx::PgConnection, handed: bool) -> Result<Fixture, s
         handed
     )
     .fetch_one(&mut *tx)
+    .await?;
+
+    // Прием закрывается после подачи, а не до нее: сторож INV-037
+    // (`core.check_application_deadline`) не пускает заявку задним числом,
+    // а сценарию нужен следующий этап - подведенные итоги и договор
+    sqlx::query!(
+        "UPDATE core.tenders
+         SET submission_deadline = now() - interval '10 days',
+             opening_at = now() - interval '9 days'
+         WHERE id = $1",
+        tender_id
+    )
+    .execute(&mut *tx)
     .await?;
 
     Ok(Fixture {
@@ -344,26 +356,43 @@ async fn fr505_evader_applications_are_rejected_automatically() {
     .expect("реестр");
     assert!(in_registry, "уклонившийся попадает в реестр (п. 120)");
 
-    // Новый тендер и лот: те же условия, другой процесс
-    let next_lot = sqlx::query_scalar!(
-        "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
-                                base_rate_monthly, rate_calculation, guarantee_fee)
-         SELECT l.tender_id, 2, l.object_id, l.purpose, l.lease_months,
-                l.base_rate_monthly, l.rate_calculation, l.guarantee_fee
-         FROM core.lots l WHERE l.id = $1
+    // Новый тендер и лот: те же условия, другой процесс. Тендер именно
+    // новый и с открытым приемом - в прежнем прием давно закрыт, и заявка
+    // в него не прошла бы вовсе (INV-037), так что правило про уклониста
+    // осталось бы непроверенным
+    let next_tender = sqlx::query_scalar!(
+        "INSERT INTO core.tenders (title, status, organizer_id, announced_at,
+                                   submission_deadline, opening_at)
+         SELECT 'Т26 тендер (следующий)', 'accepting', t.organizer_id, now(),
+                now() + interval '10 days', now() + interval '11 days'
+         FROM core.tenders t WHERE t.id = $1
          RETURNING id",
-        f.lot_id
+        f.tender_id
     )
     .fetch_one(&mut *tx)
     .await
-    .expect("лот повторного тендера");
+    .expect("следующий тендер");
+
+    let next_lot = sqlx::query_scalar!(
+        "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                                base_rate_monthly, rate_calculation, guarantee_fee)
+         SELECT $2, 1, l.object_id, l.purpose, l.lease_months,
+                l.base_rate_monthly, l.rate_calculation, l.guarantee_fee
+         FROM core.lots l WHERE l.id = $1
+         RETURNING id",
+        f.lot_id,
+        next_tender
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("лот следующего тендера");
 
     let application = sqlx::query!(
         r#"INSERT INTO core.applications
              (tender_id, lot_id, participant_id, applicant_kind, applicant_details)
            VALUES ($1, $2, $3, 'legal_entity', '{"name": "ТОО Т26"}'::jsonb)
            RETURNING status::text AS "status!", rejection_reason"#,
-        f.tender_id,
+        next_tender,
         next_lot,
         f.winner_id
     )

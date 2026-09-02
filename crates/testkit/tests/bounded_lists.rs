@@ -226,15 +226,34 @@ async fn receipts_of_one_account(
 
     let contract = sqlx::query_scalar!(
         "INSERT INTO core.contracts
-           (object_id, tenant_id, monthly_rate, status, lease_period, reg_number, registered_at)
+           (object_id, tenant_id, monthly_rate, status, lease_period,
+            drafted_at, tenant_signed_at, documents_received_at)
          VALUES ($1, $2, 1000, 'active',
-                 tstzrange(now(), now() + interval '365 days'), $3, now())
+                 tstzrange(now(), now() + interval '365 days'),
+                 core.now(), core.now(), core.now())
          RETURNING id",
         object,
-        payer,
-        format!("Д-W17-{tag}")
+        payer
     )
     .fetch_one(&mut *tx)
+    .await?;
+
+    // Регистрация - через сверку и подписи (INV-115, FR-905), а не одной вставкой
+    sqlx::query!(
+        "INSERT INTO core.contract_checklists (contract_id, item_code, checked_at)
+         VALUES ($1, 'bank_details', core.now())",
+        contract
+    )
+    .execute(&mut *tx)
+    .await?;
+    sqlx::query!(
+        "UPDATE core.contracts
+         SET landlord_signed_at = core.now(), registered_at = core.now(), reg_number = $2
+         WHERE id = $1",
+        contract,
+        format!("Д-W17-{tag}")
+    )
+    .execute(&mut *tx)
     .await?;
 
     let account = sqlx::query_scalar!(

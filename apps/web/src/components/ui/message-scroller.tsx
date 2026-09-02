@@ -6,6 +6,7 @@ import {
   useMessageScrollerVisibility,
 } from "@shadcn/react/message-scroller"
 
+import { m } from "#/paraglide/messages"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ArrowDownIcon } from "lucide-react"
@@ -107,7 +108,9 @@ function MessageScrollerButton({
         <>
           <ArrowDownIcon />
           <span className="sr-only">
-            {direction === "end" ? "Scroll to end" : "Scroll to start"}
+            {direction === "end"
+              ? m.ui_scroll_to_end()
+              : m.ui_scroll_to_start()}
           </span>
         </>
       )}

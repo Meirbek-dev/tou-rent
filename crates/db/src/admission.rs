@@ -98,7 +98,8 @@ pub async fn ensure_qualification_meeting(
         // Только утвержденный состав (FR-1101) и действующие полномочия (п. 9–11)
         let commission_id = sqlx::query_scalar!(
             "SELECT id FROM core.commissions
-             WHERE valid_from <= current_date AND current_date < valid_until
+             WHERE valid_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date
+               AND (core.now() AT TIME ZONE 'Asia/Almaty')::date < valid_until
                AND approved_at IS NOT NULL
              ORDER BY approved_at DESC LIMIT 1"
         )

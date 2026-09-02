@@ -57,14 +57,18 @@ pub async fn rejection_reasons(db: &Db) -> Result<Vec<RejectionReason>, sqlx::Er
 }
 
 /// Значения всех коэффициентов, действующие сегодня: последняя версия
-/// каждой пары (коэффициент, опция) с effective_from <= current_date.
+/// каждой пары (коэффициент, опция), вступившая в силу не позже деловой
+/// даты. Дата - из доменных часов по Алматы (ADR-0005): `current_date`
+/// брал часы процесса СУБД в UTC, поэтому при сдвинутых часах стенда давал
+/// коэффициент прошлой версии, а ежедневно с 00:00 до 05:00 по Алматы
+/// отставал на сутки.
 pub async fn coefficients_today(
     db: &Db,
 ) -> Result<HashMap<(String, String), Decimal>, sqlx::Error> {
     let rows = sqlx::query!(
         "SELECT DISTINCT ON (coefficient, option_code) coefficient, option_code, value
          FROM refdata.rate_coefficients
-         WHERE effective_from <= current_date
+         WHERE effective_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date
          ORDER BY coefficient, option_code, effective_from DESC",
     )
     .fetch_all(db)
@@ -151,8 +155,9 @@ pub async fn coefficients_all(db: &Db) -> Result<Vec<CoefficientRecord>, sqlx::E
                   label_ru, label_kk, label_en, value, effective_from,
                   id = first_value(id) OVER (
                     PARTITION BY coefficient, option_code
-                    ORDER BY (effective_from <= current_date) DESC, effective_from DESC
-                  ) AND effective_from <= current_date AS "current!"
+                    ORDER BY (effective_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date) DESC,
+                             effective_from DESC
+                  ) AND effective_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date AS "current!"
            FROM refdata.rate_coefficients
            ORDER BY coefficient, option_code, effective_from DESC"#
     )
@@ -253,10 +258,16 @@ pub async fn clock_shift_seconds(db: &Db) -> Result<f64, sqlx::Error> {
 }
 
 /// Сдвиг часов стенда. `who` попадает в аудит вместе со значением.
+///
+/// `set_at` - единственное место, где время берется реальными часами, а не
+/// доменными: отметка о самом сдвиге, поставленная сдвинутыми часами, прячет
+/// сдвиг от того, кто по ней разбирается (ADR-0005, `REAL_CLOCK_ALLOWED`
+/// в `clock_single_source`). Отсюда токен исключения в тексте запроса.
 pub async fn set_clock_shift(db: &Db, interval: &str, who: &str) -> Result<f64, sqlx::Error> {
     sqlx::query_scalar!(
         r#"UPDATE refdata.clock_offset
-         SET shift = $1::text::interval, set_at = clock_timestamp(), set_by = $2
+         SET shift = $1::text::interval, set_by = $2,
+             set_at = clock_timestamp() -- ALLOWED-BY-ENGINEER:ADR-0005
          WHERE id
          RETURNING extract(epoch FROM shift)::float8 AS "shift!""#,
         interval,

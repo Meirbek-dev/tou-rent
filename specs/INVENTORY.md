@@ -48,7 +48,15 @@
 `core.investment_contracts` · `core.investment_contract_files` · `core.investment_acceptances` (T36, FR-1204) ·
 `core.benefit_grants` (T37, FR-1205) · `core.public_records` (T39, FR-1403) ·
 `core.land_plots` · `core.land_applications` · `core.land_decisions` · `core.land_contracts` · `core.land_contract_covenants` (T40, FR-1801, INV-105) ·
-`core.contract_amendments` · `core.contract_amendment_changes` (T42, FR-906)
+`core.contract_amendments` · `core.contract_amendment_changes` (T42, FR-906) ·
+`core.objects` · `core.auctions` · `core.ledger_accounts` (круг 2 гаунтлета:
+реестр имущества, итог торгов и лицевые счета мутировались без единого события)
+
+Вне перечня осознанно, обратное направление гейта G15 держит этот список
+исключений: `journal_counters` (внутренний счетчик номеров, не факт домена) и
+`account_verifications` (одноразовые коды подтверждения регистрации - плумбинг
+аутентификации, живет минутами и гасится по `expires_at`). Обе таблицы - схемы
+core; в перечне выше их нет намеренно.
 
 ## Аудит справочников (T53, FR-1901)
 

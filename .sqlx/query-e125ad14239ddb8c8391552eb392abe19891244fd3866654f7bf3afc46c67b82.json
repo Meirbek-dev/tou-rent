@@ -1,0 +1,68 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, coefficient, option_code,\n                  label_ru, label_kk, label_en, value, effective_from,\n                  id = first_value(id) OVER (\n                    PARTITION BY coefficient, option_code\n                    ORDER BY (effective_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date) DESC,\n                             effective_from DESC\n                  ) AND effective_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date AS \"current!\"\n           FROM refdata.rate_coefficients\n           ORDER BY coefficient, option_code, effective_from DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "coefficient",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "option_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "label_ru",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "label_kk",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "label_en",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "value",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "effective_from",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 8,
+        "name": "current!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "e125ad14239ddb8c8391552eb392abe19891244fd3866654f7bf3afc46c67b82"
+}

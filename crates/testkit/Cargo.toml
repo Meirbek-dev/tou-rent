@@ -18,4 +18,6 @@ jiff.workspace = true
 rust_decimal.workspace = true
 time.workspace = true
 tou-domain.workspace = true
+# Разбор отказа БД в ответ API проверяется той же воронкой, что и в обработчике (AC-1)
+tou-http.workspace = true
 uuid.workspace = true

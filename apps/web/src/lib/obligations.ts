@@ -10,11 +10,9 @@ export type HolidayDto = components["schemas"]["HolidayDto"]
 /**
  * «Мои сроки» (FR-1702): открытые обязательства ролей пользователя.
  *
- * TODO-ENGINEER: маршрут отдает страницу `{ items, next_after, truncated }`
- * (ТЗ § 7), сюда возвращаются только строки - дашборд
- * (`components/my-deadlines.tsx`) признак `truncated` пока не показывает.
- * А показать его тут важнее всего: поднятый признак значит, что открытых
- * сроков накопилось больше, чем дашборд умещает.
+ * Отдается страница целиком, а не ее `items`: поднятый `truncated` значит,
+ * что открытых сроков накопилось больше, чем дашборд умещает, и молчать об
+ * этом нельзя - пропущенный срок стоит дороже лишней строки на экране.
  */
 export const myObligationsQuery = queryOptions({
   queryKey: ["obligations", "my"],
@@ -23,7 +21,7 @@ export const myObligationsQuery = queryOptions({
     if (error !== undefined || data === undefined) {
       throw (error as unknown) ?? new Error("failed to load obligations")
     }
-    return data.items
+    return data
   },
   // Сроки меряются днями - частый опрос не нужен
   staleTime: 60_000,

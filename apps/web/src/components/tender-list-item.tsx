@@ -32,12 +32,19 @@ export function TenderListItem({
       <article className="grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_auto]">
         <div className="flex min-w-0 flex-col gap-2 p-4 sm:p-5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <TenderStatusBadge status={tender.status} />
+            <TenderStatusBadge
+              status={tender.status}
+              deadline={tender.submission_deadline}
+            />
             <span className="text-sm text-muted-foreground">
               {m.tenders_lots_count({ count: tender.lots.length })}
             </span>
           </div>
-          <Heading className="text-lg leading-snug font-semibold">
+          {/* Наименование тендера - свободный текст: в нем встречается
+              длинный неразрывный кусок (номер, идентификатор, ссылка).
+              Без переноса он уезжает за карточку, а `overflow-hidden`
+              у нее срезает хвост - на узком экране заголовок обрывался */}
+          <Heading className="text-lg leading-snug font-semibold break-words">
             <Link
               to="/tenders/$tenderId"
               params={{ tenderId: tender.id }}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT COALESCE(\n                 (SELECT commission_id FROM core.sessions_meetings\n                  WHERE tender_id = $1 AND kind = 'qualification'),\n                 (SELECT id FROM core.commissions\n                  WHERE valid_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date\n                    AND (core.now() AT TIME ZONE 'Asia/Almaty')::date < valid_until\n                  ORDER BY valid_from DESC LIMIT 1))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "coalesce",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "af460a8487d789bbce57fb63098e5e91b6dd61189c707b2618b83a658f06ebe9"
+}

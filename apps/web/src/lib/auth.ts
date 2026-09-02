@@ -1,8 +1,12 @@
 import { queryOptions } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 
-import { api } from "@/lib/api"
-import { ruleMessage } from "@/lib/rule-messages"
+// `#/` вместо `@/`: оба псевдонима ведут в `src/` (tsconfig paths), но `#/`
+// объявлен полем `imports` в package.json и потому разрешается не только
+// сборщиком, а и раннером тестов. Без этого `auth.test.ts` не поднимается -
+// vitest берет конфиг корня репозитория, где tsconfigPaths не включен.
+import { api } from "#/lib/api"
+import { ruleMessage } from "#/lib/rule-messages"
 
 import type { components } from "@tou/api-client"
 
@@ -39,15 +43,20 @@ export async function changePassword(
 }
 
 /**
- * Человекочитаемое сообщение из problem+json (RFC 9457, NFR-08).
+ * Подробность отказа из problem+json (RFC 9457, NFR-08); `null` - ответ
+ * не разбирается.
  *
  * Причина отказа по правилу читается первой и переводится по каталогу:
  * раньше первым был `detail`, а туда попадал текст `RAISE EXCEPTION` из
  * триггера БД - единственная строка интерфейса, существовавшая только
  * по-русски (NFR-01). Теперь сервер шлет машинную причину, `detail`
  * у отказов по правилу пуст, и остальным ошибкам он по-прежнему принадлежит.
+ *
+ * `null` - это обрыв сети, 502 от прокси, HTML-страница ошибки и собственные
+ * броски слоя данных (`new Error("failed to load ...")`): у них нет ни
+ * `detail`, ни `title`, и показывать пользователю нечего.
  */
-export function problemMessage(error: unknown): string {
+export function problemDetail(error: unknown): string | null {
   if (error && typeof error === "object") {
     const problem = error as Partial<Problem>
     if (typeof problem.rule === "string") {
@@ -60,7 +69,20 @@ export function problemMessage(error: unknown): string {
       return problem.title
     }
   }
-  return "unknown_error"
+  return null
+}
+
+/**
+ * Человекочитаемое сообщение об отказе - всегда строка интерфейса.
+ *
+ * Последней веткой здесь стоял литерал `"unknown_error"`: не ключ Paraglide,
+ * а служебное слово, которое доезжало до `<FormAlert>` на любой неразобранной
+ * ошибке. Отфильтрован он был ровно в одном месте из тридцати восьми -
+ * сравнением строк. Теперь неизвестное объясняется словами в трех локалях,
+ * а «есть ли что показать» спрашивают у `problemDetail`, а не у текста.
+ */
+export function problemMessage(error: unknown): string {
+  return problemDetail(error) ?? m.error_unknown()
 }
 
 /** Кабинеты по ролям (ТЗ § 8, INV-POL-01). Ключи - snake_case ролей домена. */

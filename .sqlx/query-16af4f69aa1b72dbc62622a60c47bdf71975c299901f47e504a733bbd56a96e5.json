@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.applications\n           (tender_id, lot_id, participant_id, applicant_kind, applicant_details)\n         VALUES ($1, $2, $3, 'individual', '{}'::jsonb)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "16af4f69aa1b72dbc62622a60c47bdf71975c299901f47e504a733bbd56a96e5"
+}

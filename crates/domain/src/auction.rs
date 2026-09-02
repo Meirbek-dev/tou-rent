@@ -19,13 +19,22 @@ use crate::money::Money;
 /// Минимальный шаг торгов по решению заказчика Q-019.
 pub const MIN_BID_STEP_PERCENT: Decimal = dec!(5);
 
+/// Потолок шага торгов.
+///
+/// Нижняя граница была, верхней не было ни у типа, ни у CHECK, ни у DTO:
+/// принимались и `1000`, и `999999999999999999999999999`. Шаг больше самой
+/// стартовой ставки - не торги, а один ход: вторая ставка обязана быть выше
+/// старта более чем вдвое, и комната закрывается на первом же участнике.
+/// 100 % - последнее значение, при котором торг еще возможен.
+pub const MAX_BID_STEP_PERCENT: Decimal = dec!(100);
+
 /// Процент шага, который секретарь фиксирует до открытия комнаты.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BidStepPercent(Decimal);
 
 impl BidStepPercent {
     pub fn new(value: Decimal) -> Result<Self, InvalidBidStepPercent> {
-        if value < MIN_BID_STEP_PERCENT {
+        if value < MIN_BID_STEP_PERCENT || value > MAX_BID_STEP_PERCENT {
             return Err(InvalidBidStepPercent);
         }
         Ok(Self(value))
@@ -37,7 +46,7 @@ impl BidStepPercent {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
-#[error("шаг торгов должен быть не меньше 5 %")]
+#[error("шаг торгов - от 5 % до 100 % стартовой ставки")]
 pub struct InvalidBidStepPercent;
 
 /// Длительность торгов по умолчанию - 60 минут от объявления старта (п. 66).
@@ -49,8 +58,16 @@ pub const EXTENSION_MINUTES: i64 = 15;
 /// Шаг торгов: выбранный процент от стартовой ставки, округленный по FR-204,
 /// но не меньше 1 тенге - иначе на копеечном старте шаг выродится в ноль
 /// и `core.auctions.bid_step > 0` отклонит аукцион.
+/// Умножение - `checked_mul`: у `Decimal` обычное `*` при переполнении
+/// паникует, а стартовая ставка приходит из БД и процент - от секретаря.
+/// Не сошлось - шаг равен самой ставке: это уже отвергнет и потолок процента,
+/// и `numeric(14,2)` колонки, но не паникой в рабочем потоке.
 pub fn bid_step(starting_bid: Money, percent: BidStepPercent) -> Money {
-    let raw = Money::new(starting_bid.amount() * percent.value() / dec!(100)).round_to_tenge();
+    let raw = starting_bid
+        .amount()
+        .checked_mul(percent.value())
+        .and_then(|product| product.checked_div(dec!(100)))
+        .map_or(starting_bid, |product| Money::new(product).round_to_tenge());
     if raw.amount() < dec!(1) {
         Money::new(dec!(1))
     } else {
@@ -180,6 +197,32 @@ mod tests {
     #[test]
     fn step_rejects_percent_below_five() {
         assert_eq!(BidStepPercent::new(dec!(4.99)), Err(InvalidBidStepPercent));
+    }
+
+    /// Рубеж RC-5: верхней границы не было ни у типа, ни у CHECK, ни у DTO -
+    /// принимались и `1000`, и число из двадцати семи девяток. Расчет шага по
+    /// такому проценту не помещался в `numeric(14,2)`, и вместо отказа
+    /// секретарь получал 500.
+    #[test]
+    fn step_rejects_percent_above_the_ceiling() {
+        assert_eq!(
+            BidStepPercent::new(dec!(100.01)),
+            Err(InvalidBidStepPercent)
+        );
+        assert_eq!(BidStepPercent::new(dec!(1000)), Err(InvalidBidStepPercent));
+        assert!(BidStepPercent::new(MAX_BID_STEP_PERCENT).is_ok());
+    }
+
+    /// Расчет шага не паникует ни на какой допустимой паре: `Decimal` при
+    /// переполнении обычного `*` снимает поток, а стартовая ставка приходит
+    /// из БД.
+    #[test]
+    fn step_does_not_panic_on_the_largest_inputs() {
+        let percent = BidStepPercent::new(MAX_BID_STEP_PERCENT).unwrap();
+        let huge = Money::new(Decimal::MAX);
+
+        let step = bid_step(huge, percent);
+        assert!(step.amount() > Decimal::ZERO);
     }
 
     #[test]

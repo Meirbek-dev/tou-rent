@@ -106,7 +106,7 @@ pub async fn seed_commission(db: &Db) -> Result<bool, sqlx::Error> {
         None => {
             sqlx::query_scalar!(
                 "INSERT INTO core.commissions (name, valid_from, valid_until)
-                 VALUES ($1, current_date, current_date + interval '1 year')
+                 VALUES ($1, (core.now() AT TIME ZONE 'Asia/Almaty')::date, (core.now() AT TIME ZONE 'Asia/Almaty')::date + interval '1 year')
                  RETURNING id",
                 DEMO_COMMISSION_NAME
             )
@@ -980,7 +980,8 @@ async fn advance_to_summed_up(db: &Db, tender_id: uuid::Uuid) -> Result<(), Seed
 
     let commission = sqlx::query_scalar!(
         "SELECT id FROM core.commissions
-         WHERE approved_at IS NOT NULL AND valid_from <= current_date AND current_date < valid_until
+         WHERE approved_at IS NOT NULL AND valid_from <= (core.now() AT TIME ZONE 'Asia/Almaty')::date
+           AND (core.now() AT TIME ZONE 'Asia/Almaty')::date < valid_until
          ORDER BY approved_at DESC LIMIT 1"
     )
     .fetch_optional(db)
@@ -1062,7 +1063,7 @@ async fn seed_admitted_fees(db: &Db, tender_id: uuid::Uuid) -> Result<(), SeedEr
 
         sqlx::query!(
             "INSERT INTO core.ledger_entries (account_id, op, credit, rule_ref, paid_at)
-             SELECT $1, 'receipt_confirmed', $2, 'п. 23, 25', current_date
+             SELECT $1, 'receipt_confirmed', $2, 'п. 23, 25', (core.now() AT TIME ZONE 'Asia/Almaty')::date
              WHERE NOT EXISTS (SELECT 1 FROM core.ledger_entries e WHERE e.account_id = $1)",
             account_id,
             row.guarantee_fee

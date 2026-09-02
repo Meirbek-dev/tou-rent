@@ -26,7 +26,8 @@ export const Route = createFileRoute("/special-orders")({
 })
 
 function SpecialOrdersPage() {
-  const records = Route.useLoaderData()
+  const page = Route.useLoaderData()
+  const records = page.items
 
   return (
     <PublicShell>
@@ -48,6 +49,17 @@ function SpecialOrdersPage() {
           />
         ) : (
           <>
+            {/* Реестр публикаций обрезан потолком выборки: об этом говорят
+                прямо, иначе неполный реестр читается как полный */}
+            {page.truncated && (
+              <p
+                role="status"
+                className="rounded-lg bg-amber-500/10 px-3 py-2 text-sm text-amber-700 ring-1 ring-amber-500/30 dark:text-amber-400"
+                data-testid="public-records-truncated"
+              >
+                {m.list_truncated({ count: records.length })}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground">
               {m.registry_found()}:{" "}
               <span className="font-medium text-foreground tabular-nums">

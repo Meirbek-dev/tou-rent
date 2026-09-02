@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.objects (kind, name, name_kk, address, address_kk, area_m2)\n         VALUES ('premises', 'AC-1', 'AC-1', 'AC-1', 'AC-1', 100000000.00)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "9d4aef6ed37ad834ddc4ac08afda9a2b8ace54104d9008fc58979238666519d8"
+}

@@ -1,0 +1,59 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.participant_id, a.status::text AS \"status!\", l.guarantee_fee,\n                      t.opening_at,\n                      (t.announced_at AT TIME ZONE 'Asia/Almaty')::date AS announced_on,\n                      (core.now() AT TIME ZONE 'Asia/Almaty')::date AS \"today!\",\n                      refdata.add_business_days($2::date, 2)\n                        <= (t.opening_at AT TIME ZONE 'Asia/Almaty')::date AS in_time\n               FROM core.applications a\n               JOIN core.lots l ON l.id = a.lot_id\n               JOIN core.tenders t ON t.id = a.tender_id\n               WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "participant_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "status!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "guarantee_fee",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 3,
+        "name": "opening_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "announced_on",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 5,
+        "name": "today!",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 6,
+        "name": "in_time",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c3a37b0828b10ab21ec3e7c75100a26fac3b6642b226ad54bacc80f013f8b010"
+}
