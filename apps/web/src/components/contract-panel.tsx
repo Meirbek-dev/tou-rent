@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { FileTextIcon } from "lucide-react"
 
@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { problemMessage } from "@/lib/auth"
+import { meQuery, problemMessage } from "@/lib/auth"
 import {
   advanceContract,
   checkChecklistItem,
@@ -23,6 +23,7 @@ import {
   draftContract,
   registerContract,
   tenderContractsQuery,
+  uploadActScan,
 } from "@/lib/contracts"
 import {
   declareEvasion,
@@ -31,7 +32,7 @@ import {
 } from "@/lib/evasion"
 import { formatDate, formatDateTime, formatTenge } from "@/lib/format"
 import { serverLabel } from "@/lib/server-label"
-import { notifySuccess } from "@/lib/toast"
+import { notifyError, notifySuccess } from "@/lib/toast"
 
 import type { ContractDto } from "@/lib/contracts"
 
@@ -484,6 +485,86 @@ function EvasionSection({
 }
 
 /**
+ * Скан подписанного акта (`POST /acts/{id}/scan`, Прил. 7–8).
+ *
+ * Маршрут был с самого начала, флаг `ActDto.has_scan` доезжал до клиента -
+ * и не читался никем: подписанный на бумаге акт оставался вне системы.
+ * Форма - та же, что у скана договора (`contracts.tsx`): одно поле `file`,
+ * состав форматов повторяет белый список сервера (`http::upload`), чтобы
+ * отказ был виден в диалоге выбора, а не после загрузки.
+ */
+function ActScanUpload({
+  actId,
+  contractId,
+}: {
+  actId: string
+  contractId: string
+}) {
+  const queryClient = useQueryClient()
+  const fileInput = useRef<HTMLInputElement>(null)
+  // Отказ остается на экране рядом с формой: тост исчезает, а причина
+  // нужна тому, кто будет выбирать файл заново
+  const [scanError, setScanError] = useState<string | undefined>(undefined)
+
+  const upload = useMutation({
+    mutationFn: (file: File) => uploadActScan(actId, file),
+    onSuccess: async () => {
+      setScanError(undefined)
+      if (fileInput.current !== null) fileInput.current.value = ""
+      notifySuccess(m.contract_scan_uploaded())
+      await queryClient.invalidateQueries({
+        queryKey: contractActsQuery(contractId).queryKey,
+      })
+    },
+    onError: (error: unknown) => {
+      const message = problemMessage(error)
+      setScanError(message)
+      notifyError(message)
+    },
+  })
+
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const file = fileInput.current?.files?.[0]
+        // Пустая форма - не отказ сервера: сообщение свое и локализованное
+        if (file === undefined) {
+          setScanError(m.file_not_selected())
+          return
+        }
+        setScanError(undefined)
+        upload.mutate(file)
+      }}
+    >
+      <Input
+        type="file"
+        accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff"
+        aria-label={m.acts_scan_label()}
+        aria-invalid={scanError !== undefined}
+        className="h-8 w-auto max-w-56 py-1 text-xs"
+        ref={fileInput}
+      />
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        data-testid="upload-act-scan"
+        disabled={upload.isPending}
+      >
+        {m.contract_scan_cta()}
+      </Button>
+      {scanError !== undefined && (
+        <p role="alert" className="w-full text-sm text-destructive">
+          {scanError}
+        </p>
+      )}
+    </form>
+  )
+}
+
+/**
  * Акты приема-передачи и возврата (FR-904, Прил. 7–8): с даты передачи
  * начисляется плата, возврат закрывает договор и освобождает объект.
  */
@@ -497,6 +578,12 @@ function ActsSection({
   const queryClient = useQueryClient()
   const acts = useQuery(contractActsQuery(contractId))
   const [actDate, setActDate] = useState("")
+  // Скан акта принимает `Action::ActManage` (`domain::policy`), а его несет
+  // одна роль - организатор. Панель и так живет в его кабинете, но право
+  // здесь названо вслух: перенести панель дешевле, чем заметить пропажу
+  // проверки после переноса
+  const { data: me } = useQuery(meQuery)
+  const canManageActs = me?.roles.includes("organizer") ?? false
 
   const create = useMutation({
     mutationFn: (kind: ActKind) => createAct(contractId, kind, actDate),
@@ -545,6 +632,19 @@ function ActsSection({
                   >
                     {m.acts_pdf()}
                   </a>
+                )}
+                {/* Подписанный экземпляр акта: пока он не приложен, «передан
+                    ли объект по бумаге» выяснялось перепиской. Ссылки на
+                    скачивание нет намеренно - выдачи скана контракт не
+                    описывает, отдается только печатная форма */}
+                {act.has_scan ? (
+                  <span className="text-muted-foreground">
+                    {m.contract_scan_uploaded()}
+                  </span>
+                ) : (
+                  canManageActs && (
+                    <ActScanUpload actId={act.id} contractId={contractId} />
+                  )
                 )}
               </li>
             ))}

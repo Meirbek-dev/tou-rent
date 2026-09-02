@@ -17,6 +17,7 @@ import {
   ledgerEntriesQuery,
   refundReasonsQuery,
 } from "@/lib/ledger"
+import { serverLabel } from "@/lib/server-label"
 
 import type { LedgerAccountDto } from "@/lib/ledger"
 
@@ -265,7 +266,7 @@ function RefundForm({ applicationId }: { applicationId: string }) {
         </NativeSelectOption>
         {(reasons ?? []).map((item) => (
           <NativeSelectOption key={item.code} value={item.code}>
-            {item.label_ru}
+            {serverLabel(item)}
           </NativeSelectOption>
         ))}
       </NativeSelect>

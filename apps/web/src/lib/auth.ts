@@ -6,6 +6,7 @@ import { m } from "#/paraglide/messages"
 // сборщиком, а и раннером тестов. Без этого `auth.test.ts` не поднимается -
 // vitest берет конфиг корня репозитория, где tsconfigPaths не включен.
 import { api } from "#/lib/api"
+import { errorCodeMessage } from "#/lib/error-codes"
 import { ruleMessage } from "#/lib/rule-messages"
 
 import type { components } from "@tou/api-client"
@@ -46,15 +47,16 @@ export async function changePassword(
  * Подробность отказа из problem+json (RFC 9457, NFR-08); `null` - ответ
  * не разбирается.
  *
- * Причина отказа по правилу читается первой и переводится по каталогу:
- * раньше первым был `detail`, а туда попадал текст `RAISE EXCEPTION` из
- * триггера БД - единственная строка интерфейса, существовавшая только
- * по-русски (NFR-01). Теперь сервер шлет машинную причину, `detail`
- * у отказов по правилу пуст, и остальным ошибкам он по-прежнему принадлежит.
+ * Порядок чтения - от самого точного к самому общему: причина отказа по
+ * правилу (`rule`), затем текст машинного кода (`code`), и лишь потом то,
+ * что прислал сервер словами. Так `title` и `detail` перестали быть
+ * объяснением: они составлены по-русски для делопроизводства и на /en/
+ * и /kk/ читались как есть - «Неверный email или пароль» английскому
+ * участнику (NFR-01).
  *
  * `null` - это обрыв сети, 502 от прокси, HTML-страница ошибки и собственные
- * броски слоя данных (`new Error("failed to load ...")`): у них нет ни
- * `detail`, ни `title`, и показывать пользователю нечего.
+ * броски слоя данных (`new Error("failed to load ...")`): у них нет ни кода,
+ * ни `detail`, ни `title`, и показывать пользователю нечего.
  */
 export function problemDetail(error: unknown): string | null {
   if (error && typeof error === "object") {
@@ -62,8 +64,24 @@ export function problemDetail(error: unknown): string | null {
     if (typeof problem.rule === "string") {
       return ruleMessage(problem.rule)
     }
-    if (typeof problem.detail === "string" && problem.detail !== "") {
-      return problem.detail
+
+    const detail =
+      typeof problem.detail === "string" && problem.detail !== ""
+        ? problem.detail
+        : null
+    const localized =
+      typeof problem.code === "string" ? errorCodeMessage(problem.code) : null
+
+    if (localized !== null) {
+      // У отказа валидации `detail` называет поле и нарушенное правило
+      // словами garde - строка техническая и всегда английская. Она идет
+      // второй, после объяснения, а не вместо него.
+      return problem.code === "validation_failed" && detail !== null
+        ? `${localized} (${detail})`
+        : localized
+    }
+    if (detail !== null) {
+      return detail
     }
     if (typeof problem.title === "string" && problem.title !== "") {
       return problem.title

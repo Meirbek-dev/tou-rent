@@ -60,6 +60,7 @@ import { meQuery, problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
 import { fromAlmatyInput, toAlmatyInput } from "@/lib/organizer"
+import { serverLabel } from "@/lib/server-label"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { tabSearch } from "@/lib/tabs"
 
@@ -682,7 +683,10 @@ function TenderSchedulePanel() {
                     <TableCell className="font-medium">
                       <div className="flex flex-col items-start gap-1">
                         <span>{localizedRecordTitle(tender)}</span>
-                        <TenderStatusBadge status={tender.status} />
+                        <TenderStatusBadge
+                          status={tender.status}
+                          deadline={tender.submission_deadline}
+                        />
                       </div>
                     </TableCell>
                     {SCHEDULE_MARKS.map((mark) => (
@@ -1466,6 +1470,8 @@ function CoefficientsPanel() {
         coefficient: string
         option_code: string
         label_ru: string
+        label_kk: string | null
+        label_en: string | null
       }
     >()
     for (const version of versions ?? []) {
@@ -1476,6 +1482,8 @@ function CoefficientsPanel() {
           coefficient: version.coefficient,
           option_code: version.option_code,
           label_ru: version.label_ru,
+          label_kk: version.label_kk ?? null,
+          label_en: version.label_en ?? null,
         })
       }
     }
@@ -1490,8 +1498,8 @@ function CoefficientsPanel() {
         coefficient: chosen.coefficient,
         option_code: chosen.option_code,
         label_ru: chosen.label_ru,
-        label_kk: null,
-        label_en: null,
+        label_kk: chosen.label_kk,
+        label_en: chosen.label_en,
         ...form,
       })
     },
@@ -1541,7 +1549,7 @@ function CoefficientsPanel() {
                     {version.coefficient}
                   </TableCell>
                   <TableCell>
-                    {version.label_ru}
+                    {serverLabel(version)}
                     <span className="ml-1 font-mono text-xs text-muted-foreground">
                       {version.option_code}
                     </span>
@@ -1583,7 +1591,8 @@ function CoefficientsPanel() {
             </NativeSelectOption>
             {pairs.map((option) => (
               <NativeSelectOption key={option.key} value={option.key}>
-                {option.coefficient} · {option.label_ru} ({option.option_code})
+                {option.coefficient} · {serverLabel(option)} (
+                {option.option_code})
               </NativeSelectOption>
             ))}
           </NativeSelect>

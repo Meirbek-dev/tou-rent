@@ -94,6 +94,28 @@ export const uploadContractScan = async (contractId: string, file: File) => {
   )
 }
 
+/**
+ * Скан подписанного акта (Прил. 7–8): бумажный экземпляр возвращается
+ * в дело, и до сих пор ему некуда было лечь.
+ *
+ * Маршрут `POST /acts/{id}/scan` существовал с самого начала, а флаг
+ * `ActDto.has_scan` не читал никто: подписанные акты оставались вне системы,
+ * и «передан ли объект по бумаге» приходилось выяснять в переписке.
+ * Разбор формы - тот же, что у скана договора: одна часть с именем `file`.
+ */
+export const uploadActScan = async (actId: string, file: File) => {
+  const body = new FormData()
+  body.append("file", file)
+  return mutate(
+    api.POST("/api/v1/acts/{id}/scan", {
+      params: { path: { id: actId } },
+      // Контракт описывает multipart как строковое тело - отдаем FormData
+      body: body as unknown as string,
+      bodySerializer: (b: unknown) => b as FormData,
+    })
+  )
+}
+
 /** Чек-лист сверки документов договора (п. 113, INV-115). */
 export const contractChecklistQuery = (contractId: string) =>
   queryOptions({

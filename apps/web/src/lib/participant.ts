@@ -1,7 +1,11 @@
 import { queryOptions } from "@tanstack/react-query"
 
-import { api } from "@/lib/api"
-import { serverLabel } from "@/lib/server-label"
+// `#/` вместо `@/`: оба псевдонима ведут в `src/`, но `#/` объявлен полем
+// `imports` в package.json и потому разрешается и раннером тестов - без
+// этого `participant.test.ts` не поднимается (см. тот же комментарий в
+// `lib/auth.ts`)
+import { api } from "#/lib/api"
+import { serverLabel } from "#/lib/server-label"
 
 import type { components } from "@tou/api-client"
 
@@ -119,3 +123,24 @@ export const tenderJournalQuery = (tenderId: string) =>
       return data
     },
   })
+
+/**
+ * Состояние обязательного пакета заявки (FR-401, п. 46).
+ *
+ * `package_complete` отвечает не «пять PDF на месте», а «требование пакета
+ * выполнено»: у заявки с `package_required = false` (демо-данные, заявка
+ * особого порядка) признак поднят при нуле вложений, и карточка уверяла
+ * участника, что пакет собран, рядом со строкой «Файлы не приложены».
+ * Самого `package_required` в контракте нет, поэтому «пакет не требуется»
+ * выводится из пары признак+вложения - это ровно тот случай, который
+ * отличим снаружи.
+ */
+export type PackageState = "complete" | "not_required" | "incomplete"
+
+export function applicationPackageState(application: {
+  package_complete: boolean
+  files: readonly unknown[]
+}): PackageState {
+  if (!application.package_complete) return "incomplete"
+  return application.files.length > 0 ? "complete" : "not_required"
+}

@@ -13,6 +13,7 @@ import { StatCard } from "@/components/stat-card"
 import { cabinetLabel, userCabinets } from "@/lib/auth"
 import { notificationsQuery } from "@/lib/notifications"
 import { useQueueCounts } from "@/lib/queues"
+import { specialCategoriesQuery } from "@/lib/special"
 
 import type { QueueItem } from "@/components/queue-card"
 
@@ -45,13 +46,20 @@ function AppHome() {
   const cabinets = userCabinets(user.roles)
   const counts = useQueueCounts(user.roles)
   const notifications = useQuery(notificationsQuery)
+  // Подпись категории особого порядка - из справочника на языке пользователя
+  const { data: categories } = useQuery({
+    ...specialCategoriesQuery,
+    enabled: (notifications.data?.items ?? []).some(
+      (notification) => notification.kind === "special_decided"
+    ),
+  })
 
   const stats = queueStats(user.roles, counts)
   const recent: QueueItem[] = (notifications.data?.items ?? [])
     .slice(0, 5)
     .map((notification) => ({
       id: notification.id,
-      label: notificationText(notification),
+      label: notificationText(notification, categories),
       to: notificationTarget(notification),
       at: notification.created_at,
     }))

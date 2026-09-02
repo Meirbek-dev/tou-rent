@@ -14,6 +14,7 @@ import {
 import { m } from "#/paraglide/messages"
 import { Badge } from "@/components/ui/badge"
 import { useNowMs } from "@/hooks/use-now"
+import { intakeClosed } from "@/lib/intake"
 
 import type { TenderStatus } from "@/lib/api"
 
@@ -88,10 +89,7 @@ function DeadlineAwareBadge({
   // «Сейчас» появляется после монтирования: серверное время в разметке
   // разошлось бы с браузерным при гидратации (NFR-03, см. useNowMs)
   const nowMs = useNowMs()
-  const intakeOver =
-    status === "accepting" &&
-    nowMs !== null &&
-    new Date(deadline).getTime() <= nowMs
+  const intakeOver = intakeClosed(status, deadline, nowMs)
 
   return intakeOver ? (
     <StatusBadge view={INTAKE_OVER} label={m.tender_status_intake_over()} />

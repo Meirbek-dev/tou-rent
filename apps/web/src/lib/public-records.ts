@@ -1,6 +1,8 @@
 import { queryOptions } from "@tanstack/react-query"
 
-import { api } from "@/lib/api"
+import { m } from "#/paraglide/messages"
+// `#/` вместо `@/`: этот псевдоним разрешает и раннер тестов (см. `lib/auth.ts`)
+import { api } from "#/lib/api"
 
 import type { components } from "@tou/api-client"
 
@@ -45,3 +47,28 @@ export const publishRecord = (kind: string, sourceId: string) =>
       body: { kind, source_id: sourceId },
     })
   )
+
+/**
+ * Подпись вида публикации (FR-1403, п. 90, 92, 97).
+ *
+ * Вид закрыт перечнем `PublicRecordKind`, но в DTO рядом с ним едет только
+ * `kind_title_ru`: подпись раздела по-русски для делопроизводства. Портал
+ * рисовал ее напрямую, и на /en/ и /kk/ бейдж карточки оставался русским -
+ * колонок `*_kk`/`*_en` у публикаций нет и не будет, вид не справочник
+ * админа, а константа домена (NFR-01).
+ *
+ * Неизвестный вид откатывается на серверную подпись: контракт может
+ * опередить интерфейс, и пустой бейдж хуже русского.
+ */
+const KIND_LABELS: Record<string, (() => string) | undefined> = {
+  decision: m.public_record_kind_decision,
+  rate: m.public_record_kind_rate,
+  investment_act: m.public_record_kind_investment_act,
+}
+
+export function publicRecordKindLabel(record: {
+  kind: string
+  kind_title_ru: string
+}): string {
+  return KIND_LABELS[record.kind]?.() ?? record.kind_title_ru
+}

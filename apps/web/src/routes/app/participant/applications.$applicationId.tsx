@@ -24,6 +24,7 @@ import { lotAuctionQuery } from "@/lib/auctions"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import {
+  applicationPackageState,
   myApplicationsQuery,
   reasonLabel,
   rejectionReasonsQuery,
@@ -32,8 +33,20 @@ import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { uploadError } from "@/lib/validation"
 
-import type { ApplicationDto } from "@/lib/participant"
+import type { ApplicationDto, PackageState } from "@/lib/participant"
 import type { ReactNode } from "react"
+
+/**
+ * Что сказано о пакете документов: собран, не требовался, неполон
+ * (FR-401, п. 46). Ветка «не требовался» появилась потому, что признак
+ * `package_complete` поднят и у заявки без обязательного пакета - и
+ * карточка обещала пять PDF при нуле вложений.
+ */
+const PACKAGE_NOTE: Record<PackageState, () => string> = {
+  complete: m.application_package_complete,
+  not_required: m.application_package_not_required,
+  incomplete: m.application_package_incomplete,
+}
 
 type ApplicationDocumentKind =
   | "application_form"
@@ -263,9 +276,7 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
         contentClassName="flex flex-col gap-4"
       >
         <p className="text-sm text-muted-foreground">
-          {application.package_complete
-            ? m.application_package_complete()
-            : m.application_package_incomplete()}
+          {PACKAGE_NOTE[applicationPackageState(application)]()}
         </p>
         {application.files.length === 0 ? (
           <p className="text-sm text-muted-foreground">

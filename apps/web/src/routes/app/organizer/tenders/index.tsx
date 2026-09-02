@@ -46,7 +46,10 @@ function OrganizerTendersPage() {
               className="rounded-lg border p-4 transition-colors hover:bg-muted/50"
             >
               <div className="flex flex-wrap items-center gap-3">
-                <TenderStatusBadge status={tender.status} />
+                <TenderStatusBadge
+                  status={tender.status}
+                  deadline={tender.submission_deadline}
+                />
                 <span className="text-sm text-muted-foreground">
                   {m.tenders_lots_count({ count: tender.lots.length })}
                 </span>

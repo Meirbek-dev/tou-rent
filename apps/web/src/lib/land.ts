@@ -49,6 +49,21 @@ export const publishLandPlot = (plotId: string) =>
     })
   )
 
+/**
+ * Отзыв заявки инвестором (п. 105).
+ *
+ * Сервер отзывает только свою заявку и только до решения Правления
+ * (`status = 'submitted'`), поэтому кнопка в кабинете держится того же
+ * условия: предлагать действие, которое заведомо получит 404, - хуже,
+ * чем не предлагать его вовсе.
+ */
+export const withdrawLandApplication = (applicationId: string) =>
+  mutate(
+    api.POST("/api/v1/land-applications/{id}/withdraw", {
+      params: { path: { id: applicationId } },
+    })
+  )
+
 /** Решение Правления по заявке (п. 106). */
 export const decideLandApplication = (
   applicationId: string,

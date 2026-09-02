@@ -8,6 +8,7 @@ import {
 import { m } from "#/paraglide/messages"
 import { ConfirmAction } from "@/components/confirm-action"
 import { DeadlineBlock } from "@/components/deadline-block"
+import { FormAlert } from "@/components/form-alert"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { Button } from "@/components/ui/button"
@@ -15,9 +16,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
+import { useNowMs } from "@/hooks/use-now"
 import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
+import { deadlinePassed } from "@/lib/intake"
 import { myApplicationsQuery } from "@/lib/participant"
 import { ID_NUMBER_LENGTH, applicantDetailsErrors } from "@/lib/validation"
 
@@ -138,12 +141,23 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
   const complete =
     Object.keys(errors).length === 0 && price !== "" && lotId !== ""
 
+  // Срок вышел - заявку уже не принимают (FR-401, п. 45). Раньше мастер
+  // оставался открытым, и участник узнавал об этом отказом
+  // `application_deadline_passed` по заполненной форме
+  const closed = deadlinePassed(tender.submission_deadline, useNowMs())
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title={m.apply_title()}
         description={localizedTenderTitle(tender)}
       />
+
+      {closed && (
+        <FormAlert>
+          {m.tender_closed()} {m.apply_closed_hint()}
+        </FormAlert>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <form
@@ -316,7 +330,7 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
             </p>
           )}
           <div>
-            {complete ? (
+            {complete && !closed ? (
               <ConfirmAction
                 variant="default"
                 title={m.apply_confirm_title()}
@@ -337,7 +351,11 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
                 }
               />
             ) : (
-              <Button type="submit" data-testid="apply-submit">
+              <Button
+                type="submit"
+                disabled={closed}
+                data-testid="apply-submit"
+              >
                 {m.apply_submit()}
               </Button>
             )}

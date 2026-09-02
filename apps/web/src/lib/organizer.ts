@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query"
 
-import { api } from "@/lib/api"
+import { api } from "#/lib/api"
+import { serverLabel } from "#/lib/server-label"
 
 import type { components } from "@tou/api-client"
 
@@ -10,6 +11,36 @@ export type ObjectRequest = components["schemas"]["ObjectRequest"]
 export type RateOptions = components["schemas"]["RateOptionsDto"]
 export type RateOptionsCatalog = components["schemas"]["RateOptionsCatalog"]
 export type RateCalculation = components["schemas"]["RateCalculationDto"]
+export type RateOption = components["schemas"]["RateOptionDto"]
+
+/**
+ * Подпись опции коэффициента Прил. 4 (FR-202).
+ *
+ * Справочник ведет названия в трех колонках, и до этого фронт их не читал:
+ * в селектах калькулятора стояло «default (1.0000)» - машинный код вместо
+ * условия, по которому опция и выбирается. Код остается запасным: строка
+ * справочника без названия все же лучше пустого пункта списка.
+ */
+export function rateOptionLabel(option: RateOption): string {
+  return serverLabel(option) || option.option_code
+}
+
+/**
+ * Подпись выбранной опции по каталогу: снимок расчета несет только код
+ * (`FactorDto.option_code`) - он заморожен в лоте (FR-202) и названия
+ * справочника в себе не держит.
+ */
+export function rateOptionLabelOf(
+  options: readonly RateOption[],
+  coefficient: string,
+  optionCode: string
+): string {
+  const known = options.find(
+    (option) =>
+      option.coefficient === coefficient && option.option_code === optionCode
+  )
+  return known === undefined ? optionCode : rateOptionLabel(known)
+}
 
 /** Порядок множителей формулы FR-201 (обозначения Прил. 4 - предметные, вне i18n). */
 export const COEFFICIENTS = [

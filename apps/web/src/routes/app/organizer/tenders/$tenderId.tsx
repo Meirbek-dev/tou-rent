@@ -253,7 +253,12 @@ function ManageTender({
       <PageHeader
         title={localizedTenderTitle(tender)}
         description={isDraft ? m.tender_draft_visibility_hint() : undefined}
-        badge={<TenderStatusBadge status={tender.status} />}
+        badge={
+          <TenderStatusBadge
+            status={tender.status}
+            deadline={tender.submission_deadline}
+          />
+        }
         facts={
           <>
             <Fact label={m.tender_id_label()} value={tender.id.slice(0, 8)} />

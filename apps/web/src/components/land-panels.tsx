@@ -33,9 +33,10 @@ import {
   landStatusLabel,
   myLandApplicationsQuery,
   publishLandPlot,
+  withdrawLandApplication,
 } from "@/lib/land"
 import { serverLabel } from "@/lib/server-label"
-import { notifySuccess } from "@/lib/toast"
+import { notifyError, notifySuccess } from "@/lib/toast"
 
 import type { LucideIcon } from "lucide-react"
 import type { QueryLike } from "@/components/query-boundary"
@@ -227,7 +228,7 @@ export function LandInvestorPanel() {
               <ul className="flex flex-col gap-3">
                 {applications.map((application) => (
                   <li key={application.id}>
-                    <ApplicationCard application={application} />
+                    <InvestorApplicationCard application={application} />
                   </li>
                 ))}
               </ul>
@@ -236,6 +237,67 @@ export function LandInvestorPanel() {
         )
       }
     </QueryBoundary>
+  )
+}
+
+/**
+ * Своя заявка в кабинете инвестора: та же карточка плюс отзыв (п. 105).
+ *
+ * Отзыв - право заявителя до решения Правления, и маршрут для него был, а
+ * кнопки не было: подав заявку, инвестор не мог передумать иначе как письмом
+ * организатору. Кнопка появляется только у заявки в состоянии `submitted` -
+ * ровно то условие, по которому сервер разрешает отзыв.
+ */
+function InvestorApplicationCard({
+  application,
+}: {
+  application: LandApplication
+}) {
+  const queryClient = useQueryClient()
+
+  const withdraw = useMutation({
+    mutationFn: () => withdrawLandApplication(application.id),
+    onSuccess: async () => {
+      notifySuccess(m.application_detail_withdrawn_toast())
+      await queryClient.invalidateQueries({
+        queryKey: myLandApplicationsQuery.queryKey,
+      })
+    },
+    onError: (error: unknown) => {
+      notifyError(problemMessage(error))
+    },
+  })
+
+  return (
+    <ApplicationCard application={application}>
+      {application.status === "submitted" && (
+        <div className="flex flex-wrap items-center gap-3 border-t pt-3">
+          {/* Отозванную заявку не вернуть: подать придется заново, и по
+              участку, который к тому времени может быть уже занят */}
+          <ConfirmAction
+            title={m.application_detail_withdraw_confirm_title()}
+            description={m.land_withdraw_confirm_description()}
+            confirmLabel={m.application_withdraw()}
+            disabled={withdraw.isPending}
+            onConfirm={() => withdraw.mutate()}
+            trigger={
+              <Button
+                variant="destructive"
+                size="sm"
+                data-testid="withdraw-land-application"
+              >
+                {m.application_withdraw()}
+              </Button>
+            }
+          />
+          {withdraw.isError && (
+            <FormAlert className="w-full">
+              {problemMessage(withdraw.error)}
+            </FormAlert>
+          )}
+        </div>
+      )}
+    </ApplicationCard>
   )
 }
 

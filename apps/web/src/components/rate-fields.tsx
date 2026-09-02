@@ -12,7 +12,12 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatTenge, trimZeros } from "@/lib/format"
-import { COEFFICIENTS, rateOptionsQuery } from "@/lib/organizer"
+import {
+  COEFFICIENTS,
+  rateOptionLabel,
+  rateOptionLabelOf,
+  rateOptionsQuery,
+} from "@/lib/organizer"
 
 import type { RateCalculation, RateOptions } from "@/lib/organizer"
 
@@ -78,7 +83,7 @@ export function RateOptionsFields({
                   key={option.option_code}
                   value={option.option_code}
                 >
-                  {option.option_code} ({option.value})
+                  {rateOptionLabel(option)} ({option.value})
                 </NativeSelectOption>
               ))}
             </NativeSelect>
@@ -91,6 +96,10 @@ export function RateOptionsFields({
 
 /** Таблица-расшифровка результата (FR-201: объяснимость). */
 export function RateBreakdown({ calc }: { calc: RateCalculation }) {
+  // Расшифровка называет опции теми же словами, что и селекты над ней:
+  // снимок расчета несет только код опции, а название - у справочника
+  const { data: catalog } = useSuspenseQuery(rateOptionsQuery)
+
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-lg border">
@@ -111,7 +120,11 @@ export function RateBreakdown({ calc }: { calc: RateCalculation }) {
                   {COEFFICIENT_LABELS[field]()}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
-                  {calc.factors[field].option_code}
+                  {rateOptionLabelOf(
+                    catalog.options,
+                    field,
+                    calc.factors[field].option_code
+                  )}
                 </TableCell>
                 <TableCell className="text-right tabular-nums">
                   {calc.factors[field].value}

@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import {
   useMutation,
+  useQuery,
   useQueryClient,
   useSuspenseQuery,
 } from "@tanstack/react-query"
@@ -22,6 +23,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
 import { markRead, notificationsQuery } from "@/lib/notifications"
+import { specialCategoriesQuery } from "@/lib/special"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { BellIcon, FilterXIcon } from "lucide-react"
 
@@ -43,6 +45,14 @@ const ALL_KINDS = "all"
 function NotificationsPage() {
   const queryClient = useQueryClient()
   const query = useSuspenseQuery(notificationsQuery)
+  // Подпись категории особого порядка - из справочника на языке
+  // пользователя; справочник нужен только когда такое решение есть в ленте
+  const { data: categories } = useQuery({
+    ...specialCategoriesQuery,
+    enabled: query.data.items.some(
+      (notification) => notification.kind === "special_decided"
+    ),
+  })
   const [kind, setKind] = useState<NotificationKind | typeof ALL_KINDS>(
     ALL_KINDS
   )
@@ -156,7 +166,7 @@ function NotificationsPage() {
                     const body = (
                       <>
                         <span className={unread ? "font-medium" : undefined}>
-                          {notificationText(notification)}
+                          {notificationText(notification, categories)}
                         </span>
                         <span
                           className="text-xs text-muted-foreground"

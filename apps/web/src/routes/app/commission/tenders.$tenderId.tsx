@@ -112,7 +112,12 @@ function CommissionTenderPage() {
         }
         title={localizedTenderTitle(tender)}
         description={m.tender_card_title({ id: tender.id.slice(0, 8) })}
-        badge={<TenderStatusBadge status={tender.status} />}
+        badge={
+          <TenderStatusBadge
+            status={tender.status}
+            deadline={tender.submission_deadline}
+          />
+        }
       />
 
       {meeting !== null && (

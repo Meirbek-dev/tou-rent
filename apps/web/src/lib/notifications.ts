@@ -66,10 +66,20 @@ export type ProtocolPublishedPayload = {
   protocol_number: string
 }
 
-/** Данные решения по заявке особого порядка (FR-1202, п. 90). */
+/**
+ * Данные решения по заявке особого порядка (FR-1202, п. 90).
+ *
+ * Категория приходит кодом справочника: подпись к нему выбирает кабинет по
+ * своей локали (NFR-01). `category_ru` - запасной текст на случай, когда
+ * справочник не загружен, а `category` - то же поле уведомлений, разосланных
+ * до этой правки: они несли готовую русскую строку и обязаны остаться
+ * читаемыми.
+ */
 export type SpecialDecidedPayload = {
   special_request_id: string
-  category: string
+  category_code?: string
+  category_ru?: string
+  category?: string
   decision: string
   rationale: string
 }

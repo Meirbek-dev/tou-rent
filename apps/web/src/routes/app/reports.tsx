@@ -19,8 +19,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { registriesQuery, registryCsvHref, registryQuery } from "@/lib/reports"
+import {
+  registriesQuery,
+  registryCellText,
+  registryCsvHref,
+  registryQuery,
+} from "@/lib/reports"
 import { serverLabel } from "@/lib/server-label"
+
+import type { ReportRegistry } from "@/lib/reports"
 import { cn } from "@/lib/utils"
 import { LockIcon, TableIcon } from "lucide-react"
 
@@ -35,7 +42,9 @@ export const Route = createFileRoute("/app/reports")({
 
 function ReportsPage() {
   const { data: registries } = useSuspenseQuery(registriesQuery)
-  const [registry, setRegistry] = useState(registries[0]?.registry ?? "")
+  const [registry, setRegistry] = useState<ReportRegistry | "">(
+    registries[0]?.registry ?? ""
+  )
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
 
@@ -74,7 +83,15 @@ function ReportsPage() {
             id="registry"
             className="w-full"
             value={registry}
-            onChange={(event) => setRegistry(event.target.value)}
+            // Значение из <select> - строка; перечень контракта закрыт,
+            // и выбранным становится реестр из уже полученного списка,
+            // а не то, что пришло в событии
+            onChange={(event) => {
+              const chosen = registries.find(
+                (item) => item.registry === event.target.value
+              )
+              if (chosen) setRegistry(chosen.registry)
+            }}
           >
             {registries.map((item) => (
               <NativeSelectOption key={item.registry} value={item.registry}>
@@ -143,23 +160,26 @@ function ReportsPage() {
                 <TableHeader>
                   <TableRow>
                     {data.columns.map((column) => (
-                      <TableHead key={column}>{column}</TableHead>
+                      <TableHead key={column.key}>
+                        {serverLabel(column, "title")}
+                      </TableHead>
                     ))}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {data.rows.map((row) => (
-                    // Строка реестра - факт БД, но идентификатора в ответе нет:
-                    // сервер отдает уже отформатированные значения. Ключом
-                    // служит само содержимое - оно и отличает факт от факта,
-                    // а место в выборке меняется при любой смене периода
-                    <TableRow key={row.join("")}>
+                    // Строка реестра - факт БД, но идентификатора в ответе нет.
+                    // Ключом служит само содержимое - оно и отличает факт от
+                    // факта, а место в выборке меняется при любой смене
+                    // периода. Берется русская запись ячейки: она есть всегда
+                    // и от языка интерфейса не зависит
+                    <TableRow key={row.map((value) => value.text_ru).join("")}>
                       {row.map((value, cell) => (
                         <TableCell
-                          key={data.columns[cell] ?? String(cell)}
+                          key={data.columns[cell]?.key ?? String(cell)}
                           className="align-top whitespace-normal"
                         >
-                          {value}
+                          {registryCellText(value)}
                         </TableCell>
                       ))}
                     </TableRow>

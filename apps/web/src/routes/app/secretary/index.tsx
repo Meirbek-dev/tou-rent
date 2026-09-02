@@ -80,7 +80,10 @@ function SecretaryHome() {
                 className="grid overflow-hidden rounded-lg border transition-colors hover:bg-muted/50"
               >
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 p-3">
-                  <TenderStatusBadge status={tender.status} />
+                  <TenderStatusBadge
+                    status={tender.status}
+                    deadline={tender.submission_deadline}
+                  />
                   <h3 className="min-w-0 flex-1 font-medium">
                     <Link
                       to="/app/secretary/tenders/$tenderId"

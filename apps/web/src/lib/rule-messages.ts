@@ -31,6 +31,7 @@ const RULE_MESSAGES: Record<string, () => string> = {
   application_deadline_passed: m.rule_application_deadline_passed,
   application_already_submitted: m.rule_application_already_submitted,
   application_not_pending: m.rule_application_not_pending,
+  application_package_incomplete: m.rule_application_package_incomplete,
   sealed_price_key_missing: m.rule_sealed_price_key_missing,
   commission_composition: m.rule_commission_composition,
   commission_meeting: m.rule_commission_meeting,

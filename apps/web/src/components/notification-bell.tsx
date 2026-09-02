@@ -17,10 +17,15 @@ import {
   unreadCountQuery,
 } from "@/lib/notifications"
 import { deadlineLabel } from "@/lib/obligation-labels"
-import { decisionLabel } from "@/lib/special"
+import {
+  decisionLabel,
+  specialCategoriesQuery,
+  specialCategoryLabel,
+} from "@/lib/special"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { BellIcon } from "lucide-react"
 
+import type { SpecialCategory } from "@/lib/special"
 import type {
   ApplicationRejectedPayload,
   AuctionInvitationPayload,
@@ -64,7 +69,10 @@ export type NotificationKind = (typeof NOTIFICATION_KINDS)[number]
  * участнику № 2, опубликованный протокол - показывались в колокольчике
  * машинным кодом вроде `protocol_published`.
  */
-export function notificationText(notification: NotificationDto): string {
+export function notificationText(
+  notification: NotificationDto,
+  categories?: readonly SpecialCategory[]
+): string {
   switch (notification.kind) {
     case "auction_invitation": {
       const payload = notification.payload as AuctionInvitationPayload
@@ -127,7 +135,9 @@ export function notificationText(notification: NotificationDto): string {
     case "special_decided": {
       const payload = notification.payload as SpecialDecidedPayload
       return m.notif_special_decided({
-        category: payload.category,
+        // Категория приходит кодом справочника - подпись к нему выбирается
+        // по локали кабинета (NFR-01), а не приезжает готовой строкой
+        category: specialCategoryLabel(payload, categories),
         decision: decisionLabel(payload.decision),
       })
     }
@@ -239,6 +249,16 @@ export function NotificationBell() {
   const recent = page?.items.slice(0, 5) ?? []
   const unreadCount = unread ?? 0
 
+  // Справочник категорий нужен одному виду уведомлений из восьми, и просить
+  // его у сервера на каждой странице кабинета незачем: колокольчик висит
+  // в оболочке, а решение Правления приходит редко.
+  const { data: categories } = useQuery({
+    ...specialCategoriesQuery,
+    enabled: recent.some(
+      (notification) => notification.kind === "special_decided"
+    ),
+  })
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
@@ -318,7 +338,7 @@ export function NotificationBell() {
                         unreadRow ? "font-medium" : "text-muted-foreground"
                       }
                     >
-                      {notificationText(notification)}
+                      {notificationText(notification, categories)}
                     </span>
                   </span>
                   <span

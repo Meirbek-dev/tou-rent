@@ -180,7 +180,12 @@ function SecretaryTenderPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title={localizedTenderTitle(tender)}
-        badge={<TenderStatusBadge status={tender.status} />}
+        badge={
+          <TenderStatusBadge
+            status={tender.status}
+            deadline={tender.submission_deadline}
+          />
+        }
         breadcrumb={
           <nav>
             <Link

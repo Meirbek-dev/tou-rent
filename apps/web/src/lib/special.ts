@@ -1,8 +1,8 @@
 import { queryOptions } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
-import { api } from "@/lib/api"
-import { serverLabel } from "@/lib/server-label"
+import { api } from "#/lib/api"
+import { serverLabel } from "#/lib/server-label"
 
 import type { components } from "@tou/api-client"
 
@@ -110,6 +110,43 @@ export function localeLabel(item: {
   label_en?: string | null
 }): string {
   return serverLabel(item)
+}
+
+/** Минимум, которого хватает для подписи категории: сам справочник шире. */
+export type CategoryLabelSource = {
+  code: string
+  label_ru: string
+  label_kk?: string | null
+  label_en?: string | null
+}
+
+/**
+ * Подпись категории в уведомлении о решении Правления (FR-1301, п. 90).
+ *
+ * Код категории переводится справочником, а не сервером: до этого payload
+ * нес готовую русскую подпись, и в казахском кабинете она оставалась
+ * русской, хотя `refdata.special_categories` держит label_kk и label_en.
+ *
+ * Откат - к тексту из самого уведомления: у разосланных до правки строк
+ * кода нет вовсе (поле `category`), а у новых он есть, но справочник
+ * участнику мог не загрузиться.
+ */
+export function specialCategoryLabel(
+  payload: {
+    category_code?: string | undefined
+    category_ru?: string | undefined
+    category?: string | undefined
+  },
+  categories?: readonly CategoryLabelSource[]
+): string {
+  const code = payload.category_code
+  const known =
+    code === undefined
+      ? undefined
+      : categories?.find((category) => category.code === code)
+
+  if (known !== undefined) return localeLabel(known)
+  return payload.category_ru ?? payload.category ?? code ?? "-"
 }
 
 /** Подпись состояния заявки особого порядка (п. 88–90). */

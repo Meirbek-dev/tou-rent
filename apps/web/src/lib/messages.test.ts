@@ -10,8 +10,12 @@ import ru from "#/../messages/ru.json" with { type: "json" }
 /**
  * Полнота переводов (T15, гейт G14). ru - эталон контура 1 (NFR-01):
  * каждый его ключ обязан существовать в kk и en с теми же параметрами
- * подстановки, а строки публичного портала - быть переведенными, а не
- * скопированными из ru.
+ * подстановки и быть переведенным, а не скопированным из ru.
+ *
+ * Проверка сперва читала только девятнадцать файлов публичного портала -
+ * кабинеты в нее не входили, и четырнадцать kk-значений там байт-в-байт
+ * совпадали с русскими. Теперь охвачен весь `src`, а совпадение с ru
+ * приходится объявлять поименно и с причиной.
  */
 
 type Messages = Record<string, string>
@@ -28,64 +32,72 @@ const keys = (locale: Messages): string[] =>
 
 /**
  * Совпадение с ru допустимо там, где перевода не существует: бренд, символ
- * нумерации, заимствованный термин «тендер» (одинаков в ru и kk), единица
- * измерения «{area} м²» и обозначения множителей Прил. 4 (Кт, Кк, ... —
- * предметные символы формулы FR-201, кириллица общая для ru и kk).
+ * нумерации, единица измерения, обозначения множителей Прил. 4 и термины,
+ * заимствованные казахским как есть. Причина - в значении: каждая строчка
+ * здесь обязана объясняться, иначе список превращается в свалку непереведенного.
  */
-const SAME_AS_RU_ALLOWED = new Set([
-  "app_name",
-  "lot_seq",
-  "tender_card_title",
-  "tender_id_label",
-  "object_area_value",
-  "rate_coef_kt",
-  "rate_coef_kk",
-  "rate_coef_ksk",
-  "rate_coef_kr",
-  "rate_coef_kvd",
-  "rate_coef_kopf",
-  "rate_coef_kfu",
-  "rate_coef_ksots",
-  "rate_coef_k",
-  "rate_coef_kn",
-  "rate_coef_kv",
+const SAME_AS_RU_ALLOWED = new Map<string, string>([
+  ["app_name", "бренд - не переводится"],
+  ["lot_seq", "«№» - символ нумерации"],
+  ["journal_seq", "«№» - символ нумерации"],
+  ["object_area_value", "«{area} м²» - единица измерения"],
+  ["tender_card_title", "«тендер» - заимствование, kk то же слово"],
+  ["tender_id_label", "«тендер» - заимствование"],
+  ["admin_schedule_tender", "«тендер» - заимствование"],
+  ["tender_lot_legend", "«лот» - заимствование (ср. tenders_lots_count)"],
+  ["acts_pdf", "«акт» - заимствование (ср. contract_acts_title «Актілер»)"],
+  ["meeting_commission", "«комиссия» - заимствование (ср. meeting_title)"],
+  ["meeting_quorum", "«кворум» - заимствование (ср. meeting_open_first)"],
+  ["commission_quorum_required", "«кворум» - заимствование"],
+  ["calc_option", "«опция» - заимствование (ср. admin_pick_option)"],
+  ["admin_option", "«опция» - заимствование (ср. admin_pick_option)"],
+  [
+    "org_nav_calculator",
+    "«калькулятор» - заимствование (ср. land_contract_hint)",
+  ],
+  ["file_upload_label", "«файл» - заимствование (ср. application_files_empty)"],
+  ["benefit_scheme_label", "«схема» - заимствование (ср. benefit_title)"],
+  ["rate_coef_kt", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_kk", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_ksk", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_kr", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_kvd", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_kopf", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_kfu", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_ksots", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_k", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_kn", "обозначение множителя Прил. 4 - символ формулы"],
+  ["rate_coef_kv", "обозначение множителя Прил. 4 - символ формулы"],
 ])
 
-/** Файлы публичного портала: страницы без авторизации и их компоненты. */
-const PUBLIC_SOURCES = [
-  "src/routes/index.tsx",
-  "src/routes/how-to.tsx",
-  "src/routes/land-plots.tsx",
-  "src/routes/special-orders.tsx",
-  "src/routes/objects/index.tsx",
-  "src/components/object-status-badge.tsx",
-  "src/routes/tenders/index.tsx",
-  "src/routes/tenders/$tenderId.tsx",
-  "src/routes/auth/login.tsx",
-  "src/routes/auth/register.tsx",
-  "src/components/site-header.tsx",
-  "src/components/site-footer.tsx",
-  "src/components/theme-toggle.tsx",
-  "src/components/tender-list-item.tsx",
-  "src/components/tender-status-badge.tsx",
-  "src/components/deadline-block.tsx",
-  "src/components/registry-skeleton.tsx",
-  "src/components/locale-switcher.tsx",
-  "src/lib/how-to-steps.ts",
-]
+const SRC = join(import.meta.dirname, "..")
 
-/** Ключи, которые реально использует публичный портал. */
-function publicKeys(): string[] {
-  const root = join(import.meta.dirname, "..", "..")
+/** Исходники интерфейса: весь `src`, кроме сгенерированного Paraglide. */
+function sources(dir: string = SRC): string[] {
+  const found: string[] = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === "paraglide") continue
+      found.push(...sources(path))
+    } else if (/\.tsx?$/.test(entry.name)) {
+      found.push(path)
+    }
+  }
+  return found
+}
+
+/** Ключи, которые интерфейс действительно вызывает (`m.<key>`). */
+function usedKeys(): Set<string> {
   const used = new Set<string>()
-  for (const file of PUBLIC_SOURCES) {
-    const source = readFileSync(join(root, file), "utf8")
+  for (const file of sources()) {
+    const source = readFileSync(file, "utf8")
     for (const match of source.matchAll(/\bm\.([a-z0-9_]+)/gi)) {
       const key = match[1]
       if (key !== undefined && key in messages.ru) used.add(key)
     }
   }
-  return [...used].toSorted()
+  return used
 }
 
 /** Параметры сообщения: `{count}`, `{months}` и т.д. */
@@ -127,13 +139,13 @@ describe("i18n: полнота переводов (NFR-01, G14)", () => {
       expect(mismatched).toEqual([])
     })
 
-    it(`${locale}: строки публичного портала переведены`, () => {
-      const untranslated = publicKeys().filter(
+    it(`${locale}: строки интерфейса переведены, а не скопированы из ru`, () => {
+      const untranslated = [...usedKeys()].filter(
         (key) =>
           !SAME_AS_RU_ALLOWED.has(key) &&
           messages[locale][key] === messages.ru[key]
       )
-      expect(untranslated).toEqual([])
+      expect(untranslated.toSorted()).toEqual([])
     })
 
     it(`${locale}: нет пустых строк`, () => {
@@ -144,7 +156,21 @@ describe("i18n: полнота переводов (NFR-01, G14)", () => {
     })
   }
 
-  it("публичный портал вообще пользуется ключами", () => {
-    expect(publicKeys().length).toBeGreaterThan(50)
+  it("интерфейс вообще пользуется ключами", () => {
+    expect(usedKeys().size).toBeGreaterThan(500)
+  })
+
+  it("мертвых ключей нет: каждый ключ ru кто-то вызывает", () => {
+    const used = usedKeys()
+    const dead = keys(messages.ru).filter((key) => !used.has(key))
+    expect(dead.toSorted()).toEqual([])
+  })
+
+  it("список допущенных совпадений не протух", () => {
+    const used = usedKeys()
+    const stale = [...SAME_AS_RU_ALLOWED.keys()].filter(
+      (key) => !used.has(key) || messages.kk[key] !== messages.ru[key]
+    )
+    expect(stale).toEqual([])
   })
 })

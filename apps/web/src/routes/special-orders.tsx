@@ -8,7 +8,7 @@ import { RegistryPending } from "@/components/registry-skeleton"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { formatDate, formatDateTime } from "@/lib/format"
-import { publicRecordsQuery } from "@/lib/public-records"
+import { publicRecordKindLabel, publicRecordsQuery } from "@/lib/public-records"
 import { cn } from "@/lib/utils"
 
 import type { PublicRecord } from "@/lib/public-records"
@@ -99,7 +99,7 @@ function PublicRecordCard({ record }: { record: PublicRecord }) {
     <article className="overflow-hidden rounded-xl border bg-card shadow-xs">
       <div className="flex flex-col gap-3 p-5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <Badge variant="outline">{record.kind_title_ru}</Badge>
+          <Badge variant="outline">{publicRecordKindLabel(record)}</Badge>
           <span
             className="text-sm text-muted-foreground"
             suppressHydrationWarning

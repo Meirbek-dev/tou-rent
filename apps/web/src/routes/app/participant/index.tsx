@@ -8,10 +8,12 @@ import { EmptyState } from "@/components/empty-state"
 import { LandInvestorPanel } from "@/components/land-panels"
 import { MyProtocols } from "@/components/my-protocols"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
-import { buttonVariants } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { DeadlineBlock } from "@/components/deadline-block"
+import { useNowMs } from "@/hooks/use-now"
 import { localizedTenderTitle, tendersPageQuery } from "@/lib/api"
 import { formatDateTime, formatTenge } from "@/lib/format"
+import { deadlinePassed } from "@/lib/intake"
 import { myApplicationsQuery } from "@/lib/participant"
 import { mySpecialRequestsQuery, specialStatusLabel } from "@/lib/special"
 import { cn } from "@/lib/utils"
@@ -60,6 +62,9 @@ function ParticipantHome() {
   const { data: tendersPage } = useSuspenseQuery(tendersPageQuery())
   const { data: specialRequests } = useSuspenseQuery(mySpecialRequestsQuery)
   const accepting = tendersPage.items.filter((t) => t.status === "accepting")
+  // Прием закрывает срок, а статус переводит процедура: пока она не прошла,
+  // тендер остается `accepting` с вышедшим сроком (FR-401, п. 45)
+  const nowMs = useNowMs()
 
   const ordered = applications.toSorted(
     (left, right) =>
@@ -212,19 +217,28 @@ function ParticipantHome() {
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
               >
                 <div className="flex min-w-0 flex-col gap-1.5">
-                  <TenderStatusBadge status={tender.status} />
+                  <TenderStatusBadge
+                    status={tender.status}
+                    deadline={tender.submission_deadline}
+                  />
                   <p className="font-heading text-lg font-semibold">
                     {localizedTenderTitle(tender)}
                   </p>
                 </div>
                 <DeadlineBlock value={tender.submission_deadline} />
-                <Link
-                  to="/app/participant/apply/$tenderId"
-                  params={{ tenderId: tender.id }}
-                  className={cn(buttonVariants())}
-                >
-                  {m.apply_cta()}
-                </Link>
+                {deadlinePassed(tender.submission_deadline, nowMs) ? (
+                  /* Мастер подачи все равно отказал бы по правилу
+                     `application_deadline_passed` - но уже по заполненной форме */
+                  <Button disabled>{m.tender_closed()}</Button>
+                ) : (
+                  <Link
+                    to="/app/participant/apply/$tenderId"
+                    params={{ tenderId: tender.id }}
+                    className={cn(buttonVariants())}
+                  >
+                    {m.apply_cta()}
+                  </Link>
+                )}
               </li>
             ))}
           </ul>
