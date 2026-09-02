@@ -117,6 +117,10 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(admin::reset_password))
         .routes(routes!(admin::set_user_active))
         .routes(routes!(admin::audit_chain))
+        .routes(routes!(admin::data_overview))
+        .routes(routes!(admin::purge_data))
+        .routes(routes!(admin::purge_tender))
+        .routes(routes!(admin::deactivate_demo_accounts))
         .routes(routes!(site_announcements::published))
         .routes(routes!(
             site_announcements::current,

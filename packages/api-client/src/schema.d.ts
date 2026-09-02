@@ -63,6 +63,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Обзор данных стенда: что и в каком количестве уйдет при очистке. */
+        get: operations["data_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Полная очистка: все тендеры, объекты, заявки, торги, протоколы, договоры,
+         *     книга проводок, особый порядок, участки и уведомления - одной транзакцией.
+         * @description Учетные записи, роли, состав комиссии, объявление на главной, справочники
+         *     и журнал аудита остаются. Файлы в `dossiers` тоже: бакет под Object Lock
+         *     (INV-042), а без строки метаданных объект недостижим (A-095).
+         */
+        post: operations["purge_data"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/demo-accounts/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Отключение демо-учеток `*@tou.demo` (Прил. Б) кроме своей: у них один
+         *     пароль на всех, и на рабочем стенде они не должны входить. Записи не
+         *     удаляются - их можно вернуть обычным переключением (W-07).
+         */
+        post: operations["deactivate_demo_accounts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/site-announcement": {
         parameters: {
             query?: never;
@@ -76,6 +137,28 @@ export interface paths {
         put: operations["save"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/tenders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Удаление одного тендера со всем, что на нем висит: лоты, заявки, журнал,
+         *     заседания, протоколы, торги, договоры, акты, проводки, обязательства,
+         *     материалы досье. Объекты остаются. В отличие от `DELETE /tenders/{id}`,
+         *     статус не важен - это административная очистка, а не ход процедуры.
+         */
+        delete: operations["purge_tender"];
         options?: never;
         head?: never;
         patch?: never;
@@ -3018,6 +3101,93 @@ export interface components {
             signature_status: string;
             title_ru: string;
         };
+        /** @description Сколько строк каждого вида лежит на стенде - что уйдет при очистке. */
+        AdminDataCountsDto: {
+            /** Format: int64 */
+            acts: number;
+            /** Format: int64 */
+            applications: number;
+            /** Format: int64 */
+            auctions: number;
+            /** Format: int64 */
+            contracts: number;
+            /**
+             * Format: int64
+             * @description Действующие демо-учетки `*@tou.demo` (Прил. Б)
+             */
+            demo_accounts: number;
+            /** Format: int64 */
+            dossier_items: number;
+            /** Format: int64 */
+            investment_contracts: number;
+            /** Format: int64 */
+            land_plots: number;
+            /** Format: int64 */
+            ledger_entries: number;
+            /** Format: int64 */
+            lots: number;
+            /** Format: int64 */
+            notifications: number;
+            /** Format: int64 */
+            objects: number;
+            /** Format: int64 */
+            obligations: number;
+            /** Format: int64 */
+            protocols: number;
+            /** Format: int64 */
+            public_records: number;
+            /** Format: int64 */
+            special_requests: number;
+            /** Format: int64 */
+            tenders: number;
+        };
+        AdminDataOverviewDto: {
+            counts: components["schemas"]["AdminDataCountsDto"];
+            /**
+             * @description Очистка разрешена конфигурацией стенда (`ALLOW_DATA_PURGE`); без нее
+             *     кнопки в кабинете не действуют, а маршруты отказывают
+             */
+            purge_enabled: boolean;
+            /** @description Все тендеры стенда в любом статусе, свежие сверху */
+            tenders: components["schemas"]["AdminTenderDto"][];
+            /** @description Перечень обрезан потолком строк */
+            tenders_truncated: boolean;
+        };
+        AdminDemoAccountsDto: {
+            /**
+             * Format: int64
+             * @description Сколько демо-учеток отключено
+             */
+            deactivated: number;
+        };
+        AdminPurgeRequest: {
+            /**
+             * @description Слово подтверждения - ровно [`PURGE_CONFIRMATION`]
+             * @example purge
+             */
+            confirmation: string;
+        };
+        AdminPurgeResultDto: {
+            /** @description Удалено строк по таблицам схемы `core` (таблицы без удалений опущены) */
+            deleted: {
+                [key: string]: number;
+            };
+        };
+        /** @description Тендер в перечне на удаление. */
+        AdminTenderDto: {
+            /**
+             * Format: int64
+             * @description Заявок по тендеру - уйдут вместе с ним
+             */
+            applications: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["TenderStatusDto"];
+            title: string;
+            title_kk: string;
+        };
         AdvanceRequest: {
             /** @description Шаг конвейера: `handed_to_tenant`, `tenant_signed`, … (п. 110–115) */
             stage: string;
@@ -5115,6 +5285,106 @@ export interface operations {
             };
         };
     };
+    data_overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Обзор данных стенда */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDataOverviewDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    purge_data: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPurgeRequest"];
+            };
+        };
+        responses: {
+            /** @description Стенд очищен */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPurgeResultDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Очистка выключена или слово подтверждения не совпало */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    deactivate_demo_accounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Демо-учетки отключены */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDemoAccountsDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     current: {
         parameters: {
             query?: never;
@@ -5185,6 +5455,56 @@ export interface operations {
                 };
             };
             /** @description Некорректный заголовок или текст */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    purge_tender: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Тендер */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Тендер удален */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminPurgeResultDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Очистка выключена */
             422: {
                 headers: {
                     [name: string]: unknown;

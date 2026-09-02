@@ -133,6 +133,120 @@
         }
       }
     },
+    "/api/v1/admin/data": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Обзор данных стенда: что и в каком количестве уйдет при очистке.",
+        "operationId": "data_overview",
+        "responses": {
+          "200": {
+            "description": "Обзор данных стенда",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDataOverviewDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/data/purge": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Полная очистка: все тендеры, объекты, заявки, торги, протоколы, договоры,\nкнига проводок, особый порядок, участки и уведомления - одной транзакцией.",
+        "description": "Учетные записи, роли, состав комиссии, объявление на главной, справочники\nи журнал аудита остаются. Файлы в `dossiers` тоже: бакет под Object Lock\n(INV-042), а без строки метаданных объект недостижим (A-095).",
+        "operationId": "purge_data",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminPurgeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Стенд очищен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPurgeResultDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Очистка выключена или слово подтверждения не совпало",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/demo-accounts/deactivate": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Отключение демо-учеток `*@tou.demo` (Прил. Б) кроме своей: у них один\nпароль на всех, и на рабочем стенде они не должны входить. Записи не\nудаляются - их можно вернуть обычным переключением (W-07).",
+        "operationId": "deactivate_demo_accounts",
+        "responses": {
+          "200": {
+            "description": "Демо-учетки отключены",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDemoAccountsDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/site-announcement": {
       "get": {
         "tags": [
@@ -212,6 +326,69 @@
           },
           "422": {
             "description": "Некорректный заголовок или текст",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tenders/{id}": {
+      "delete": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Удаление одного тендера со всем, что на нем висит: лоты, заявки, журнал,\nзаседания, протоколы, торги, договоры, акты, проводки, обязательства,\nматериалы досье. Объекты остаются. В отличие от `DELETE /tenders/{id}`,\nстатус не важен - это административная очистка, а не ход процедуры.",
+        "operationId": "purge_tender",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Тендер",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Тендер удален",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminPurgeResultDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Тендер не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Очистка выключена",
             "content": {
               "application/json": {
                 "schema": {
@@ -8550,6 +8727,211 @@
             "description": "Способ подписания (ТЗ § 2): `unsigned` | `paper` | `electronic`"
           },
           "title_ru": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminDataCountsDto": {
+        "type": "object",
+        "description": "Сколько строк каждого вида лежит на стенде - что уйдет при очистке.",
+        "required": [
+          "objects",
+          "tenders",
+          "lots",
+          "applications",
+          "protocols",
+          "auctions",
+          "contracts",
+          "acts",
+          "ledger_entries",
+          "special_requests",
+          "land_plots",
+          "investment_contracts",
+          "dossier_items",
+          "public_records",
+          "obligations",
+          "notifications",
+          "demo_accounts"
+        ],
+        "properties": {
+          "acts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "applications": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "auctions": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contracts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "demo_accounts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Действующие демо-учетки `*@tou.demo` (Прил. Б)"
+          },
+          "dossier_items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "investment_contracts": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "land_plots": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "ledger_entries": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "lots": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "notifications": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "objects": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "obligations": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "protocols": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "public_records": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "special_requests": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tenders": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AdminDataOverviewDto": {
+        "type": "object",
+        "required": [
+          "purge_enabled",
+          "counts",
+          "tenders",
+          "tenders_truncated"
+        ],
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/AdminDataCountsDto"
+          },
+          "purge_enabled": {
+            "type": "boolean",
+            "description": "Очистка разрешена конфигурацией стенда (`ALLOW_DATA_PURGE`); без нее\nкнопки в кабинете не действуют, а маршруты отказывают"
+          },
+          "tenders": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminTenderDto"
+            },
+            "description": "Все тендеры стенда в любом статусе, свежие сверху"
+          },
+          "tenders_truncated": {
+            "type": "boolean",
+            "description": "Перечень обрезан потолком строк"
+          }
+        }
+      },
+      "AdminDemoAccountsDto": {
+        "type": "object",
+        "required": [
+          "deactivated"
+        ],
+        "properties": {
+          "deactivated": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Сколько демо-учеток отключено",
+            "minimum": 0
+          }
+        }
+      },
+      "AdminPurgeRequest": {
+        "type": "object",
+        "required": [
+          "confirmation"
+        ],
+        "properties": {
+          "confirmation": {
+            "type": "string",
+            "description": "Слово подтверждения - ровно [`PURGE_CONFIRMATION`]",
+            "example": "purge"
+          }
+        }
+      },
+      "AdminPurgeResultDto": {
+        "type": "object",
+        "required": [
+          "deleted"
+        ],
+        "properties": {
+          "deleted": {
+            "type": "object",
+            "description": "Удалено строк по таблицам схемы `core` (таблицы без удалений опущены)",
+            "additionalProperties": {
+              "type": "integer",
+              "format": "int64"
+            },
+            "propertyNames": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "AdminTenderDto": {
+        "type": "object",
+        "description": "Тендер в перечне на удаление.",
+        "required": [
+          "id",
+          "title",
+          "title_kk",
+          "status",
+          "created_at",
+          "applications"
+        ],
+        "properties": {
+          "applications": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Заявок по тендеру - уйдут вместе с ним"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TenderStatusDto"
+          },
+          "title": {
+            "type": "string"
+          },
+          "title_kk": {
             "type": "string"
           }
         }

@@ -34,6 +34,7 @@ pub mod obligations;
 pub mod prices;
 pub mod public_records;
 pub mod publications;
+pub mod purge;
 pub mod refdata;
 pub mod reports;
 pub mod results;

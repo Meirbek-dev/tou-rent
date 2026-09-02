@@ -9,6 +9,8 @@ export type MrpDto = components["schemas"]["MrpDto"]
 export type CoefficientVersionDto =
   components["schemas"]["CoefficientVersionDto"]
 export type SiteAnnouncementDto = components["schemas"]["SiteAnnouncementDto"]
+export type AdminDataOverviewDto = components["schemas"]["AdminDataOverviewDto"]
+export type AdminTenderDto = components["schemas"]["AdminTenderDto"]
 
 /** Роли, назначаемые админом (FR-1503): `guest` - аноним, он не хранится. */
 export const GRANTABLE_ROLES = [
@@ -108,6 +110,61 @@ export const auditChainQuery = queryOptions({
     return data
   },
 })
+
+/** Слово подтверждения полной очистки - то же, что ждет сервер. */
+export const PURGE_CONFIRMATION = "purge"
+
+/**
+ * Обзор данных стенда для вкладки «Данные»: что и сколько уйдет при очистке
+ * и разрешена ли она конфигурацией стенда (`ALLOW_DATA_PURGE`).
+ */
+export const dataOverviewQuery = queryOptions({
+  queryKey: ["admin", "data"],
+  queryFn: async () => {
+    const { data, error } = await api.GET("/api/v1/admin/data")
+    if (error !== undefined || data === undefined) {
+      throw (error as unknown) ?? new Error("failed to load data overview")
+    }
+    return data
+  },
+})
+
+/**
+ * Полная очистка стенда: все процедуры и объекты одной транзакцией.
+ * Необратима; сервер сверяет слово подтверждения сам - кнопка лишь не
+ * дает нажать раньше, чем оно набрано.
+ */
+export const purgeAllData = async (confirmation: string) => {
+  const { data, error } = await api.POST("/api/v1/admin/data/purge", {
+    body: { confirmation },
+  })
+  if (error !== undefined || data === undefined) {
+    throw (error as unknown) ?? new Error("purge failed")
+  }
+  return data
+}
+
+/** Удаление одного тендера со всем, что на нем висит; объекты остаются. */
+export const purgeTender = async (tenderId: string) => {
+  const { data, error } = await api.DELETE("/api/v1/admin/tenders/{id}", {
+    params: { path: { id: tenderId } },
+  })
+  if (error !== undefined || data === undefined) {
+    throw (error as unknown) ?? new Error("tender purge failed")
+  }
+  return data
+}
+
+/** Отключение демо-учеток `*@tou.demo` кроме своей (обратимо, W-07). */
+export const deactivateDemoAccounts = async () => {
+  const { data, error } = await api.POST(
+    "/api/v1/admin/demo-accounts/deactivate"
+  )
+  if (error !== undefined || data === undefined) {
+    throw (error as unknown) ?? new Error("demo accounts deactivation failed")
+  }
+  return data
+}
 
 /** Объявление для админской формы, включая скрытый черновик. */
 export const adminSiteAnnouncementQuery = queryOptions({

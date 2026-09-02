@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.dossier_items (tender_id, kind, source_table, source_id, title)\n         VALUES ($1, 'test', 'core.tenders', $1, 'Проба очистки') RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.dossier_items",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "04a344e88a4e9df3224ac3e5259ca679a572dff81a5543d528caa57812cf532f"
+}

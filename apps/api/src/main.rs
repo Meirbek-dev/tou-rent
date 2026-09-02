@@ -129,6 +129,16 @@ async fn serve() -> anyhow::Result<()> {
     let database_url = env("DATABASE_URL")?;
     let redis_url = env("REDIS_URL")?;
     let secure_cookies = std::env::var("COOKIE_SECURE").is_ok_and(|v| v == "1" || v == "true");
+    // Очистка данных из кабинета админа (М15): второй рубеж по образцу
+    // ADR-0005 - явное намерение деплоя. На рабочем стенде переменная
+    // задается только на окно перед вводом в работу и после него убирается
+    let data_purge = std::env::var("ALLOW_DATA_PURGE").is_ok_and(|v| v == "1" || v == "true");
+    if data_purge {
+        tracing::warn!(
+            "ALLOW_DATA_PURGE задана: очистка данных из кабинета админа включена - \
+             после очистки уберите переменную и перезапустите api"
+        );
+    }
 
     let db = tou_db::connect(&database_url)
         .await
@@ -165,6 +175,7 @@ async fn serve() -> anyhow::Result<()> {
         // Источники апгрейда WS-комнаты торгов (FR-603): окружение разбирает
         // композиция, как и остальную конфигурацию стенда
         .with_ws_origins(tou_http::state::allowed_ws_origins_from_env())
+        .with_data_purge(data_purge)
         .with_oidc(oidc);
 
     // Реалтайм между экземплярами (NFR-12): публикация уходит в Redis
