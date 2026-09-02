@@ -73,13 +73,13 @@ impl ObjectDto {
 pub struct ObjectRequest {
     #[garde(skip)]
     pub kind: ObjectKindDto,
-    #[garde(length(chars, min = 1, max = 300))]
+    #[garde(length(chars, min = 1, max = 300), custom(not_blank))]
     pub name: String,
-    #[garde(length(chars, min = 1, max = 300))]
+    #[garde(length(chars, min = 1, max = 300), custom(not_blank))]
     pub name_kk: String,
-    #[garde(length(chars, min = 1, max = 500))]
+    #[garde(length(chars, min = 1, max = 500), custom(not_blank))]
     pub address: String,
-    #[garde(length(chars, min = 1, max = 500))]
+    #[garde(length(chars, min = 1, max = 500), custom(not_blank))]
     pub address_kk: String,
     /// Площадь, м² (> 0)
     #[garde(custom(positive_area))]
@@ -96,6 +96,17 @@ pub struct ObjectRequest {
     pub comfort_code: Option<String>,
     #[garde(inner(length(chars, max = 50)))]
     pub location_code: Option<String>,
+}
+
+/// Текст из одних пробелов проходит `length(min = 1)`, а после `trim()`
+/// упирается в CHECK `*_not_blank` таблицы - и клиент получал 500 вместо
+/// 422. Проверка стоит у типа запроса, чтобы отказ назвал поле.
+pub(crate) fn not_blank(value: &str, _ctx: &()) -> garde::Result {
+    if value.trim().is_empty() {
+        Err(garde::Error::new("must not be blank"))
+    } else {
+        Ok(())
+    }
 }
 
 fn positive_area(value: &Decimal, _ctx: &()) -> garde::Result {
@@ -126,9 +137,10 @@ impl ObjectRequest {
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct ListObjectsParams {
-    /// Cursor: id последнего элемента предыдущей страницы
+    /// Курсор: id последнего элемента предыдущей страницы
     pub after: Option<Uuid>,
-    /// 1..=100, по умолчанию 50
+    /// Размер страницы; значение вне 1..=100 подтягивается к границе
+    #[param(minimum = 1, maximum = 100)]
     pub limit: Option<i64>,
     /// Витрина FR-102: статус объекта (вычисляемый, FR-103)
     pub status: Option<ObjectStatusDto>,

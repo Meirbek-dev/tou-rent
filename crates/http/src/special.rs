@@ -905,9 +905,16 @@ pub async fn decide_special_request(
         NotificationKind::SpecialDecided.as_str(),
         &[tou_db::notifications::NewNotification {
             user_id: request.applicant_id,
+            // Категория уезжает кодом: готовая русская подпись в payload'е
+            // оставалась русской и в казахском кабинете, хотя у категории
+            // в refdata есть label_kk/label_en. `category_ru` - тот же
+            // текст рядом: он остается запасным для клиента, которому
+            // справочник недоступен, и совпадает по смыслу с полем
+            // `category` уже разосланных уведомлений.
             payload: json!({
                 "special_request_id": id,
-                "category": request.category_label,
+                "category_code": request.category,
+                "category_ru": request.category_label,
                 "decision": choice.as_str(),
                 "rationale": record.rationale,
                 "rule_ref": "п. 90",

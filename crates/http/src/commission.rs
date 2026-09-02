@@ -578,6 +578,7 @@ pub(crate) fn attendance_dto(row: commission::AttendanceRow) -> AttendanceRowDto
     params(("id" = Uuid, Path, description = "Тендер")),
     responses(
         (status = 204, description = "Заседание открыто"),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
         (status = 409, description = "Кворума нет либо заседание уже открыто", body = crate::error::Problem),
     )
 )]
@@ -587,6 +588,9 @@ pub async fn open_meeting(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     user.require(Action::MeetingManage)?;
+    // Несуществующий тендер - 404, а не «явка не отмечена»: отсутствие
+    // заседания у несуществующего тендера не нарушение п. 12
+    crate::tenders::ensure_tender_exists(&state, id).await?;
 
     let meeting = tou_db::admission::qualification_meeting(&state.db, id)
         .await?

@@ -195,15 +195,13 @@ pub struct PendingPublicationDto {
     pub ready: bool,
 }
 
-/// Рабочий список ожидающих публикации (ТЗ § 7).
-///
-/// `next_after` здесь всегда `null`: продолжения у списка нет - он не
-/// реестр, а очередь работы, и `truncated` означает не «есть вторая
-/// страница», а «работы накопилось больше, чем система показывает».
+/// Страница рабочего списка ожидающих публикации (ТЗ § 7): старое сверху.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct PendingPublicationPage {
     pub items: Vec<PendingPublicationDto>,
-    pub next_after: Option<String>,
+    /// Курсор продолжения для `after` - `source_id` последней строки;
+    /// `null` - очередь показана до конца
+    pub next_after: Option<Uuid>,
     /// Показана не вся выборка
     pub truncated: bool,
 }
@@ -215,6 +213,7 @@ pub struct PendingPublicationPage {
     get,
     path = "/api/v1/public-records/pending",
     tag = "public-records",
+    params(crate::dto::PageCursorParams),
     responses(
         (status = 200, description = "Ожидают публикации", body = PendingPublicationPage),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
@@ -223,11 +222,16 @@ pub struct PendingPublicationPage {
 pub async fn pending_publications(
     user: CurrentUser,
     State(state): State<AppState>,
+    Query(params): Query<crate::dto::PageCursorParams>,
 ) -> Result<Json<PendingPublicationPage>, ApiError> {
     user.require(Action::RecordPublish)?;
 
-    let page = public_records::pending(&state.db).await?;
+    let limit = crate::page_limit(params.limit);
+    let page = public_records::pending(&state.db, params.after, limit).await?;
     let truncated = page.truncated;
+    let next_after = truncated
+        .then(|| page.last().map(|r| r.source_id))
+        .flatten();
     Ok(Json(PendingPublicationPage {
         items: page
             .into_iter()
@@ -241,7 +245,7 @@ pub async fn pending_publications(
                 ready: item.ready,
             })
             .collect(),
-        next_after: None,
+        next_after,
         truncated,
     }))
 }

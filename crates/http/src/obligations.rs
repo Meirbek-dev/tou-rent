@@ -13,9 +13,10 @@ use tou_domain::policy::Action;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::dto::PageCursorParams;
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
-use crate::request::{Json, Path};
+use crate::request::{Json, Path, Query};
 use crate::state::AppState;
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -36,15 +37,16 @@ pub struct ObligationDto {
     pub status: String,
 }
 
-/// Дашборд сроков (ТЗ § 7).
+/// Страница дашборда сроков (ТЗ § 7): ближайший срок сверху.
 ///
-/// `next_after` всегда `null`: рабочий список разгружается работой, а не
-/// листанием. Поднятый `truncated` здесь значит, что сроков накопилось
-/// больше, чем дашборд показывает, - это про завал, а не про страницу.
+/// Поднятый `truncated` значит, что сроков накопилось больше страницы, -
+/// это и про завал работой, и про то, что есть продолжение: его адрес
+/// приходит в `next_after`.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ObligationPage {
     pub items: Vec<ObligationDto>,
-    pub next_after: Option<String>,
+    /// Курсор продолжения для `after`; `null` - показаны все открытые сроки
+    pub next_after: Option<Uuid>,
     /// Показана не вся выборка
     pub truncated: bool,
 }
@@ -54,14 +56,18 @@ pub struct ObligationPage {
     get,
     path = "/api/v1/obligations/my",
     tag = "obligations",
+    params(PageCursorParams),
     responses((status = 200, description = "Открытые сроки", body = ObligationPage))
 )]
 pub async fn my_obligations(
     user: CurrentUser,
     State(state): State<AppState>,
+    Query(params): Query<PageCursorParams>,
 ) -> Result<Json<ObligationPage>, ApiError> {
-    let page = obligations::for_roles(&state.db, &user.roles).await?;
+    let limit = crate::page_limit(params.limit);
+    let page = obligations::for_roles(&state.db, &user.roles, params.after, limit).await?;
     let truncated = page.truncated;
+    let next_after = truncated.then(|| page.last().map(|r| r.id)).flatten();
 
     Ok(Json(ObligationPage {
         items: page
@@ -77,7 +83,7 @@ pub async fn my_obligations(
                 status: record.status,
             })
             .collect(),
-        next_after: None,
+        next_after,
         truncated,
     }))
 }

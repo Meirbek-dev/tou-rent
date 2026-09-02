@@ -20,16 +20,17 @@ use serde::Serialize;
 use serde_json::json;
 use time::OffsetDateTime;
 use tou_db::publications::{self, ProtocolRecord, PublicationError};
-use tou_db::tenders;
+use tou_db::{special, tenders};
 use tou_domain::notification::NotificationKind;
 use tou_domain::policy::{Action, Compound};
 use tou_domain::publication::{DossierKind, DossierSubject};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
+use crate::dto::PageCursorParams;
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
-use crate::request::{Json, Path};
+use crate::request::{Json, Path, Query};
 use crate::state::AppState;
 
 fn publication_error(err: PublicationError) -> ApiError {
@@ -92,13 +93,18 @@ fn protocol_dto(record: ProtocolRecord) -> ProtocolDto {
     path = "/api/v1/tenders/{id}/protocols",
     tag = "publications",
     params(("id" = Uuid, Path, description = "Тендер")),
-    responses((status = 200, description = "Протоколы тендера", body = [ProtocolDto]))
+    responses(
+        (status = 200, description = "Протоколы тендера", body = [ProtocolDto]),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
+    )
 )]
 pub async fn tender_protocols(
     user: Option<CurrentUser>,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<ProtocolDto>>, ApiError> {
+    crate::tenders::ensure_tender_exists(&state, id).await?;
+
     let records = publications::list_for_tender(&state.db, id).await?;
     let sees_all = sees_all_protocols(&state, user.as_ref(), id).await?;
 
@@ -111,15 +117,12 @@ pub async fn tender_protocols(
     ))
 }
 
-/// Протоколы кабинета участника (ТЗ § 7).
-///
-/// `next_after` всегда `null`: выборку ограничивает участие одного человека,
-/// продолжения у нее нет. Поле остается, чтобы усекаемые реестры отвечали
-/// одинаково и клиенту не приходилось помнить, у какого из них какая форма.
+/// Страница протоколов кабинета участника (ТЗ § 7).
 #[derive(Debug, Serialize, ToSchema)]
 pub struct MyProtocolPage {
     pub items: Vec<ProtocolDto>,
-    pub next_after: Option<String>,
+    /// Курсор продолжения для `after`; `null` - показаны все протоколы
+    pub next_after: Option<Uuid>,
     /// Показана не вся выборка
     pub truncated: bool,
 }
@@ -130,19 +133,24 @@ pub struct MyProtocolPage {
     get,
     path = "/api/v1/protocols/my",
     tag = "publications",
+    params(PageCursorParams),
     responses((status = 200, description = "Протоколы моих тендеров", body = MyProtocolPage))
 )]
 pub async fn my_protocols(
     user: CurrentUser,
     State(state): State<AppState>,
+    Query(params): Query<PageCursorParams>,
 ) -> Result<Json<MyProtocolPage>, ApiError> {
     user.require(Action::ApplicationReadOwn)?;
 
-    let page = publications::list_for_participant(&state.db, user.id()).await?;
+    let limit = crate::page_limit(params.limit);
+    let page =
+        publications::list_for_participant(&state.db, user.id(), params.after, limit).await?;
     let truncated = page.truncated;
+    let next_after = truncated.then(|| page.last().map(|r| r.id)).flatten();
     Ok(Json(MyProtocolPage {
         items: page.into_iter().map(protocol_dto).collect(),
-        next_after: None,
+        next_after,
         truncated,
     }))
 }
@@ -312,7 +320,10 @@ fn require_dossier_access(user: &CurrentUser) -> Result<(), ApiError> {
     path = "/api/v1/tenders/{id}/dossier",
     tag = "publications",
     params(("id" = Uuid, Path, description = "Тендер")),
-    responses((status = 200, description = "Материалы досье", body = [DossierItemDto]))
+    responses(
+        (status = 200, description = "Материалы досье", body = [DossierItemDto]),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
+    )
 )]
 pub async fn tender_dossier(
     user: CurrentUser,
@@ -320,6 +331,7 @@ pub async fn tender_dossier(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<DossierItemDto>>, ApiError> {
     require_dossier_access(&user)?;
+    crate::tenders::ensure_tender_exists(&state, id).await?;
 
     let items = publications::dossier(&state.db, id).await?;
     Ok(Json(items.into_iter().map(dossier_dto).collect()))
@@ -337,6 +349,7 @@ pub async fn tender_dossier(
     responses(
         (status = 200, description = "Материалы досье решения", body = [DossierItemDto]),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
+        (status = 404, description = "Заявка особого порядка не найдена", body = crate::error::Problem),
     )
 )]
 pub async fn special_dossier(
@@ -345,6 +358,11 @@ pub async fn special_dossier(
     Path(id): Path<Uuid>,
 ) -> Result<Json<Vec<DossierItemDto>>, ApiError> {
     require_special_dossier_access(&user)?;
+    // Тот же рубеж, что у подресурсов тендера: досье несуществующей заявки -
+    // это 404, а не пустой перечень материалов
+    special::get(&state.db, id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
 
     let items = publications::special_dossier(&state.db, id).await?;
     Ok(Json(items.into_iter().map(dossier_dto).collect()))

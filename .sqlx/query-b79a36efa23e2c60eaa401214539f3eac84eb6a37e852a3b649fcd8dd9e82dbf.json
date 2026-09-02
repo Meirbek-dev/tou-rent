@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH pending AS (\n           SELECT 'decision'::text AS kind, r.id AS source_id,\n                'Результат по заявке: ' || c.label_ru || ' (' || c.rule_ref || ')' AS title,\n                d.decided_at AS occurred_at, d.pdf_key IS NOT NULL AS ready\n         FROM core.special_board_decisions d\n         JOIN core.special_requests r ON r.id = d.special_request_id\n         JOIN refdata.special_categories c ON c.code = r.category\n         WHERE c.publishable\n           AND NOT EXISTS (SELECT 1 FROM core.public_records p\n                           WHERE p.special_request_id = r.id)\n         UNION ALL\n         SELECT 'rate', i.contract_id,\n                'Обоснование ставки договора особого порядка', i.created_at,\n                i.rate_calculation IS NOT NULL\n         FROM core.investment_contracts i\n         WHERE NOT EXISTS (SELECT 1 FROM core.public_records p\n                           WHERE p.contract_id = i.contract_id)\n         UNION ALL\n         SELECT 'investment_act', a.id,\n                'Акт приемки инвестиций от ' || to_char(a.act_date, 'DD.MM.YYYY'),\n                a.created_at, a.pdf_key IS NOT NULL\n         FROM core.investment_acceptances a\n         WHERE NOT EXISTS (SELECT 1 FROM core.public_records p\n                           WHERE p.acceptance_id = a.id)\n         )\n         SELECT kind AS \"kind!\", source_id AS \"source_id!\", title AS \"title!\",\n                occurred_at AS \"occurred_at!\", ready AS \"ready!\"\n         FROM pending\n         WHERE $1::uuid IS NULL\n            OR (occurred_at, source_id)\n               > (SELECT occurred_at, source_id FROM pending WHERE source_id = $1 LIMIT 1)\n         ORDER BY occurred_at, source_id LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "source_id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "occurred_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "ready!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "b79a36efa23e2c60eaa401214539f3eac84eb6a37e852a3b649fcd8dd9e82dbf"
+}

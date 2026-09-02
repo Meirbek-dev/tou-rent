@@ -281,18 +281,23 @@ impl TryFrom<PendingRow> for PendingPublication {
 /// Что ждет публикации: решения по публикуемым категориям (п. 87, 97),
 /// обоснования ставок договоров особого порядка и акты приемки (п. 92).
 ///
-/// Курсора нет намеренно: список разгружается работой подразделения -
-/// опубликованный материал из него выбывает. Тысяча непубликованных
-/// материалов - это не длинный реестр, а несделанная работа, и признак
-/// усечения здесь сообщает именно о ней.
-pub async fn pending(db: &Db) -> Result<crate::Page<PendingPublication>, sqlx::Error> {
-    // Столбцы под UNION планировщик считает потенциально NULL; сортировка
-    // идет по номеру, потому что переименование меняет имя столбца
+/// Старое сверху: рабочий список подразделения разгружается работой, и
+/// первым в нем должен стоять материал, ждущий дольше всех. Курсор - id
+/// материала (`source_id`); ключ сортировки (`occurred_at`, `source_id`)
+/// БД находит по нему в той же выборке, поэтому состав ключа остается
+/// внутри запроса, а объединение трех источников не мешает листать.
+pub async fn pending(
+    db: &Db,
+    after: Option<Uuid>,
+    limit: i64,
+) -> Result<crate::Page<PendingPublication>, sqlx::Error> {
+    // Столбцы под UNION планировщик считает потенциально NULL
     let rows = sqlx::query_as!(
         PendingRow,
-        r#"SELECT 'decision'::text AS "kind!", r.id AS "source_id!",
-                'Результат по заявке: ' || c.label_ru || ' (' || c.rule_ref || ')' AS "title!",
-                d.decided_at AS "occurred_at!", d.pdf_key IS NOT NULL AS "ready!"
+        r#"WITH pending AS (
+           SELECT 'decision'::text AS kind, r.id AS source_id,
+                'Результат по заявке: ' || c.label_ru || ' (' || c.rule_ref || ')' AS title,
+                d.decided_at AS occurred_at, d.pdf_key IS NOT NULL AS ready
          FROM core.special_board_decisions d
          JOIN core.special_requests r ON r.id = d.special_request_id
          JOIN refdata.special_categories c ON c.code = r.category
@@ -313,14 +318,22 @@ pub async fn pending(db: &Db) -> Result<crate::Page<PendingPublication>, sqlx::E
          FROM core.investment_acceptances a
          WHERE NOT EXISTS (SELECT 1 FROM core.public_records p
                            WHERE p.acceptance_id = a.id)
-         ORDER BY 4 LIMIT $1"#,
-        crate::probe_limit(crate::MAX_ROWS)
+         )
+         SELECT kind AS "kind!", source_id AS "source_id!", title AS "title!",
+                occurred_at AS "occurred_at!", ready AS "ready!"
+         FROM pending
+         WHERE $1::uuid IS NULL
+            OR (occurred_at, source_id)
+               > (SELECT occurred_at, source_id FROM pending WHERE source_id = $1 LIMIT 1)
+         ORDER BY occurred_at, source_id LIMIT $2"#,
+        after,
+        crate::probe_limit(limit)
     )
     .fetch_all(db)
     .await?;
-    let page = crate::Page::probe(rows, crate::MAX_ROWS);
-    crate::warn_if_truncated(page.truncated, "public_records::pending");
-    page.try_map(PendingPublication::try_from)
+    // См. `contracts::list_for_tenant`: с курсором `truncated` - признак
+    // продолжения, а не упершейся в потолок выборки
+    crate::Page::probe(rows, limit).try_map(PendingPublication::try_from)
 }
 
 /// Снятие материалов с публичного доступа по истечении шести месяцев

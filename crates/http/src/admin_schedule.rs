@@ -33,7 +33,7 @@ use crate::admin_data::require_purge_enabled;
 use crate::dto::TenderStatusDto;
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
-use crate::request::{Json, Path};
+use crate::request::{Json, Path, Query};
 use crate::state::AppState;
 use crate::tenders::transition_error;
 
@@ -86,7 +86,9 @@ impl AdminTenderScheduleDto {
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AdminTenderSchedulePageDto {
     pub items: Vec<AdminTenderScheduleDto>,
-    /// Показаны не все тендеры: перечень обрезан потолком строк
+    /// Курсор продолжения для `after`; `null` - показаны все тендеры
+    pub next_after: Option<Uuid>,
+    /// Показаны не все тендеры: есть следующая страница
     pub truncated: bool,
 }
 
@@ -120,6 +122,7 @@ fn to_instant(value: OffsetDateTime) -> Instant {
     get,
     path = "/api/v1/admin/tenders/schedule",
     tag = "admin",
+    params(crate::dto::PageCursorParams),
     responses(
         (status = 200, description = "Тендеры со сроками", body = AdminTenderSchedulePageDto),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
@@ -128,16 +131,24 @@ fn to_instant(value: OffsetDateTime) -> Instant {
 pub async fn list_schedules(
     user: CurrentUser,
     State(state): State<AppState>,
+    Query(params): Query<crate::dto::PageCursorParams>,
 ) -> Result<Json<AdminTenderSchedulePageDto>, ApiError> {
     user.require(Action::DataPurge)?;
 
-    let page = tou_db::tenders::list_all(&state.db).await?;
+    // Курсор реестра тендеров: выборка та же самая, значит и листается так же
+    let limit = crate::page_limit(params.limit);
+    let page = tou_db::tenders::list_all(&state.db, params.after, limit).await?;
     let truncated = page.truncated;
+    let next_after = truncated.then(|| page.last().map(|r| r.id)).flatten();
     let items = page
         .into_iter()
         .map(AdminTenderScheduleDto::from_record)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Json(AdminTenderSchedulePageDto { items, truncated }))
+    Ok(Json(AdminTenderSchedulePageDto {
+        items,
+        next_after,
+        truncated,
+    }))
 }
 
 /// Правка сроков тендера в обход процедуры: все четыре отметки, включая дату

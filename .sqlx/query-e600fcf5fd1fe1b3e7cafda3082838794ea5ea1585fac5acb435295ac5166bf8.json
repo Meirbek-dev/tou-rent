@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.commissions SET name = $1 WHERE id = $2 AND name <> $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e600fcf5fd1fe1b3e7cafda3082838794ea5ea1585fac5acb435295ac5166bf8"
+}

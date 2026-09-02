@@ -225,14 +225,7 @@ pub async fn decide_application(
 
     let record = admission::decide(&state.db, user.id(), id, verdict, reason)
         .await
-        .map_err(|err| match err {
-            DecideError::NotDecidable => ApiError::rule(
-                RuleViolation::ApplicationNotPending,
-                "решение принимается на открытом заседании после вскрытия, по заявке                  в статусе «подана» (FR-502, FR-1102)",
-            ),
-            DecideError::Rejected(reason) => ApiError::RuleViolation(reason),
-            DecideError::Db(db) => db.into(),
-        })?;
+        .map_err(decide_error)?;
 
     // Отклоненного участника извещает система, а не протокол (п. 56):
     // допущенный узнает о решении приглашением на торги (FR-504), а
@@ -260,6 +253,27 @@ pub async fn decide_application(
 
     let files = applications::list_files(&state.db, record.id).await?;
     Ok(Json(ApplicationDto::from_record(record, files)?))
+}
+
+/// Перевод отказов решения в problem+json.
+///
+/// Неполный пакет - своя причина, а не общий `application_not_pending`:
+/// решение о допуске требует и решаемого статуса заявки, и всех пяти
+/// зашифрованных PDF (п. 40), и до разделения секретарь получал на второе
+/// подсказку про первое.
+fn decide_error(err: DecideError) -> ApiError {
+    match err {
+        DecideError::NotDecidable => ApiError::rule(
+            RuleViolation::ApplicationNotPending,
+            "решение принимается на открытом заседании после вскрытия, по заявке в статусе «подана» (FR-502, FR-1102)",
+        ),
+        DecideError::PackageIncomplete => ApiError::rule(
+            RuleViolation::ApplicationPackageIncomplete,
+            "пакет заявки неполон: решение возможно только по заявке со всеми пятью зашифрованными PDF (FR-502, п. 40)",
+        ),
+        DecideError::Rejected(reason) => ApiError::RuleViolation(reason),
+        DecideError::Db(db) => db.into(),
+    }
 }
 
 /// Формулировка основания п. 52 из справочника: участнику нужен текст
@@ -703,6 +717,31 @@ fn protocol_content(input: ProtocolInput<'_>) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Причина отказа, как ее увидит клиент.
+    fn rule_of(err: ApiError) -> RuleViolation {
+        match err {
+            ApiError::RuleViolation(rejection) => rejection.rule(),
+            other => panic!("ожидался отказ по правилу, получено {other:?}"),
+        }
+    }
+
+    /// Гаунтлет G-006: неполный пакет и нерешаемый статус - разные причины.
+    ///
+    /// Оба отказа приходили клиенту как `application_not_pending`, и
+    /// секретарь читал «заявка не в статусе подана» о заявке, которая
+    /// в нем как раз и была: не хватало документов (п. 40).
+    #[test]
+    fn incomplete_package_is_its_own_rule() {
+        assert_eq!(
+            rule_of(decide_error(DecideError::PackageIncomplete)),
+            RuleViolation::ApplicationPackageIncomplete
+        );
+        assert_eq!(
+            rule_of(decide_error(DecideError::NotDecidable)),
+            RuleViolation::ApplicationNotPending
+        );
+    }
 
     /// Шаблон протокола компилируется в PDF на снимке с решениями и голосами
     /// (критерий Т9: PDF содержит поля п. 55).

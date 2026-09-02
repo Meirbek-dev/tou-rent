@@ -144,6 +144,17 @@ pub async fn entries(
     Ok(page)
 }
 
+/// Есть ли такой счет: выписка несуществующего счета - 404, а не пустая
+/// страница проводок.
+pub async fn account_exists(conn: &mut sqlx::PgConnection, id: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM core.ledger_accounts WHERE id = $1) AS "found!""#,
+        id
+    )
+    .fetch_one(conn)
+    .await
+}
+
 /// Счет взноса по заявке (кабинет участника: «мой взнос»).
 pub async fn account_of_application(
     db: &Db,

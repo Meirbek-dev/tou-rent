@@ -1,0 +1,116 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.id, o.action, o.rule_ref,\n                      o.assignee_role::text AS \"assignee_role!\",\n                      o.tender_id, t.title AS \"tender_title?\", o.due_at,\n                      o.status::text AS \"status!\", o.completed_at\n               FROM core.obligations o\n               LEFT JOIN core.tenders t ON t.id = o.tender_id WHERE o.assignee_role = ANY($1::text[]::core.role[])\n            AND o.status IN ('pending', 'overdue')\n            AND ($2::uuid IS NULL\n                 OR (o.due_at, o.id)\n                    > (SELECT due_at, id FROM core.obligations WHERE id = $2))\n          ORDER BY o.due_at, o.id LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rule_ref",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "rule_ref"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "assignee_role!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "tender_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "tender_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "tender_title?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "due_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "due_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "completed_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "completed_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      true,
+      false,
+      false,
+      null,
+      true
+    ]
+  },
+  "hash": "5198fed3d24b2ec8d1abd28c5eebc4db2daebacf291b783a05009160450ed7a7"
+}

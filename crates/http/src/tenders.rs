@@ -147,9 +147,9 @@ impl TenderDto {
 pub struct CreateLotRequest {
     #[garde(skip)]
     pub object_id: Uuid,
-    #[garde(length(chars, min = 1, max = 500))]
+    #[garde(length(chars, min = 1, max = 500), custom(crate::objects::not_blank))]
     pub purpose: String,
-    #[garde(length(chars, min = 1, max = 500))]
+    #[garde(length(chars, min = 1, max = 500), custom(crate::objects::not_blank))]
     pub purpose_kk: String,
     #[garde(range(min = 1, max = 240))]
     pub lease_months: i32,
@@ -265,9 +265,9 @@ pub(crate) async fn prepare_lots(
 
 #[derive(Debug, Deserialize, garde::Validate, ToSchema)]
 pub struct CreateTenderRequest {
-    #[garde(length(chars, min = 1, max = 300))]
+    #[garde(length(chars, min = 1, max = 300), custom(crate::objects::not_blank))]
     pub title: String,
-    #[garde(length(chars, min = 1, max = 300))]
+    #[garde(length(chars, min = 1, max = 300), custom(crate::objects::not_blank))]
     pub title_kk: String,
     #[garde(length(min = 1, max = 50), dive)]
     pub lots: Vec<CreateLotRequest>,
@@ -276,9 +276,9 @@ pub struct CreateTenderRequest {
 /// Правка черновика: даты процесса и ссылка Zoom (FR-301, FR-303, FR-306).
 #[derive(Debug, Deserialize, garde::Validate, ToSchema)]
 pub struct UpdateTenderRequest {
-    #[garde(length(chars, min = 1, max = 300))]
+    #[garde(length(chars, min = 1, max = 300), custom(crate::objects::not_blank))]
     pub title: String,
-    #[garde(length(chars, min = 1, max = 300))]
+    #[garde(length(chars, min = 1, max = 300), custom(crate::objects::not_blank))]
     pub title_kk: String,
     #[garde(skip)]
     #[serde(default, with = "time::serde::rfc3339::option")]
@@ -306,7 +306,10 @@ pub struct SetRecordingRequest {
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct ListTendersParams {
+    /// Курсор: id последнего элемента предыдущей страницы
     pub after: Option<Uuid>,
+    /// Размер страницы; значение вне 1..=100 подтягивается к границе
+    #[param(minimum = 1, maximum = 100)]
     pub limit: Option<i64>,
 }
 
@@ -443,6 +446,25 @@ pub async fn create_tender(
         StatusCode::CREATED,
         Json(TenderDto::from_record(record, lots)?),
     ))
+}
+
+/// Подресурс несуществующего тендера - это 404, а не пустой перечень.
+///
+/// Пустой массив на месте отказа неотличим от «у тендера ничего нет»:
+/// опечатка в id выглядит рабочим ответом, кабинет рисует пустую вкладку
+/// вместо «тендер не найден», а автотест такой ответ принимает. Проверка
+/// родителя стоит теперь у всех подресурсов тендера - там же, где она
+/// давно стояла у `/documents`.
+///
+/// Порядок важен: право проверяется раньше существования, иначе ответ
+/// рассказывал бы постороннему, какие идентификаторы тендеров заведены.
+pub(crate) async fn ensure_tender_exists(state: &AppState, id: Uuid) -> Result<(), ApiError> {
+    let mut conn = state.db.acquire().await?;
+    if tenders::exists(&mut conn, id).await? {
+        Ok(())
+    } else {
+        Err(ApiError::NotFound)
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]

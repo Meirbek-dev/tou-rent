@@ -222,6 +222,10 @@ pub enum DecideError {
     /// Заявка не найдена, не в решаемом статусе или тендер не на допуске
     #[error("решение по заявке сейчас невозможно")]
     NotDecidable,
+    /// Все условия решения выполнены, кроме полноты пакета (п. 40): заявке
+    /// не хватает обязательных зашифрованных PDF
+    #[error("пакет документов заявки неполон")]
+    PackageIncomplete,
     /// FK/CHECK БД: неизвестное основание (INV-052), чужой член комиссии и т.п.
     #[error("{0}")]
     Rejected(RuleRejection),
@@ -268,7 +272,21 @@ pub async fn decide(
         .await
         .map_err(map_db)?;
 
-        let tender_id = updated.ok_or(DecideError::NotDecidable)?;
+        // Отказ UPDATE'а имеет две разные причины, и раньше обе уезжали
+        // клиенту одним `application_not_pending`: неполный пакет выглядел
+        // как «заявка уже решена», хотя устраняется он не тем и не тем же
+        // человеком. Классификация - тем же условием, что и в UPDATE.
+        let tender_id = match updated {
+            Some(tender_id) => tender_id,
+            None => {
+                return Err(
+                    match decidable_package_complete(&mut *tx, application_id).await? {
+                        Some(false) => DecideError::PackageIncomplete,
+                        _ => DecideError::NotDecidable,
+                    },
+                );
+            }
+        };
 
         // Решение принимается на открытом заседании (FR-1102): без него
         // голосовать было невозможно, а значит и фиксировать нечего
@@ -293,6 +311,30 @@ pub async fn decide(
             .await?;
         Ok(ApplicationRecord::from(record))
     })
+    .await
+}
+
+/// Полнота пакета заявки, у которой прочие условия решения выполнены
+/// (тендер на допуске, заявка «подана» либо «взнос подтвержден»).
+///
+/// `None` - дело не в пакете: заявки нет, статус не тот или тендер не
+/// вскрыт; `Some(false)` - решению мешает именно неполный пакет (п. 40).
+/// Условия повторяют UPDATE из [`decide`] - иначе классификация отказа
+/// разошлась бы с самим отказом.
+pub async fn decidable_package_complete(
+    conn: &mut sqlx::PgConnection,
+    application_id: Uuid,
+) -> Result<Option<bool>, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT core.application_package_complete(a.id) AS "complete!"
+           FROM core.applications a
+           JOIN core.tenders t ON t.id = a.tender_id
+           WHERE a.id = $1
+             AND t.status = 'qualification'
+             AND a.status IN ('submitted', 'fee_confirmed')"#,
+        application_id
+    )
+    .fetch_optional(conn)
     .await
 }
 

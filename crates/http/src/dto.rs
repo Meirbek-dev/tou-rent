@@ -3,9 +3,26 @@
 
 use serde::{Deserialize, Serialize};
 use tou_domain::tender::TenderStatus;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 
 use crate::error::ApiError;
+
+/// Курсор реестра, ключ которого сервер находит сам (ТЗ § 7).
+///
+/// Клиент возвращает в `after` тот `next_after`, что пришел со страницей, -
+/// то есть id последней показанной строки. Ключ сортировки (срок, время
+/// составления, момент события) реестр подбирает по этому id в самом
+/// запросе, поэтому порядок можно менять, не ломая клиента, а страницы
+/// не теряют и не дублируют строки с совпавшим временем.
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct PageCursorParams {
+    /// Курсор: id последнего элемента предыдущей страницы (`next_after`)
+    pub after: Option<Uuid>,
+    /// Размер страницы; значение вне 1..=100 подтягивается к границе
+    #[param(minimum = 1, maximum = 100)]
+    pub limit: Option<i64>,
+}
 
 /// Календарные даты на проводе - строки `YYYY-MM-DD`.
 ///

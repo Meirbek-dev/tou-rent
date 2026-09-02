@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.commissions\n         SET approved_at = core.now(),\n             approved_by = (SELECT id FROM core.users WHERE email = 'admin@tou.demo'::citext)\n         WHERE id = $1 AND approved_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6cf7fe4effe1c86c379dd361f2c0d9b3e03f3834f41728cda575e3e9ab3b3e98"
+}

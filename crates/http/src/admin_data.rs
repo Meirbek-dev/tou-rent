@@ -168,10 +168,18 @@ pub struct AdminRecordDto {
     pub created_at: Option<OffsetDateTime>,
 }
 
+/// Перечень записей одного вида - без курсора намеренно.
+///
+/// Вид данных выбирается заново, а строки удаляются точечно: перечень
+/// разгружается работой, а не листанием, и продолжения у него нет.
+/// Потолок - `tou_db::MAX_ROWS` (тысяча свежих записей); поднятый
+/// `truncated` значит «показана не вся тысяча», и продолжить чтение
+/// нечем - остальное видно после удаления показанного либо полной
+/// очистки вида.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct AdminRecordPageDto {
     pub items: Vec<AdminRecordDto>,
-    /// Перечень обрезан потолком строк
+    /// Перечень обрезан потолком строк; продолжения (курсора) у него нет
     pub truncated: bool,
 }
 
@@ -211,7 +219,10 @@ pub async fn data_overview(
     tag = "admin",
     params(AdminRecordsParams),
     responses(
-        (status = 200, description = "Перечень записей вида", body = AdminRecordPageDto),
+        (status = 200,
+            description = "Перечень записей вида: до 1000 свежих записей, \
+                           курсора нет - продолжение читается после удаления показанного",
+            body = AdminRecordPageDto),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
         (status = 422, description = "`everything` перечнем не является", body = crate::error::Problem),
     )

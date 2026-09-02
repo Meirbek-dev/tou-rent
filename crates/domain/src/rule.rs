@@ -48,6 +48,12 @@ pub enum RuleViolation {
     ApplicationAlreadySubmitted,
     /// Заявка не в статусе «подана»: отзывать или решать по ней нечего (FR-404)
     ApplicationNotPending,
+    /// FR-502 (п. 40): пакет документов заявки неполон - решение о допуске
+    /// принимается только по заявке со всеми пятью зашифрованными PDF.
+    /// Отдельная причина, а не [`RuleViolation::ApplicationNotPending`]:
+    /// статус заявки тут ни при чем, и участнику с секретарем нужны разные
+    /// подсказки - «уже решено» и «пакет неполон» устраняются по-разному.
+    ApplicationPackageIncomplete,
     /// INV-040: ценовое предложение не записывается без ключа шифрования (п. 40)
     SealedPriceKeyMissing,
     /// FR-1101: состав комиссии - председатель, заместитель, нечетное число
@@ -168,6 +174,7 @@ impl RuleViolation {
         RuleViolation::ApplicationDeadlinePassed,
         RuleViolation::ApplicationAlreadySubmitted,
         RuleViolation::ApplicationNotPending,
+        RuleViolation::ApplicationPackageIncomplete,
         RuleViolation::SealedPriceKeyMissing,
         RuleViolation::CommissionComposition,
         RuleViolation::CommissionMeeting,
@@ -233,6 +240,7 @@ impl RuleViolation {
             RuleViolation::ApplicationDeadlinePassed => "application_deadline_passed",
             RuleViolation::ApplicationAlreadySubmitted => "application_already_submitted",
             RuleViolation::ApplicationNotPending => "application_not_pending",
+            RuleViolation::ApplicationPackageIncomplete => "application_package_incomplete",
             RuleViolation::SealedPriceKeyMissing => "sealed_price_key_missing",
             RuleViolation::CommissionComposition => "commission_composition",
             RuleViolation::CommissionMeeting => "commission_meeting",
@@ -380,6 +388,14 @@ impl RuleViolation {
             // организатор, перепутавший две даты, обязан узнать об этом
             "deadline_before_opening" | "opened_not_before_meeting" => {
                 Some(RuleViolation::TenderPublicationTerms)
+            }
+            // Крайние отметки процедуры (круг 2 гаунтлета, G-043):
+            // объявление раньше окончания приема, торги не раньше
+            // вскрытия. Порядок сроков - отдельная причина от условий
+            // публикации: админ, правящий запись под вышедшее объявление,
+            // перепутал две даты, а не нарушил окно в десять дней
+            "announced_before_deadline" | "opening_before_trading" => {
+                Some(RuleViolation::TenderScheduleOrder)
             }
             _ => None,
         }

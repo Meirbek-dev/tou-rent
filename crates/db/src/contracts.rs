@@ -154,25 +154,37 @@ pub async fn list_for_tender(db: &Db, tender_id: Uuid) -> Result<Vec<ContractRec
         .await
 }
 
-/// Договоры нанимателя (кабинет участника).
+/// Договоры нанимателя (кабинет участника), страницей.
 ///
-/// Курсора нет: договоров у одного нанимателя единицы - выборку ограничивает
-/// сама предметная область. Потолок остается защитой от невероятного, но
-/// молчать о нем нельзя: наниматель не должен гадать, все ли договоры видит.
+/// Курсор - id последней отданной строки; ключ сортировки (`created_at`, `id`)
+/// БД находит по нему сама, поэтому порядок реестра принадлежит запросу,
+/// а не клиенту. Одного `created_at` мало: договоры по лотам одного тендера
+/// составляются в одну секунду, и курсор по голому времени такую пару либо
+/// потерял бы, либо показал дважды.
+/// Соединением, а не пулом (как `reports::receipts_page`): курсор
+/// проверяется на данных, а данные интеграционного теста живут в
+/// откатываемой транзакции - пулу они не видны.
 pub async fn list_for_tenant(
-    db: &Db,
+    conn: &mut sqlx::PgConnection,
     tenant_id: Uuid,
+    after: Option<Uuid>,
+    limit: i64,
 ) -> Result<crate::Page<ContractRecord>, sqlx::Error> {
     let rows = contract_query!(
-        " WHERE c.tenant_id = $1 ORDER BY c.created_at DESC LIMIT $2",
+        " WHERE c.tenant_id = $1
+            AND ($2::uuid IS NULL
+                 OR (c.created_at, c.id)
+                    < (SELECT created_at, id FROM core.contracts WHERE id = $2))
+          ORDER BY c.created_at DESC, c.id DESC LIMIT $3",
         tenant_id,
-        crate::probe_limit(crate::MAX_ROWS)
+        after,
+        crate::probe_limit(limit)
     )
-    .fetch_all(db)
+    .fetch_all(conn)
     .await?;
-    let page = crate::Page::probe(rows, crate::MAX_ROWS);
-    crate::warn_if_truncated(page.truncated, "contracts::list_for_tenant");
-    Ok(page)
+    // Без предупреждения о потолке: у выборки есть курсор, и поднятый
+    // `truncated` теперь значит «есть следующая страница», а не «обрезано»
+    Ok(crate::Page::probe(rows, limit))
 }
 
 /// Составление договора по итогам торгов (FR-901, п. 108, 110).

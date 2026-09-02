@@ -23,9 +23,10 @@ use crate::state::AppState;
 
 #[derive(Debug, Deserialize, IntoParams)]
 pub struct ListUsersParams {
-    /// Cursor: id последнего элемента предыдущей страницы (uuid v7 упорядочен по времени)
+    /// Курсор: id последнего элемента предыдущей страницы (uuid v7 упорядочен по времени)
     pub after: Option<Uuid>,
-    /// 1..=100, по умолчанию 50
+    /// Размер страницы; значение вне 1..=100 подтягивается к границе
+    #[param(minimum = 1, maximum = 100)]
     pub limit: Option<i64>,
 }
 

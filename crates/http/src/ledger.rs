@@ -148,7 +148,10 @@ pub struct LedgerEntryPage {
     path = "/api/v1/ledger/accounts/{id}/entries",
     tag = "ledger",
     params(("id" = Uuid, Path, description = "Счет книги"), EntriesPageParams),
-    responses((status = 200, description = "Страница проводок счета", body = LedgerEntryPage))
+    responses(
+        (status = 200, description = "Страница проводок счета", body = LedgerEntryPage),
+        (status = 404, description = "Счет не найден", body = crate::error::Problem),
+    )
 )]
 pub async fn account_entries(
     user: CurrentUser,
@@ -157,6 +160,13 @@ pub async fn account_entries(
     Query(params): Query<EntriesPageParams>,
 ) -> Result<Json<LedgerEntryPage>, ApiError> {
     user.require(Action::LedgerRead)?;
+    // Выписка несуществующего счета - 404, а не пустая страница проводок:
+    // «денег не было» и «счета нет» финблок различать обязан
+    let mut conn = state.db.acquire().await?;
+    if !ledger::account_exists(&mut conn, id).await? {
+        return Err(ApiError::NotFound);
+    }
+    drop(conn);
 
     let after = params.after.as_deref().map(cursor::parse).transpose()?;
     let limit = crate::page_limit(params.limit);
@@ -383,6 +393,12 @@ pub async fn refund_deposit(
     Json(body): Json<RefundNote>,
 ) -> Result<Json<LedgerAccountDto>, ApiError> {
     user.require(Action::FeeConfirm)?;
+    // Несуществующий договор - 404, а не «объект не возвращен по акту»:
+    // акта нет и у отсутствующего договора, и отказ по правилу выглядел
+    // так, будто договор есть, но не дошел до п. 136
+    if tou_db::contracts::get(&state.db, id).await?.is_none() {
+        return Err(ApiError::NotFound);
+    }
 
     let account = ledger::refund_deposit(
         &state.db,

@@ -326,6 +326,7 @@ pub async fn my_applications(
     params(("id" = Uuid, Path, description = "Заявка")),
     responses(
         (status = 200, description = "Заявка отозвана", body = ApplicationDto),
+        (status = 404, description = "Своей заявки с таким id нет", body = crate::error::Problem),
         (status = 409, description = "Отзыв невозможен (статус/дедлайн, INV-037)", body = crate::error::Problem),
     )
 )]
@@ -335,13 +336,16 @@ pub async fn withdraw_application(
     Path(id): Path<Uuid>,
 ) -> Result<Json<ApplicationDto>, ApiError> {
     user.require(Action::ApplicationWithdraw)?;
+    // Сначала запись, потом правило: без этого несуществующий id отвечал
+    // отказом по правилу (409) наравне с уже отозванной заявкой
+    require_own_application(&state, &user, id).await?;
 
     let record = applications::withdraw(&state.db, user.id(), id)
         .await
         .map_err(|err| match err {
             WithdrawError::NotWithdrawable => ApiError::rule(
                 RuleViolation::ApplicationNotPending,
-                "заявка не найдена или уже не в статусе «подана» (FR-404)",
+                "заявка уже не в статусе «подана» (FR-404)",
             ),
             WithdrawError::Rejected(reason) => ApiError::RuleViolation(reason),
             WithdrawError::Db(db) => db.into(),
@@ -461,15 +465,7 @@ async fn ensure_open_own_application(
     user: &CurrentUser,
     id: Uuid,
 ) -> Result<(), ApiError> {
-    let record = applications::get(&state.db, user.id(), id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-
-    // Чужая заявка - 404, а не 403: иначе по коду ответа перебираются
-    // идентификаторы чужих заявок (NFR-07)
-    if record.participant_id != user.id() {
-        return Err(ApiError::NotFound);
-    }
+    let record = require_own_application(state, user, id).await?;
 
     if record.status != "submitted" {
         return Err(ApiError::rule(
@@ -491,6 +487,29 @@ async fn ensure_open_own_application(
     }
 
     Ok(())
+}
+
+/// Своя заявка по id - или 404.
+///
+/// Отсутствующая запись и негодный статус - разные ответы. Мутации своей
+/// заявки отвечали на несуществующий id отказом по правилу (409): клиент
+/// получал «заявка не в статусе подана» на опечатку в идентификаторе и
+/// искал нарушение правила там, где нарушать было нечего. Чужая заявка -
+/// тоже 404, а не 403: иначе по коду ответа перебираются идентификаторы
+/// чужих заявок (NFR-07).
+pub(crate) async fn require_own_application(
+    state: &AppState,
+    user: &CurrentUser,
+    id: Uuid,
+) -> Result<ApplicationRecord, ApiError> {
+    let record = applications::get(&state.db, user.id(), id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+
+    if record.participant_id != user.id() {
+        return Err(ApiError::NotFound);
+    }
+    Ok(record)
 }
 
 /// Скачивание вложения после вскрытия. До назначенного события AES-ключ не
@@ -577,6 +596,7 @@ pub async fn download_file(
     responses(
         (status = 200, description = "Заявки тендера", body = [ApplicationDto]),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
     )
 )]
 pub async fn tender_applications(
@@ -585,6 +605,7 @@ pub async fn tender_applications(
     Path(tender_id): Path<Uuid>,
 ) -> Result<Json<Vec<ApplicationDto>>, ApiError> {
     user.require(Action::ApplicationReadAll)?;
+    crate::tenders::ensure_tender_exists(&state, tender_id).await?;
     let records = applications::list_for_tender(&state.db, user.id(), tender_id).await?;
     Ok(Json(with_files(&state, records).await?))
 }
@@ -623,6 +644,7 @@ impl JournalEntryDto {
     responses(
         (status = 200, description = "Журнал (append-only, seq монотонен)", body = [JournalEntryDto]),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
     )
 )]
 pub async fn tender_journal(
@@ -631,6 +653,7 @@ pub async fn tender_journal(
     Path(tender_id): Path<Uuid>,
 ) -> Result<Json<Vec<JournalEntryDto>>, ApiError> {
     user.require(Action::JournalRead)?;
+    crate::tenders::ensure_tender_exists(&state, tender_id).await?;
     let records = applications::journal_of(&state.db, tender_id).await?;
     records
         .into_iter()

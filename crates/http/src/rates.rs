@@ -198,6 +198,12 @@ pub struct RateOptionDto {
     /// Код коэффициента (kt, kk, ... kv)
     pub coefficient: String,
     pub option_code: String,
+    /// Название опции из справочника (`refdata.rate_coefficients`): без него
+    /// селекты калькулятора показывали машинный код - «default (1.0000)»
+    /// вместо условия Прил. 4, по которому организатор и выбирает опцию
+    pub label_ru: String,
+    pub label_kk: Option<String>,
+    pub label_en: Option<String>,
     #[schema(value_type = String, example = "0.5")]
     pub value: Decimal,
 }
@@ -234,13 +240,20 @@ pub async fn options(
             ApiError::Validation("МРП на текущий год не заведен в refdata (A-010)".into())
         })?;
 
-    let table = tou_db::refdata::coefficients_today(&state.db).await?;
-    let mut options: Vec<RateOptionDto> = table
+    // Версии справочника вместо голых значений: подпись опции лежит в той
+    // же строке, что и величина, и `current` отбирает ровно то, что
+    // действует сегодня, - то же условие, что и в `coefficients_today`.
+    let mut options: Vec<RateOptionDto> = tou_db::refdata::coefficients_all(&state.db)
+        .await?
         .into_iter()
-        .map(|((coefficient, option_code), value)| RateOptionDto {
-            coefficient,
-            option_code,
-            value,
+        .filter(|version| version.current)
+        .map(|version| RateOptionDto {
+            coefficient: version.coefficient,
+            option_code: version.option_code,
+            label_ru: version.label_ru,
+            label_kk: version.label_kk,
+            label_en: version.label_en,
+            value: version.value,
         })
         .collect();
     options.sort_by(|a, b| {

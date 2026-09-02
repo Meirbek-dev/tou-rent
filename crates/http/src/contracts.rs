@@ -24,10 +24,11 @@ use uuid::Uuid;
 
 use crate::admission::format_almaty;
 use crate::announcement::format_decimal_ru;
+use crate::dto::PageCursorParams;
 use crate::error::ApiError;
 use crate::extract::CurrentUser;
 use crate::pdf;
-use crate::request::{Json, Multipart, Path};
+use crate::request::{Json, Multipart, Path, Query};
 use crate::state::AppState;
 use crate::upload;
 
@@ -112,7 +113,10 @@ fn contract_dto(record: ContractRecord) -> ContractDto {
     path = "/api/v1/tenders/{id}/contracts",
     tag = "contracts",
     params(("id" = Uuid, Path, description = "Тендер")),
-    responses((status = 200, description = "Договоры тендера", body = [ContractDto]))
+    responses(
+        (status = 200, description = "Договоры тендера", body = [ContractDto]),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
+    )
 )]
 pub async fn tender_contracts(
     user: CurrentUser,
@@ -122,19 +126,18 @@ pub async fn tender_contracts(
     // Не `TenderRead`: тендер публичен, договорный конвейер - нет.
     // Свой договор наниматель читает через `GET /contracts/my`
     user.require(Action::ContractRead)?;
+    crate::tenders::ensure_tender_exists(&state, id).await?;
 
     let records = contracts::list_for_tender(&state.db, id).await?;
     Ok(Json(records.into_iter().map(contract_dto).collect()))
 }
 
-/// Договоры кабинета нанимателя (ТЗ § 7).
-///
-/// `next_after` всегда `null`: договоров у нанимателя единицы, продолжения
-/// у выборки нет. Поле остается ради единообразия усекаемых реестров.
+/// Страница договоров кабинета нанимателя (ТЗ § 7).
 #[derive(Debug, Serialize, ToSchema)]
 pub struct MyContractPage {
     pub items: Vec<ContractDto>,
-    pub next_after: Option<String>,
+    /// Курсор продолжения для `after`; `null` - показаны все договоры
+    pub next_after: Option<Uuid>,
     /// Показана не вся выборка
     pub truncated: bool,
 }
@@ -144,17 +147,24 @@ pub struct MyContractPage {
     get,
     path = "/api/v1/contracts/my",
     tag = "contracts",
+    params(PageCursorParams),
     responses((status = 200, description = "Договоры нанимателя", body = MyContractPage))
 )]
 pub async fn my_contracts(
     user: CurrentUser,
     State(state): State<AppState>,
+    Query(params): Query<PageCursorParams>,
 ) -> Result<Json<MyContractPage>, ApiError> {
-    let page = contracts::list_for_tenant(&state.db, user.id()).await?;
+    let limit = crate::page_limit(params.limit);
+    let mut conn = state.db.acquire().await?;
+    let page = contracts::list_for_tenant(&mut conn, user.id(), params.after, limit).await?;
     let truncated = page.truncated;
+    // Курсор есть только тогда, когда за отданными строками что-то осталось:
+    // иначе клиент запрашивал бы заведомо пустую страницу
+    let next_after = truncated.then(|| page.last().map(|r| r.id)).flatten();
     Ok(Json(MyContractPage {
         items: page.into_iter().map(contract_dto).collect(),
-        next_after: None,
+        next_after,
         truncated,
     }))
 }
@@ -190,6 +200,7 @@ pub(crate) async fn ensure_contract_party(
     params(("id" = Uuid, Path, description = "Лот")),
     responses(
         (status = 201, description = "Договор составлен", body = ContractDto),
+        (status = 404, description = "Лот не найден", body = crate::error::Problem),
         (status = 409, description = "Торги не завершены либо нет победителя", body = crate::error::Problem),
     )
 )]
@@ -199,6 +210,13 @@ pub async fn draft_contract(
     Path(lot_id): Path<Uuid>,
 ) -> Result<(StatusCode, Json<ContractDto>), ApiError> {
     user.require(Action::ContractManage)?;
+    // Несуществующий лот - 404: «торги не завершены» это про состояние
+    // существующего лота, и на опечатку в id такой ответ вводит в заблуждение
+    let mut conn = state.db.acquire().await?;
+    if !tenders::lot_exists(&mut conn, lot_id).await? {
+        return Err(ApiError::NotFound);
+    }
+    drop(conn);
 
     let record = contracts::draft_from_auction(&state.db, user.id(), lot_id)
         .await

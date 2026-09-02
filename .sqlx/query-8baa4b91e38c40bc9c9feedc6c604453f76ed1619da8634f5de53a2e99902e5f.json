@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM core.auctions\n          WHERE status = 'running' AND ends_at IS NOT NULL AND ends_at < core.now()\n          ORDER BY ends_at\n          LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8baa4b91e38c40bc9c9feedc6c604453f76ed1619da8634f5de53a2e99902e5f"
+}

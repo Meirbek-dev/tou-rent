@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use tou_domain::rule::RuleRejection;
 use uuid::Uuid;
 
-use crate::{Db, MAX_ROWS, Page};
+use crate::{Db, Page};
 
 #[derive(Debug, Clone)]
 pub struct TenderRecord {
@@ -115,6 +115,34 @@ pub async fn get(db: &Db, id: Uuid) -> Result<Option<TenderRecord>, sqlx::Error>
     tender_query!(" WHERE id = $1", id).fetch_optional(db).await
 }
 
+/// Есть ли такой тендер.
+///
+/// Подресурсам тендера (`/applications`, `/protocols`, `/journal`, …) нужен
+/// один бит, а не запись: без него несуществующий родитель отвечал пустым
+/// перечнем, и клиент не отличал «тендера нет» от «у тендера пусто».
+/// Отдельный запрос, а не [`get`]: тот тянет строку со всеми join'ами.
+/// Соединением, а не пулом, - чтобы рубеж проверялся на записи, созданной
+/// в откатываемой транзакции теста.
+pub async fn exists(conn: &mut sqlx::PgConnection, id: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM core.tenders WHERE id = $1) AS "found!""#,
+        id
+    )
+    .fetch_one(conn)
+    .await
+}
+
+/// Есть ли такой лот - тем же рубежом, что и [`exists`]: составление
+/// договора по несуществующему лоту это 404, а не отказ по правилу.
+pub async fn lot_exists(conn: &mut sqlx::PgConnection, id: Uuid) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM core.lots WHERE id = $1) AS "found!""#,
+        id
+    )
+    .fetch_one(conn)
+    .await
+}
+
 /// Реестр тендеров. `public_only` - только опубликованные (для guest, п. 5–6).
 pub async fn list(
     db: &Db,
@@ -137,14 +165,17 @@ pub async fn list(
     .await
 }
 
-/// Все тендеры стенда в любом статусе, свежие сверху, под потолком строк -
-/// для правки сроков из кабинета админа (М15). Запрос тот же, что у реестра:
-/// второй выборки «все тендеры» с собственным порядком быть не должно.
-pub async fn list_all(db: &Db) -> Result<Page<TenderRecord>, sqlx::Error> {
-    let rows = list(db, None, crate::probe_limit(MAX_ROWS), false).await?;
-    let page = Page::probe(rows, MAX_ROWS);
-    crate::warn_if_truncated(page.truncated, "tenders::list_all");
-    Ok(page)
+/// Все тендеры стенда в любом статусе, свежие сверху, страницей - для
+/// правки сроков из кабинета админа (М15). Запрос тот же, что у реестра:
+/// второй выборки «все тендеры» с собственным порядком быть не должно,
+/// поэтому и курсор здесь тот же - id последнего показанного тендера.
+pub async fn list_all(
+    db: &Db,
+    after: Option<Uuid>,
+    limit: i64,
+) -> Result<Page<TenderRecord>, sqlx::Error> {
+    let rows = list(db, after, crate::probe_limit(limit), false).await?;
+    Ok(Page::probe(rows, limit))
 }
 
 pub async fn lots_of(db: &Db, tender_id: Uuid) -> Result<Vec<LotRecord>, sqlx::Error> {

@@ -124,19 +124,25 @@ pub async fn list_for_tender(db: &Db, tender_id: Uuid) -> Result<Vec<ProtocolRec
 pub async fn list_for_participant(
     db: &Db,
     participant_id: Uuid,
+    after: Option<Uuid>,
+    limit: i64,
 ) -> Result<crate::Page<ProtocolRecord>, sqlx::Error> {
     let rows = protocol_query!(
         " WHERE EXISTS (SELECT 1 FROM core.applications a
                         WHERE a.tender_id = p.tender_id AND a.participant_id = $1)
-          ORDER BY p.generated_at DESC LIMIT $2",
+            AND ($2::uuid IS NULL
+                 OR (p.generated_at, p.id)
+                    < (SELECT generated_at, id FROM core.protocols WHERE id = $2))
+          ORDER BY p.generated_at DESC, p.id DESC LIMIT $3",
         participant_id,
-        crate::probe_limit(crate::MAX_ROWS)
+        after,
+        crate::probe_limit(limit)
     )
     .fetch_all(db)
     .await?;
-    let page = crate::Page::probe(rows, crate::MAX_ROWS);
-    crate::warn_if_truncated(page.truncated, "publications::list_for_participant");
-    Ok(page)
+    // См. `contracts::list_for_tenant`: с курсором `truncated` - это
+    // «есть продолжение», а не «выборка уперлась в потолок»
+    Ok(crate::Page::probe(rows, limit))
 }
 
 /// Публикация протокола (FR-702, п. 75). Срок публичного доступа считает БД

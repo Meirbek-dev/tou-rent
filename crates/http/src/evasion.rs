@@ -157,7 +157,10 @@ pub async fn declare_evasion(
     path = "/api/v1/tenders/{id}/evasions",
     tag = "evasion",
     params(("id" = Uuid, Path, description = "Тендер")),
-    responses((status = 200, description = "Уклонения тендера", body = [EvasionDto]))
+    responses(
+        (status = 200, description = "Уклонения тендера", body = [EvasionDto]),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
+    )
 )]
 pub async fn tender_evasions(
     user: CurrentUser,
@@ -167,6 +170,7 @@ pub async fn tender_evasions(
     // Факт уклонения - репутационные сведения об участнике, а не
     // публичная часть тендера (п. 116, 120)
     user.require(Action::ContractRead)?;
+    crate::tenders::ensure_tender_exists(&state, id).await?;
 
     let records = evasion::list_for_tender(&state.db, id).await?;
     Ok(Json(records.into_iter().map(evasion_dto).collect()))

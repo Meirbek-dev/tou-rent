@@ -219,6 +219,14 @@ impl ApiError {
 /// SQLSTATE `22003` - numeric_value_out_of_range: число не помещается в
 /// колонку (`numeric(10,2)` у площади, `numeric(14,2)` у денег).
 const NUMERIC_OUT_OF_RANGE: &str = "22003";
+/// SQLSTATE `23514` - check_violation; здесь разбирается только именованный
+/// класс `*_not_blank`, прочие CHECK остаются поломкой сервера.
+const CHECK_VIOLATION: &str = "23514";
+/// SQLSTATE `23503` - foreign_key_violation; разбирается только `*_option_fkey`.
+const FOREIGN_KEY_VIOLATION: &str = "23503";
+/// SQLSTATE отказов, за которыми стоит правило, а не поломка: FK, UNIQUE,
+/// EXCLUDE, CHECK и `RAISE EXCEPTION` триггера (P0001).
+const RULE_SQLSTATES: [&str; 5] = ["23503", "23505", "23P01", "23514", "P0001"];
 
 impl From<sqlx::Error> for ApiError {
     fn from(err: sqlx::Error) -> Self {
@@ -229,13 +237,47 @@ impl From<sqlx::Error> for ApiError {
         // границами `garde` у каждого денежного поля: так закрывается весь
         // класс - любая колонка, любой маршрут, включая те, что отдают
         // `sqlx::Error` напрямую, - а не три доказанных случая.
-        if let sqlx::Error::Database(db_err) = &err
-            && db_err.code().as_deref() == Some(NUMERIC_OUT_OF_RANGE)
-        {
-            // Какое поле не влезло, PostgreSQL не называет: подробности -
-            // дежурному в телеметрию, клиенту - машинная причина (NFR-07)
-            tracing::info!(error = %db_err, "numeric value out of range");
-            return ApiError::Validation("value_out_of_range".to_owned());
+        if let sqlx::Error::Database(db_err) = &err {
+            if db_err.code().as_deref() == Some(NUMERIC_OUT_OF_RANGE) {
+                // Какое поле не влезло, PostgreSQL не называет: подробности -
+                // дежурному в телеметрию, клиенту - машинная причина (NFR-07)
+                tracing::info!(error = %db_err, "numeric value out of range");
+                return ApiError::Validation("value_out_of_range".to_owned());
+            }
+            // Тот же класс, что и переполнение: значение прислал клиент.
+            // CHECK `<колонка>_not_blank` ловит текст из одних пробелов, FK
+            // `<таблица>_<поле>_option_fkey` - код опции Прил. 4, которого
+            // нет в справочнике. Оба - отказ по данным, а не поломка сервера.
+            let constraint = db_err.constraint().unwrap_or_default();
+            if db_err.code().as_deref() == Some(CHECK_VIOLATION)
+                && constraint.ends_with("_not_blank")
+            {
+                tracing::info!(error = %db_err, "blank value rejected by check constraint");
+                return ApiError::Validation(format!("blank_value:{constraint}"));
+            }
+            if db_err.code().as_deref() == Some(FOREIGN_KEY_VIOLATION)
+                && constraint.ends_with("_option_fkey")
+            {
+                tracing::info!(error = %db_err, "unknown option code");
+                return ApiError::Validation(format!("unknown_option_code:{constraint}"));
+            }
+            // Ограничение целостности или RAISE триггера, до которых не
+            // дошел `map_rule` модуля, - все равно отказ по правилу, а не
+            // поломка: FK - «связанной записи нет», UNIQUE - «повтор»,
+            // EXCLUDE - «пересечение», CHECK и RAISE - причина по имени
+            // ограничения либо по тексту, иначе честный `other_rule`.
+            // Пока они шли в 500, организатор получал «внутреннюю ошибку»
+            // на неизвестном коде опции, а админ - на годе МРП вне 2000..2100.
+            let code = db_err.code().unwrap_or_default();
+            if RULE_SQLSTATES.contains(&code.as_ref()) {
+                let message = db_err.message();
+                let rule = RuleViolation::from_message(message)
+                    .or_else(|| RuleViolation::from_constraint(constraint))
+                    .or_else(|| RuleViolation::from_sqlstate(&code))
+                    .unwrap_or(RuleViolation::OtherRule);
+                tracing::info!(error = %db_err, rule = rule.as_str(), "database constraint rejected the request");
+                return ApiError::RuleViolation(RuleRejection::new(rule, message));
+            }
         }
         ApiError::internal(err)
     }
@@ -381,10 +423,28 @@ mod tests {
     /// Прочие отказы БД остаются поломкой сервера: 500 без подробностей.
     #[test]
     fn other_database_errors_stay_internal() {
-        for err in [sqlx::Error::RowNotFound, database_error("23514")] {
+        for err in [sqlx::Error::RowNotFound, database_error("42P01")] {
             let mapped: ApiError = err.into();
             assert_eq!(mapped.status(), StatusCode::INTERNAL_SERVER_ERROR);
         }
+    }
+
+    /// Рубеж G-022: ограничение целостности, до которого не дошел `map_rule`
+    /// модуля, - отказ по правилу, а не поломка. FK без имени правила -
+    /// «связанной записи нет», безымянный CHECK - честный `other_rule`.
+    #[tokio::test]
+    async fn constraint_violations_are_rule_violations() {
+        let missing =
+            problem_of(constraint_error(FOREIGN_KEY_VIOLATION, "lots_tender_id_fkey").into()).await;
+        assert_eq!(missing["status"], 409);
+        assert_eq!(missing["code"], "rule_violation");
+        assert_eq!(missing["rule"], "related_record_missing");
+
+        let check = problem_of(database_error(CHECK_VIOLATION).into()).await;
+        assert_eq!(check["status"], 409);
+        assert_eq!(check["rule"], "other_rule");
+        // Текст БД остается внутри (NFR-07): наружу уходит только причина
+        assert!(check.get("detail").is_none());
     }
 
     /// Рубеж AC-7: 405 - не отказ по правилу предметной области. У него нет
@@ -429,7 +489,7 @@ mod tests {
     /// только из ответа сервера и публичного конструктора не имеет, а для
     /// разбора кода хватает самого кода.
     #[derive(Debug)]
-    struct FakeDbError(&'static str);
+    struct FakeDbError(&'static str, Option<&'static str>);
 
     impl std::fmt::Display for FakeDbError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -446,6 +506,10 @@ mod tests {
 
         fn code(&self) -> Option<std::borrow::Cow<'_, str>> {
             Some(std::borrow::Cow::Borrowed(self.0))
+        }
+
+        fn constraint(&self) -> Option<&str> {
+            self.1
         }
 
         fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
@@ -466,7 +530,35 @@ mod tests {
     }
 
     fn database_error(sqlstate: &'static str) -> sqlx::Error {
-        sqlx::Error::Database(Box::new(FakeDbError(sqlstate)))
+        sqlx::Error::Database(Box::new(FakeDbError(sqlstate, None)))
+    }
+
+    /// Отказ БД с именем ограничения - у CHECK и FK оно единственный признак.
+    fn constraint_error(sqlstate: &'static str, constraint: &'static str) -> sqlx::Error {
+        sqlx::Error::Database(Box::new(FakeDbError(sqlstate, Some(constraint))))
+    }
+
+    /// Рубеж G-020: текст из одних пробелов и неизвестный код опции Прил. 4
+    /// приходят от клиента. Пока CHECK `*_not_blank` и FK `*_option_fkey`
+    /// шли в `internal`, организатор получал 500 на форме объекта.
+    #[tokio::test]
+    async fn blank_text_and_unknown_option_are_client_errors() {
+        let blank =
+            problem_of(constraint_error(CHECK_VIOLATION, "objects_name_kk_not_blank").into()).await;
+        assert_eq!(blank["status"], 422);
+        assert_eq!(blank["code"], "validation_failed");
+        assert_eq!(blank["detail"], "blank_value:objects_name_kk_not_blank");
+
+        let option = problem_of(
+            constraint_error(FOREIGN_KEY_VIOLATION, "objects_premises_type_option_fkey").into(),
+        )
+        .await;
+        assert_eq!(option["status"], 422);
+        assert_eq!(option["code"], "validation_failed");
+        assert_eq!(
+            option["detail"],
+            "unknown_option_code:objects_premises_type_option_fkey"
+        );
     }
 
     /// Тело ответа как его увидит клиент.

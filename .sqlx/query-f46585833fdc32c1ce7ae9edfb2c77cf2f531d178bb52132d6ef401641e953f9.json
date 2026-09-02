@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT core.application_package_complete(a.id) AS \"complete!\"\n           FROM core.applications a\n           JOIN core.tenders t ON t.id = a.tender_id\n           WHERE a.id = $1\n             AND t.status = 'qualification'\n             AND a.status IN ('submitted', 'fee_confirmed')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "complete!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f46585833fdc32c1ce7ae9edfb2c77cf2f531d178bb52132d6ef401641e953f9"
+}

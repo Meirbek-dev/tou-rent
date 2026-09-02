@@ -60,19 +60,48 @@ pub async fn list_mrp(
 
 #[derive(Debug, Deserialize, garde::Validate, ToSchema)]
 pub struct SetMrpRequest {
-    /// Величина МРП в тенге; ограничение «больше нуля» держит и БД
-    #[garde(skip)]
+    /// Величина МРП в тенге (> 0)
+    #[garde(custom(positive_amount))]
     #[schema(value_type = String, example = "3932")]
     pub amount: Decimal,
 }
 
+/// Год МРП: те же границы, что у CHECK `mrp_year_check` (Прил. 4).
+///
+/// Рубеж БД оставался единственным, и год за его пределами приходил клиенту
+/// ошибкой целостности - то есть 500 вместо 422, без имени поля. Проверка
+/// у типа запроса называет и поле, и допустимые границы; CHECK остается
+/// последним рубежом.
+const MRP_YEARS: std::ops::RangeInclusive<i32> = 2000..=2100;
+
+fn check_year(year: i32) -> Result<(), ApiError> {
+    if MRP_YEARS.contains(&year) {
+        return Ok(());
+    }
+    Err(ApiError::Validation(format!(
+        "год МРП ожидается в пределах {}..{}, получен {year}",
+        MRP_YEARS.start(),
+        MRP_YEARS.end()
+    )))
+}
+
+/// Величина МРП строго положительна (CHECK `mrp_amount_check`): ноль и
+/// отрицательное значение обнулили бы или вывернули расчет ставки FR-201.
+fn positive_amount(value: &Decimal, _ctx: &()) -> garde::Result {
+    if *value > Decimal::ZERO {
+        Ok(())
+    } else {
+        Err(garde::Error::new("величина МРП должна быть > 0"))
+    }
+}
+
 /// Величина МРП на год (FR-1901). У показателя одна величина на год, поэтому
-/// это правка значения, а не новая версия; год и положительность проверяет БД.
+/// это правка значения, а не новая версия.
 #[utoipa::path(
     put,
     path = "/api/v1/refdata/mrp/{year}",
     tag = "refdata",
-    params(("year" = i32, Path, description = "Год")),
+    params(("year" = i32, Path, description = "Год", minimum = 2000, maximum = 2100)),
     request_body = SetMrpRequest,
     responses(
         (status = 200, description = "Величина сохранена", body = MrpDto),
@@ -87,6 +116,9 @@ pub async fn set_mrp(
     Json(body): Json<SetMrpRequest>,
 ) -> Result<Json<MrpDto>, ApiError> {
     user.require(Action::RefdataManage)?;
+    body.validate()
+        .map_err(|report| ApiError::Validation(report.to_string()))?;
+    check_year(year)?;
 
     let record = refdata::upsert_mrp(&state.db, user.id(), year, body.amount).await?;
     Ok(Json(MrpDto {
@@ -246,3 +278,41 @@ pub async fn add_coefficient(
 #[derive(Debug, thiserror::Error)]
 #[error("только что записанная версия коэффициента не найдена")]
 struct MissingCoefficient;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// G-023: величина МРП вне рубежа БД должна отказываться проверкой типа
+    /// (422 `validation_failed`), а не ошибкой целостности (500).
+    #[test]
+    fn non_positive_mrp_amount_is_rejected_by_validation() {
+        for raw in ["0", "-1", "-0.01"] {
+            let amount: Decimal = raw.parse().expect("десятичное число");
+            let request = SetMrpRequest { amount };
+            assert!(
+                request.validate().is_err(),
+                "величина {raw} должна отказываться проверкой"
+            );
+        }
+
+        let ok = SetMrpRequest {
+            amount: Decimal::from(3932),
+        };
+        assert!(ok.validate().is_ok());
+    }
+
+    /// Границы года совпадают с CHECK `mrp_year_check`.
+    #[test]
+    fn mrp_year_bounds_match_db_check() {
+        for year in [1999, 2101, 0, -1, i32::MAX] {
+            assert!(
+                matches!(check_year(year), Err(ApiError::Validation(_))),
+                "год {year} должен отказываться проверкой"
+            );
+        }
+        for year in [2000, 2026, 2100] {
+            assert!(check_year(year).is_ok(), "год {year} допустим");
+        }
+    }
+}

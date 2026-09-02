@@ -82,7 +82,10 @@ fn amendment_dto(record: amendments::AmendmentRecord) -> AmendmentDto {
     path = "/api/v1/tenders/{id}/amendments",
     tag = "amendments",
     params(("id" = Uuid, Path, description = "Тендер")),
-    responses((status = 200, description = "Редакции документации", body = [AmendmentDto]))
+    responses(
+        (status = 200, description = "Редакции документации", body = [AmendmentDto]),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
+    )
 )]
 pub async fn tender_amendments(
     user: Option<CurrentUser>,
@@ -93,6 +96,7 @@ pub async fn tender_amendments(
     if let Some(user) = user.as_ref() {
         user.require(Action::TenderRead)?;
     }
+    crate::tenders::ensure_tender_exists(&state, id).await?;
 
     let records = amendments::list_for_tender(&state.db, id).await?;
     Ok(Json(records.into_iter().map(amendment_dto).collect()))
@@ -295,6 +299,9 @@ pub async fn decline_amendment(
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode, ApiError> {
     user.require(Action::ApplicationWithdraw)?;
+    // Несуществующая заявка - 404, а не «условия тендера не изменялись»:
+    // отказ по правилу отвечает за состояние, а не за отсутствие записи
+    crate::applications::require_own_application(&state, &user, id).await?;
 
     amendments::decline_amendment(&state.db, user.id(), id)
         .await
