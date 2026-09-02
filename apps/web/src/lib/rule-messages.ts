@@ -23,6 +23,7 @@ export type Rule = components["schemas"]["Rule"]
 const RULE_MESSAGES: Record<string, () => string> = {
   tender_status_transition: m.rule_tender_status_transition,
   tender_publication_terms: m.rule_tender_publication_terms,
+  tender_schedule_order: m.rule_tender_schedule_order,
   tender_documentation_change: m.rule_tender_documentation_change,
   tender_cancellation: m.rule_tender_cancellation,
   tender_failure_ground: m.rule_tender_failure_ground,

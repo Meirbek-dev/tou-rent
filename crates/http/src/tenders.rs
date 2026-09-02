@@ -814,7 +814,7 @@ async fn transition(
 /// Отказ слоя данных как его увидит клиент. Отдельно от [`transition`], потому
 /// что тем же перечнем отвечает и правка черновика: `deadline_before_opening`
 /// (вскрытие раньше окончания приема заявок) - отказ по правилу, а не 500.
-fn transition_error(err: TransitionError) -> ApiError {
+pub(crate) fn transition_error(err: TransitionError) -> ApiError {
     match err {
         TransitionError::NotFound => ApiError::NotFound,
         TransitionError::Rejected(reason) => ApiError::RuleViolation(reason),

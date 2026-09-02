@@ -9,7 +9,7 @@ use time::OffsetDateTime;
 use tou_domain::rule::RuleRejection;
 use uuid::Uuid;
 
-use crate::Db;
+use crate::{Db, MAX_ROWS, Page};
 
 #[derive(Debug, Clone)]
 pub struct TenderRecord {
@@ -135,6 +135,16 @@ pub async fn list(
     )
     .fetch_all(db)
     .await
+}
+
+/// Все тендеры стенда в любом статусе, свежие сверху, под потолком строк -
+/// для правки сроков из кабинета админа (М15). Запрос тот же, что у реестра:
+/// второй выборки «все тендеры» с собственным порядком быть не должно.
+pub async fn list_all(db: &Db) -> Result<Page<TenderRecord>, sqlx::Error> {
+    let rows = list(db, None, crate::probe_limit(MAX_ROWS), false).await?;
+    let page = Page::probe(rows, MAX_ROWS);
+    crate::warn_if_truncated(page.truncated, "tenders::list_all");
+    Ok(page)
 }
 
 pub async fn lots_of(db: &Db, tender_id: Uuid) -> Result<Vec<LotRecord>, sqlx::Error> {
@@ -357,6 +367,57 @@ pub async fn update_draft_on(
         f.opening_at,
         f.trading_at,
         f.zoom_url
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(map_rule)
+}
+
+/// Сроки тендера, выставляемые администратором в обход процедуры (М15):
+/// правка записи под вышедшее объявление, а не редакция документации
+/// (FR-304), - поэтому здесь есть и дата публикации, которую редакция не
+/// трогает. Порядок отметок проверяет домен (`tender::Schedule`) до вызова;
+/// `deadline_before_opening` и `opened_not_before_meeting` таблица сверит
+/// сама.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ScheduleFields {
+    pub announced_at: Option<OffsetDateTime>,
+    pub submission_deadline: Option<OffsetDateTime>,
+    pub opening_at: Option<OffsetDateTime>,
+    pub trading_at: Option<OffsetDateTime>,
+}
+
+/// Правка сроков тендера в любом статусе (М15). В отличие от
+/// [`update_draft`] статус условием не стоит: это исправление записи, а не
+/// ход процедуры. Участники не извещаются, назначенные торги и сроки
+/// обязательств не переносятся - вызывающий обязан об этом знать. Событие
+/// в аудит пишет триггер таблицы под актором (INV-AUDIT).
+/// Возвращает None, если тендера нет.
+pub async fn set_schedule(
+    db: &Db,
+    actor: Uuid,
+    id: Uuid,
+    f: ScheduleFields,
+) -> Result<Option<TenderRecord>, TransitionError> {
+    crate::with_actor(db, actor, async |tx| set_schedule_on(tx, id, f).await).await
+}
+
+/// То же в транзакции вызывающего (арх. v3 § 6): тест откатывает свои
+/// изменения, а не оставляет их на стенде.
+pub async fn set_schedule_on(
+    tx: &mut sqlx::PgConnection,
+    id: Uuid,
+    f: ScheduleFields,
+) -> Result<Option<TenderRecord>, TransitionError> {
+    tender_query_returning!(
+        "UPDATE core.tenders
+         SET announced_at = $2, submission_deadline = $3, opening_at = $4, trading_at = $5
+         WHERE id = $1",
+        id,
+        f.announced_at,
+        f.submission_deadline,
+        f.opening_at,
+        f.trading_at
     )
     .fetch_optional(&mut *tx)
     .await

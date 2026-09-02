@@ -7,6 +7,7 @@
 pub mod acts;
 pub mod admin;
 pub mod admin_data;
+pub mod admin_schedule;
 pub mod admission;
 pub mod amendments;
 pub mod announcement;
@@ -123,6 +124,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(admin_data::purge_data))
         .routes(routes!(admin_data::purge_record))
         .routes(routes!(admin_data::deactivate_demo_accounts))
+        .routes(routes!(admin_schedule::list_schedules))
+        .routes(routes!(admin_schedule::set_schedule))
         .routes(routes!(site_announcements::published))
         .routes(routes!(
             site_announcements::current,
@@ -410,10 +413,11 @@ mod tests {
     fn schema_type_names_are_unique_across_modules() {
         use std::collections::BTreeMap;
 
-        let sources: [(&str, &str); 46] = [
+        let sources: [(&str, &str); 47] = [
             ("acts", include_str!("acts.rs")),
             ("admin", include_str!("admin.rs")),
             ("admin_data", include_str!("admin_data.rs")),
+            ("admin_schedule", include_str!("admin_schedule.rs")),
             ("admission", include_str!("admission.rs")),
             ("amendments", include_str!("amendments.rs")),
             ("announcement", include_str!("announcement.rs")),

@@ -461,6 +461,120 @@
         }
       }
     },
+    "/api/v1/admin/tenders/schedule": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Все тендеры стенда со сроками, свежие сверху, - что можно поправить.",
+        "operationId": "list_schedules",
+        "responses": {
+          "200": {
+            "description": "Тендеры со сроками",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTenderSchedulePageDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/tenders/{id}/schedule": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Правка сроков тендера в обход процедуры: все четыре отметки, включая дату\nпубликации, в любом статусе. Порядок отметок и обязательность первых трех\nу опубликованного тендера проверяет домен (FR-303); участники об изменении\nне узнают - это исправление записи, а не редакция документации (FR-304).",
+        "operationId": "set_schedule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Тендер",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminTenderScheduleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Сроки изменены",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminTenderScheduleDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Тендер не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Сроки не в порядке процедуры (FR-303)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Правка данных выключена (ALLOW_DATA_PURGE)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
@@ -9033,6 +9147,124 @@
           }
         }
       },
+      "AdminTenderScheduleDto": {
+        "type": "object",
+        "description": "Тендер со сроками глазами админа: заголовок, статус и все отметки,\nвключая факт вскрытия, который правке не подлежит.",
+        "required": [
+          "id",
+          "title",
+          "title_kk",
+          "status"
+        ],
+        "properties": {
+          "announced_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Публикация объявления (п. 5–6)"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "opened_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Факт вскрытия секретарем (FR-403) - правке не подлежит"
+          },
+          "opening_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Назначенное вскрытие конвертов (п. 50)"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TenderStatusDto"
+          },
+          "submission_deadline": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Окончание приема заявок (п. 36–39)"
+          },
+          "title": {
+            "type": "string"
+          },
+          "title_kk": {
+            "type": "string"
+          },
+          "trading_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Торги (п. 59, 62)"
+          }
+        }
+      },
+      "AdminTenderSchedulePageDto": {
+        "type": "object",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminTenderScheduleDto"
+            }
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показаны не все тендеры: перечень обрезан потолком строк"
+          }
+        }
+      },
+      "AdminTenderScheduleRequest": {
+        "type": "object",
+        "description": "Новые сроки целиком. Поле без значения - «отметка не назначена», а не\n«оставить как есть»: кабинет подставляет текущие значения, поэтому\nстереть отметку можно только нарочно, а не забыв поле.",
+        "properties": {
+          "announced_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "opening_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "submission_deadline": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "trading_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "AdvanceRequest": {
         "type": "object",
         "required": [
@@ -13464,6 +13696,7 @@
         "enum": [
           "tender_status_transition",
           "tender_publication_terms",
+          "tender_schedule_order",
           "tender_documentation_change",
           "tender_cancellation",
           "tender_failure_ground",

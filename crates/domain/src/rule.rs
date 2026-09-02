@@ -30,6 +30,10 @@ pub enum RuleViolation {
     /// FR-303: тендер публикуется с лотами и сроками, вскрытие - не раньше
     /// чем через 10 календарных дней
     TenderPublicationTerms,
+    /// FR-303: сроки тендера идут в порядке процедуры - публикация, прием
+    /// заявок, вскрытие, торги (п. 5–6, 36, 50, 59); у опубликованного
+    /// тендера первые три обязательны
+    TenderScheduleOrder,
     /// FR-304: документация и сроки приема заявок изменяются не всегда (п. 27)
     TenderDocumentationChange,
     /// FR-305: тендер или лот отменяется до заключения договора (п. 78)
@@ -156,6 +160,7 @@ impl RuleViolation {
     pub const ALL: &'static [RuleViolation] = &[
         RuleViolation::TenderStatusTransition,
         RuleViolation::TenderPublicationTerms,
+        RuleViolation::TenderScheduleOrder,
         RuleViolation::TenderDocumentationChange,
         RuleViolation::TenderCancellation,
         RuleViolation::TenderFailureGround,
@@ -220,6 +225,7 @@ impl RuleViolation {
         match self {
             RuleViolation::TenderStatusTransition => "tender_status_transition",
             RuleViolation::TenderPublicationTerms => "tender_publication_terms",
+            RuleViolation::TenderScheduleOrder => "tender_schedule_order",
             RuleViolation::TenderDocumentationChange => "tender_documentation_change",
             RuleViolation::TenderCancellation => "tender_cancellation",
             RuleViolation::TenderFailureGround => "tender_failure_ground",

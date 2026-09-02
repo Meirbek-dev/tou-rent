@@ -182,6 +182,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/tenders/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Все тендеры стенда со сроками, свежие сверху, - что можно поправить. */
+        get: operations["list_schedules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/tenders/{id}/schedule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Правка сроков тендера в обход процедуры: все четыре отметки, включая дату
+         *     публикации, в любом статусе. Порядок отметок и обязательность первых трех
+         *     у опубликованного тендера проверяет домен (FR-303); участники об изменении
+         *     не узнают - это исправление записи, а не редакция документации (FR-304).
+         */
+        put: operations["set_schedule"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -3216,6 +3255,62 @@ export interface components {
             /** @description Перечень обрезан потолком строк */
             truncated: boolean;
         };
+        /**
+         * @description Тендер со сроками глазами админа: заголовок, статус и все отметки,
+         *     включая факт вскрытия, который правке не подлежит.
+         */
+        AdminTenderScheduleDto: {
+            /**
+             * Format: date-time
+             * @description Публикация объявления (п. 5–6)
+             */
+            announced_at?: string | null;
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: date-time
+             * @description Факт вскрытия секретарем (FR-403) - правке не подлежит
+             */
+            opened_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Назначенное вскрытие конвертов (п. 50)
+             */
+            opening_at?: string | null;
+            status: components["schemas"]["TenderStatusDto"];
+            /**
+             * Format: date-time
+             * @description Окончание приема заявок (п. 36–39)
+             */
+            submission_deadline?: string | null;
+            title: string;
+            title_kk: string;
+            /**
+             * Format: date-time
+             * @description Торги (п. 59, 62)
+             */
+            trading_at?: string | null;
+        };
+        AdminTenderSchedulePageDto: {
+            items: components["schemas"]["AdminTenderScheduleDto"][];
+            /** @description Показаны не все тендеры: перечень обрезан потолком строк */
+            truncated: boolean;
+        };
+        /**
+         * @description Новые сроки целиком. Поле без значения - «отметка не назначена», а не
+         *     «оставить как есть»: кабинет подставляет текущие значения, поэтому
+         *     стереть отметку можно только нарочно, а не забыв поле.
+         */
+        AdminTenderScheduleRequest: {
+            /** Format: date-time */
+            announced_at?: string | null;
+            /** Format: date-time */
+            opening_at?: string | null;
+            /** Format: date-time */
+            submission_deadline?: string | null;
+            /** Format: date-time */
+            trading_at?: string | null;
+        };
         AdvanceRequest: {
             /** @description Шаг конвейера: `handed_to_tenant`, `tenant_signed`, … (п. 110–115) */
             stage: string;
@@ -4863,7 +4958,7 @@ export interface components {
          * @description Причина отказа по правилу предметной области (закрытый перечень)
          * @enum {string}
          */
-        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
+        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_schedule_order" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
         SaveSiteAnnouncementRequest: {
             body: string;
             body_kk: string;
@@ -5576,6 +5671,98 @@ export interface operations {
                 };
             };
             /** @description Некорректный заголовок или текст */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_schedules: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Тендеры со сроками */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTenderSchedulePageDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    set_schedule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Тендер */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminTenderScheduleRequest"];
+            };
+        };
+        responses: {
+            /** @description Сроки изменены */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminTenderScheduleDto"];
+                };
+            };
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Тендер не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Сроки не в порядке процедуры (FR-303) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Правка данных выключена (ALLOW_DATA_PURGE) */
             422: {
                 headers: {
                     [name: string]: unknown;
