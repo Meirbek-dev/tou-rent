@@ -3404,7 +3404,7 @@ export interface components {
          */
         ApplicantKindDto: "individual" | "legal_entity";
         /** @enum {string} */
-        ApplicationDocumentKindDto: "application_form" | "registration_certificate" | "tax_clearance" | "guarantee_payment" | "qualification_documents" | "legacy";
+        ApplicationDocumentKindDto: "application_form" | "registration_certificate" | "tax_clearance" | "guarantee_payment" | "qualification_documents" | "price_proposal_form" | "qualification_form" | "legacy";
         ApplicationDto: {
             /** @description Сведения Прил. 2 (персональные данные - NFR-07: в логи не попадают) */
             applicant_details: Record<string, never>;
@@ -3414,7 +3414,7 @@ export interface components {
             id: string;
             /** Format: uuid */
             lot_id: string;
-            /** @description Все пять обязательных PDF загружены в AES-256-конвертах. */
+            /** @description Все семь обязательных PDF загружены в AES-256-конвертах. */
             package_complete: boolean;
             /** Format: uuid */
             participant_id: string;

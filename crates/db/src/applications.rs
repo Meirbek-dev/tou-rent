@@ -28,7 +28,7 @@ pub struct ApplicationRecord {
     pub withdrawn_at: Option<OffsetDateTime>,
     /// Код основания отклонения из закрытого перечня (FR-502, INV-052)
     pub rejection_reason: Option<String>,
-    /// Пять обязательных типов PDF приложены и сохранены зашифрованными.
+    /// Семь обязательных типов PDF приложены и сохранены зашифрованными.
     pub package_complete: bool,
     /// Ценовое предложение (Прил. 9). None - строку скрыла RLS (INV-040):
     /// до вскрытия цену видит только сам участник.

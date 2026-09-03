@@ -773,6 +773,57 @@ async fn submitted_application(
     .await
 }
 
+/// Обязательный пакет считается полным только после загрузки всех семи
+/// самостоятельных PDF, включая формы Приложений 9 и 11.
+#[tokio::test]
+async fn application_package_requires_all_seven_document_kinds() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, "1 day").await.expect("fixture");
+    let application_id = submitted_application(&mut tx, &f)
+        .await
+        .expect("application");
+    let document_kinds = [
+        "application_form",
+        "registration_certificate",
+        "tax_clearance",
+        "guarantee_payment",
+        "qualification_documents",
+        "price_proposal_form",
+        "qualification_form",
+    ];
+
+    for (index, document_kind) in document_kinds.iter().enumerate() {
+        sqlx::query(
+            "INSERT INTO core.application_files
+               (application_id, file_key, filename, content_type, size_bytes,
+                document_kind, encryption_version)
+             VALUES ($1, $2, $3, 'application/pdf', 128,
+                     $4::core.application_document_kind, 1)",
+        )
+        .bind(application_id)
+        .bind(format!("tests/{application_id}/{document_kind}.pdf"))
+        .bind(format!("{document_kind}.pdf"))
+        .bind(document_kind)
+        .execute(&mut *tx)
+        .await
+        .expect("application file");
+
+        let complete =
+            sqlx::query_scalar::<_, bool>("SELECT core.application_package_complete($1)")
+                .bind(application_id)
+                .fetch_one(&mut *tx)
+                .await
+                .expect("package completeness");
+        assert_eq!(
+            complete,
+            index == document_kinds.len() - 1,
+            "package completeness after {} document kinds",
+            index + 1
+        );
+    }
+}
+
 /// Отзыв тем же составом действий, что и слой данных: смена статуса
 /// и запись журнала одной транзакцией (`tou_db::applications::withdraw`).
 async fn withdraw(

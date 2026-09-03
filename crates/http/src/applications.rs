@@ -68,6 +68,8 @@ pub enum ApplicationDocumentKindDto {
     TaxClearance,
     GuaranteePayment,
     QualificationDocuments,
+    PriceProposalForm,
+    QualificationForm,
     Legacy,
 }
 
@@ -79,6 +81,8 @@ impl ApplicationDocumentKindDto {
             Self::TaxClearance => "tax_clearance",
             Self::GuaranteePayment => "guarantee_payment",
             Self::QualificationDocuments => "qualification_documents",
+            Self::PriceProposalForm => "price_proposal_form",
+            Self::QualificationForm => "qualification_form",
             Self::Legacy => "legacy",
         }
     }
@@ -90,6 +94,8 @@ impl ApplicationDocumentKindDto {
             "tax_clearance" => Ok(Self::TaxClearance),
             "guarantee_payment" => Ok(Self::GuaranteePayment),
             "qualification_documents" => Ok(Self::QualificationDocuments),
+            "price_proposal_form" => Ok(Self::PriceProposalForm),
+            "qualification_form" => Ok(Self::QualificationForm),
             "legacy" => Ok(Self::Legacy),
             other => Err(ApiError::internal(std::io::Error::other(format!(
                 "unknown application_document_kind: {other}"
@@ -139,7 +145,7 @@ pub struct ApplicationDto {
     #[schema(value_type = Option<String>, example = "36000.00")]
     pub price_amount: Option<Decimal>,
     pub files: Vec<ApplicationFileDto>,
-    /// Все пять обязательных PDF загружены в AES-256-конвертах.
+    /// Все семь обязательных PDF загружены в AES-256-конвертах.
     pub package_complete: bool,
 }
 

@@ -9499,6 +9499,8 @@
           "tax_clearance",
           "guarantee_payment",
           "qualification_documents",
+          "price_proposal_form",
+          "qualification_form",
           "legacy"
         ]
       },
@@ -9540,7 +9542,7 @@
           },
           "package_complete": {
             "type": "boolean",
-            "description": "Все пять обязательных PDF загружены в AES-256-конвертах."
+            "description": "Все семь обязательных PDF загружены в AES-256-конвертах."
           },
           "participant_id": {
             "type": "string",

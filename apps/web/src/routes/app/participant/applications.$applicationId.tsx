@@ -1,5 +1,6 @@
 import { useRef, useState } from "react"
 import { Link, createFileRoute, notFound } from "@tanstack/react-router"
+import { DownloadIcon, FileTextIcon } from "lucide-react"
 import {
   useMutation,
   useQuery,
@@ -14,6 +15,7 @@ import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { QueryBoundary } from "@/components/query-boundary"
 import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -41,6 +43,8 @@ type ApplicationDocumentKind =
   | "tax_clearance"
   | "guarantee_payment"
   | "qualification_documents"
+  | "price_proposal_form"
+  | "qualification_form"
 
 const DOCUMENT_KINDS: readonly ApplicationDocumentKind[] = [
   "application_form",
@@ -48,6 +52,8 @@ const DOCUMENT_KINDS: readonly ApplicationDocumentKind[] = [
   "tax_clearance",
   "guarantee_payment",
   "qualification_documents",
+  "price_proposal_form",
+  "qualification_form",
 ]
 
 function documentKindLabel(kind: string): string {
@@ -62,6 +68,10 @@ function documentKindLabel(kind: string): string {
       return m.application_document_guarantee_payment()
     case "qualification_documents":
       return m.application_document_qualification_documents()
+    case "price_proposal_form":
+      return m.application_document_price_proposal_form()
+    case "qualification_form":
+      return m.application_document_qualification_form()
     default:
       return m.application_document_legacy()
   }
@@ -262,6 +272,7 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
         title={m.application_files_title()}
         contentClassName="flex flex-col gap-4"
       >
+        <RequiredApplicationForms />
         <p className="text-sm text-muted-foreground">
           {application.package_complete
             ? m.application_package_complete()
@@ -367,6 +378,56 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
         )}
       </Panel>
     </div>
+  )
+}
+
+const REQUIRED_FORM_TEMPLATES = [
+  {
+    href: "/templates/application-appendix-2.docx",
+    label: () => m.application_document_application_form(),
+    description: () => m.application_appendix_2_description(),
+  },
+  {
+    href: "/templates/price-proposal-appendix-9.docx",
+    label: () => m.application_document_price_proposal_form(),
+    description: () => m.application_appendix_9_description(),
+  },
+  {
+    href: "/templates/qualification-appendix-11.docx",
+    label: () => m.application_document_qualification_form(),
+    description: () => m.application_appendix_11_description(),
+  },
+] as const
+
+function RequiredApplicationForms() {
+  return (
+    <Alert className="px-4 py-4">
+      <FileTextIcon />
+      <AlertTitle>{m.application_required_forms_title()}</AlertTitle>
+      <AlertDescription className="mt-2 flex flex-col gap-4 text-pretty">
+        {REQUIRED_FORM_TEMPLATES.map((template) => (
+          <div key={template.href} className="flex flex-col gap-2">
+            <p>
+              <span className="font-medium text-foreground">
+                {template.label()}.
+              </span>{" "}
+              {template.description()}
+            </p>
+            <a
+              href={template.href}
+              download
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "w-fit no-underline"
+              )}
+            >
+              <DownloadIcon data-icon="inline-start" />
+              {m.application_template_download()}
+            </a>
+          </div>
+        ))}
+      </AlertDescription>
+    </Alert>
   )
 }
 
