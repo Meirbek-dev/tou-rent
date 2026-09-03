@@ -871,6 +871,36 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/resend-confirmation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Новый код подтверждения на тот же адрес (FR-1501).
+         * @description Без этого маршрута неподтвержденная регистрация была тупиком: код
+         *     действует пятнадцать минут, после пяти неверных попыток гасится совсем,
+         *     а взять новый было негде - повторная регистрация упиралась в занятый
+         *     email, вход отвечал отказом. Здесь тот же путь доставки, что и у
+         *     регистрации ([`crate::verification`]), и та же проверка кода
+         *     в [`confirm_registration`] - она не меняется.
+         *
+         *     Ответ всегда 204, в том числе на неизвестный и на уже подтвержденный
+         *     адрес: иначе маршрут, открытый до входа, перечисляет учетные записи
+         *     (NFR-07). Частота ограничена как у входа - иначе им рассылают письма
+         *     на чужой адрес.
+         */
+        post: operations["resend_confirmation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/commissions/active": {
         parameters: {
             query?: never;
@@ -995,7 +1025,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Льгота договора с расписанием платы (FR-1205, п. 95–96). */
+        /**
+         * Льгота договора с расписанием платы (FR-1205, п. 95–96).
+         * @description Льготы у договора может не быть вовсе - большинство договоров общего
+         *     порядка идет без нее (круг 4 гаунтлета, G-067). «Не применялась»
+         *     отвечало 404, и колонка «Льготная схема» в кабинете организатора
+         *     оставалась молча пустой с ошибкой в консоли на каждый договор. Теперь
+         *     ненайденным остается сам договор.
+         *
+         *     Право читать льготу закрыто перечнем `Compound::BENEFIT_READ`
+         *     (`ContractManage` | `BoardDecide`) - это организатор и Правление;
+         *     секретарь, видящий договор, льготу не читает, и 403 у него остается.
+         */
         get: operations["contract_benefit"];
         put?: never;
         /**
@@ -1041,6 +1082,14 @@ export interface paths {
         /**
          * Депозитный счет договора (FR-1003): наниматель видит свой, финблок -
          *     любой, ведущие процесс - в карточке договора.
+         * @description Депозит вносится не сразу после заключения договора, и до взноса счета
+         *     нет вовсе (круг 4 гаунтлета, G-067): «еще не внесен» отвечало 404, и
+         *     список договоров нанимателя писал по ошибке на каждый договор. Теперь
+         *     ненайденным остается сам договор, а невнесенный депозит - `null`.
+         *
+         *     Право читать проверяется по договору, а не по счету: у отсутствующего
+         *     счета владельца нет, и проверять по нему было бы нечего. Наниматель
+         *     договора - тот же, кто владеет его депозитным счетом.
          */
         get: operations["contract_deposit"];
         put?: never;
@@ -1194,6 +1243,30 @@ export interface paths {
         };
         /** Закрытый перечень оснований уклонения (п. 116). */
         get: operations["evasion_grounds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/finance/pending-fees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Очередь заявок, ждущих подтверждения взноса (FR-405, п. 23).
+         * @description Рабочий список департамента финансов: пришла выписка банка - здесь
+         *     видно, по какой заявке ждут денег, сколько положено взносом лота
+         *     (FR-206) и когда заявка подана. Право то же, что у самого подтверждения
+         *     ([`Action::FeeConfirm`]): очередь показывает ровно те заявки, по которым
+         *     это право дает нажать кнопку.
+         */
+        get: operations["finance_pending_fees"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2027,7 +2100,18 @@ export interface paths {
          */
         put: operations["set_mrp"];
         post?: never;
-        delete?: never;
+        /**
+         * Удаление заведенного по ошибке года МРП (FR-1901, Прил. 4).
+         * @description Круг 1 гаунтлета (G-141). МРП правится значением, а не версией, поэтому
+         *     год, заведенный с опечаткой, оставался в справочнике навсегда: удаления
+         *     не было ни в контракте, ни в правах роли приложения.
+         *
+         *     Удаляется только год, на котором ничего не стоит: величина попадает в
+         *     замороженный снимок расчета лота и инвестиционного договора (FR-202), а
+         *     по текущему году считаются новые ставки. Оба случая стережет триггер БД
+         *     `core.check_mrp_year_in_use` и отказывает причиной `mrp_year_in_use`.
+         */
+        delete: operations["delete_mrp"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2494,7 +2578,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Реквизиты протокола допуска (без содержимого) - состояние для UI. */
+        /**
+         * Реквизиты протокола допуска (без содержимого) - состояние для UI.
+         * @description Несформированный протокол - состояние процедуры, а не ошибка адреса
+         *     (G-067): вкладка спрашивает его на каждой загрузке и до заседания
+         *     комиссии получала 404. Ненайденным остается сам тендер.
+         */
         get: operations["admission_protocol_meta"];
         put?: never;
         /**
@@ -2829,7 +2918,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Заседание допуска: состав комиссии, явка, кворум, декларации и отводы. */
+        /**
+         * Заседание допуска: состав комиссии, явка, кворум, декларации и отводы.
+         * @description Заседания может еще не быть - это состояние процедуры, а не ошибка
+         *     адреса (круг 4 гаунтлета, G-067). Раньше «еще не назначено» отвечало
+         *     404, и каждая загрузка карточки тендера писала ошибку в консоль
+         *     кабинета. Теперь ненайденным остается только сам тендер, а
+         *     ненаступившее заседание - `null` в теле ответа.
+         */
         get: operations["qualification_meeting"];
         put?: never;
         post?: never;
@@ -3429,6 +3525,13 @@ export interface components {
             id: string;
             /** Format: uuid */
             lot_id: string;
+            /**
+             * Format: int32
+             * @description Порядковый номер лота в тендере (Прил. 12)
+             */
+            lot_seq: number;
+            /** @description Наименование объекта лота (ru) */
+            object_name: string;
             /** @description Все пять обязательных PDF загружены в AES-256-конвертах. */
             package_complete: boolean;
             /** Format: uuid */
@@ -3448,6 +3551,12 @@ export interface components {
             submitted_at: string;
             /** Format: uuid */
             tender_id: string;
+            /**
+             * @description Заголовок тендера (ru) - чтобы список заявок называл предмет,
+             *     а не идентификатор
+             */
+            tender_title: string;
+            tender_title_kk: string;
             /** Format: date-time */
             withdrawn_at?: string | null;
         };
@@ -3986,7 +4095,7 @@ export interface components {
          * @description Машинные коды ошибок контракта (enum без catch-all).
          * @enum {string}
          */
-        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_taken" | "id_number_taken" | "verification_failed" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "idempotency_in_flight" | "idempotency_key_reuse" | "method_not_allowed" | "timeout" | "internal";
+        ErrorCode: "unauthorized" | "forbidden" | "invalid_credentials" | "email_not_confirmed" | "email_taken" | "id_number_taken" | "verification_failed" | "validation_failed" | "csrf_rejected" | "not_found" | "rule_violation" | "provider_unavailable" | "too_many_requests" | "idempotency_in_flight" | "idempotency_key_reuse" | "method_not_allowed" | "timeout" | "internal";
         EvaderDto: {
             /**
              * Format: int32
@@ -4075,6 +4184,42 @@ export interface components {
             opened: boolean;
             /** @description Сколько несостоявшихся уже было в цепочке повторов */
             previous_failures: number;
+        };
+        /** @description Заявка, ждущая подтверждения гарантийного взноса (FR-405, п. 23). */
+        FinancePendingFeeDto: {
+            /** @description Имя заявителя из формы Прил. 2 - оно же стоит в выписке банка */
+            applicant_name: string;
+            /**
+             * Format: uuid
+             * @description Заявка - по ней и подтверждается поступление
+             */
+            application_id: string;
+            /**
+             * @description Размер взноса, заданный лотом (FR-206): с ним сверяется поступление
+             * @example 36000.00
+             */
+            guarantee_fee: string;
+            /** Format: uuid */
+            lot_id: string;
+            /** Format: int32 */
+            lot_seq: number;
+            /** Format: date-time */
+            submitted_at: string;
+            /** Format: uuid */
+            tender_id: string;
+            tender_title: string;
+        };
+        /** @description Страница очереди на подтверждение взносов (ТЗ § 7): старое сверху. */
+        FinancePendingFeePage: {
+            items: components["schemas"]["FinancePendingFeeDto"][];
+            /**
+             * Format: uuid
+             * @description Курсор продолжения для `after` - `application_id` последней строки;
+             *     `null` - очередь показана до конца
+             */
+            next_after?: string | null;
+            /** @description Показана не вся выборка */
+            truncated: boolean;
         };
         FinishRequest: {
             /** @description Досрочное завершение при общем согласии (п. 67) */
@@ -4297,6 +4442,13 @@ export interface components {
             /** @description `dormitory` - под общежитие, `other` - иное назначение (п. 104) */
             designation: string;
             designation_label: string;
+            designation_label_en?: string | null;
+            /**
+             * @description Та же подпись на казахском и английском (NFR-01); `null` - перевода
+             *     в справочнике нет, и кабинет откатывается на `designation_label`.
+             *     Пока их не отдавали, портал показывал русскую подпись во всех локалях
+             */
+            designation_label_kk?: string | null;
             /** @example 100000000.00 */
             min_investment?: string | null;
             name: string;
@@ -4352,11 +4504,28 @@ export interface components {
             lot_seq?: number | null;
             owner_name: string;
             /**
+             * @description Депозит можно вернуть прямо сейчас: объект возвращен по акту и на
+             *     счете есть остаток (FR-1003, п. 136).
+             *
+             *     Круг 1 гаунтлета (G-128): кабинет предлагал возврат кнопкой всегда,
+             *     а условие п. 136 узнавалось только из отказа после нажатия. Признак
+             *     считает сервер - правило одно, и второй его копии в кабинете быть
+             *     не должно
+             */
+            refundable: boolean;
+            /**
              * @description Сколько должно быть на счете: у депозита - месячная плата договора
              *     (FR-1003, п. 132); у счета взноса размер задает лот (FR-206)
              * @example 60500.00
              */
             required_amount?: string | null;
+            /**
+             * Format: date
+             * @description Дата акта возврата объекта по договору счета (Прил. 8): до него
+             *     депозит не возвращается (п. 136). `null` - объект не возвращен либо
+             *     счет не депозитный
+             */
+            return_act_at?: string | null;
             /** Format: uuid */
             tender_id?: string | null;
             tender_title?: string | null;
@@ -4521,7 +4690,10 @@ export interface components {
             label_kk?: string | null;
             label_ru: string;
             option_code: string;
-            /** @example 1.2000 */
+            /**
+             * @description Величина множителя (> 0)
+             * @example 1.2000
+             */
             value: string;
         };
         NotificationDto: {
@@ -4616,6 +4788,13 @@ export interface components {
             action: string;
             /** @description Роль-исполнитель (snake_case, enum `Role`) */
             assignee_role: string;
+            /**
+             * Format: uuid
+             * @description Договор, к которому привязан срок (возврат взноса, регистрация,
+             *     акт приема-передачи). У сроков договора тендера нет, и без этого
+             *     поля дашборд не мог сослаться на предмет просрочки
+             */
+            contract_id?: string | null;
             /** Format: date-time */
             due_at: string;
             /** Format: uuid */
@@ -4663,10 +4842,22 @@ export interface components {
             /** @description `decision` | `rate` | `investment_act` */
             kind: string;
             kind_title_ru: string;
+            /**
+             * @description Наименование объекта материала; `null` - объекта у заявки нет
+             *
+             *     Круг 1 гаунтлета (G-134): у обоснований ставки заголовок один на
+             *     всех - «Обоснование ставки договора особого порядка», и очередь из
+             *     нескольких строк не давала различить, какой договор публикуется
+             */
+            object_name?: string | null;
             /** Format: date-time */
             occurred_at: string;
+            /** @description Заявитель (результат рассмотрения) либо наниматель (ставка, акт) */
+            party_name?: string | null;
             /** @description Материал готов: печатная форма сформирована либо расчет заморожен */
             ready: boolean;
+            /** @description Регистрационный номер договора, если он присвоен (п. 126) */
+            reference?: string | null;
             rule_ref: string;
             /**
              * Format: uuid
@@ -4749,6 +4940,14 @@ export interface components {
             /** @description Пункт Правил, по которому материал публикуется */
             rule_ref: string;
             title: string;
+            title_en?: string | null;
+            /**
+             * @description Тот же заголовок на казахском и английском (NFR-01); `null` -
+             *     перевода нет, и портал показывает `title`. У материалов
+             *     «результат рассмотрения» он собирается из подписи категории
+             *     справочника в момент публикации, у остальных видов пока пуст
+             */
+            title_kk?: string | null;
             /**
              * Format: date-time
              * @description Момент автоматического снятия: публикация + 6 месяцев (INV-076)
@@ -5028,11 +5227,14 @@ export interface components {
          * @enum {string}
          */
         ReportRegistryDto: "decisions" | "contracts" | "receipts";
+        ResendConfirmationRequest: {
+            email: string;
+        };
         /**
          * @description Причина отказа по правилу предметной области (закрытый перечень)
          * @enum {string}
          */
-        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_schedule_order" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "application_package_incomplete" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
+        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_schedule_order" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "application_package_incomplete" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule" | "tender_amendment_not_extended" | "tender_amendment_extension_too_short" | "tender_amendment_intake_closed" | "vote_already_cast" | "coefficient_version_exists" | "deposit_before_return_act" | "mrp_year_in_use";
         SaveSiteAnnouncementRequest: {
             body: string;
             body_kk: string;
@@ -5115,7 +5317,14 @@ export interface components {
         SpecialDecideRequest: {
             /** @description Решение из закрытого перечня п. 90 */
             decision: string;
-            /** @description Обоснование решения - публикуется (п. 97) */
+            /**
+             * @description Обоснование решения - публикуется (п. 97)
+             *
+             *     Круг 1 гаунтлета (G-131): текст из одних пробелов проходил
+             *     `length(min = 1)`, а после `trim()` упирался в CHECK
+             *     `special_decision_rationale_not_empty` - Правление получало отказ
+             *     `other_rule` вместо названного поля
+             */
             rationale: string;
         };
         /** @description Решение Правления по заявке особого порядка (FR-1202, п. 90). */
@@ -5148,6 +5357,14 @@ export interface components {
             applicant_kind: components["schemas"]["ApplicantKindDto"];
             category: string;
             category_label: string;
+            category_label_en?: string | null;
+            /**
+             * @description Та же подпись категории на казахском и английском из
+             *     `refdata.special_categories` (NFR-01); `null` - перевода нет,
+             *     и кабинет откатывается на `category_label`. Пока их не отдавали,
+             *     категория особого порядка уезжала на портал готовой русской строкой
+             */
+            category_label_kk?: string | null;
             category_rule_ref: string;
             files: components["schemas"]["SpecialRequestFileDto"][];
             /** Format: uuid */
@@ -5265,6 +5482,16 @@ export interface components {
         TenderDto: {
             /** Format: date-time */
             announced_at?: string | null;
+            /**
+             * @description Причина отмены - ее пишет тот, кто отменяет. Пока ее не отдавали,
+             *     отмененный тендер на портале объяснялся одним словом «отменен»
+             */
+            cancel_reason?: string | null;
+            /**
+             * Format: date-time
+             * @description Момент отмены тендера (п. 82); `null` - тендер не отменен
+             */
+            cancelled_at?: string | null;
             /** Format: uuid */
             id: string;
             lots: components["schemas"]["LotDto"][];
@@ -7310,6 +7537,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Учетная запись не подтверждена (`email_not_confirmed`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             405: components["responses"]["MethodNotAllowed"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["Unprocessable"];
@@ -7605,6 +7841,58 @@ export interface operations {
             };
             /** @description Слишком много попыток */
             429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    resend_confirmation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResendConfirmationRequest"];
+            };
+        };
+        responses: {
+            /** @description Обращение принято; учетной записи, ждущей подтверждения, отправлен новый код */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            405: components["responses"]["MethodNotAllowed"];
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Адрес не похож на email */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Слишком много попыток */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Канал доставки недоступен */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7966,19 +8254,27 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Льгота договора */
+            /** @description Льгота договора; `null` - льгота не применялась */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BenefitGrantDto"];
+                    "application/json": null | components["schemas"]["BenefitGrantDto"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            /** @description Льгота не применялась */
+            /** @description Льгота договора этой роли не видна */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Договор не найден */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8136,19 +8432,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Депозитный счет */
+            /** @description Депозитный счет; `null` - депозит не вносился */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["LedgerAccountDto"];
+                    "application/json": null | components["schemas"]["LedgerAccountDto"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description Счет не открыт */
+            /** @description Договор не найден */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8552,6 +8848,44 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             405: components["responses"]["MethodNotAllowed"];
+        };
+    };
+    finance_pending_fees: {
+        parameters: {
+            query?: {
+                /** @description Курсор: id последнего элемента предыдущей страницы (`next_after`) */
+                after?: string | null;
+                /** @description Размер страницы; значение вне 1..=100 подтягивается к границе */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Заявки, ждущие подтверждения взноса */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancePendingFeePage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     healthz: {
@@ -10461,7 +10795,15 @@ export interface operations {
                 };
             };
             405: components["responses"]["MethodNotAllowed"];
-            409: components["responses"]["IdempotencyInFlight"];
+            /** @description Версия на эту дату уже заведена (FR-202) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             415: components["responses"]["UnsupportedMediaType"];
             /** @description Данные не прошли проверку */
             422: {
@@ -10710,6 +11052,72 @@ export interface operations {
             409: components["responses"]["IdempotencyInFlight"];
             415: components["responses"]["UnsupportedMediaType"];
             /** @description Год или величина недопустимы */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_mrp: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5) */
+                "x-csrf-token"?: string;
+                /** @description Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7) */
+                "Idempotency-Key"?: string;
+            };
+            path: {
+                /** @description Год */
+                year: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Год удален */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            /** @description Недостаточно прав */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Год не заведен */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            405: components["responses"]["MethodNotAllowed"];
+            /** @description Год участвует в расчетах (FR-201, FR-202) */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            415: components["responses"]["UnsupportedMediaType"];
+            /** @description Год вне допустимых границ */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -11839,19 +12247,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Протокол сформирован */
+            /** @description Реквизиты протокола; `null` - еще не сформирован */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GeneratedProtocolDto"];
+                    "application/json": null | components["schemas"]["GeneratedProtocolDto"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description Протокол не сформирован */
+            /** @description Тендер не найден */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -12761,19 +13169,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Заседание допуска */
+            /** @description Заседание допуска; `null` - еще не назначено */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MeetingDto"];
+                    "application/json": null | components["schemas"]["MeetingDto"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description Заседание не назначено */
+            /** @description Тендер не найден */
             404: {
                 headers: {
                     [name: string]: unknown;

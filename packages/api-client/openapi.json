@@ -3275,6 +3275,16 @@
               }
             }
           },
+          "403": {
+            "description": "Учетная запись не подтверждена (`email_not_confirmed`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
@@ -3687,6 +3697,70 @@
           },
           "429": {
             "description": "Слишком много попыток",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/resend-confirmation": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Новый код подтверждения на тот же адрес (FR-1501).",
+        "description": "Без этого маршрута неподтвержденная регистрация была тупиком: код\nдействует пятнадцать минут, после пяти неверных попыток гасится совсем,\nа взять новый было негде - повторная регистрация упиралась в занятый\nemail, вход отвечал отказом. Здесь тот же путь доставки, что и у\nрегистрации ([`crate::verification`]), и та же проверка кода\nв [`confirm_registration`] - она не меняется.\n\nОтвет всегда 204, в том числе на неизвестный и на уже подтвержденный\nадрес: иначе маршрут, открытый до входа, перечисляет учетные записи\n(NFR-07). Частота ограничена как у входа - иначе им рассылают письма\nна чужой адрес.",
+        "operationId": "resend_confirmation",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResendConfirmationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Обращение принято; учетной записи, ждущей подтверждения, отправлен новый код"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "description": "Адрес не похож на email",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Слишком много попыток",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Канал доставки недоступен",
             "content": {
               "application/json": {
                 "schema": {
@@ -4344,6 +4418,7 @@
           "benefit"
         ],
         "summary": "Льгота договора с расписанием платы (FR-1205, п. 95–96).",
+        "description": "Льготы у договора может не быть вовсе - большинство договоров общего\nпорядка идет без нее (круг 4 гаунтлета, G-067). «Не применялась»\nотвечало 404, и колонка «Льготная схема» в кабинете организатора\nоставалась молча пустой с ошибкой в консоли на каждый договор. Теперь\nненайденным остается сам договор.\n\nПраво читать льготу закрыто перечнем `Compound::BENEFIT_READ`\n(`ContractManage` | `BoardDecide`) - это организатор и Правление;\nсекретарь, видящий договор, льготу не читает, и 403 у него остается.",
         "operationId": "contract_benefit",
         "parameters": [
           {
@@ -4359,11 +4434,18 @@
         ],
         "responses": {
           "200": {
-            "description": "Льгота договора",
+            "description": "Льгота договора; `null` - льгота не применялась",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/BenefitGrantDto"
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BenefitGrantDto"
+                    }
+                  ]
                 }
               }
             }
@@ -4375,10 +4457,17 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "$ref": "#/components/responses/Forbidden"
+            "description": "Льгота договора этой роли не видна",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Льгота не применялась",
+            "description": "Договор не найден",
             "content": {
               "application/json": {
                 "schema": {
@@ -4668,6 +4757,7 @@
           "ledger"
         ],
         "summary": "Депозитный счет договора (FR-1003): наниматель видит свой, финблок -\nлюбой, ведущие процесс - в карточке договора.",
+        "description": "Депозит вносится не сразу после заключения договора, и до взноса счета\nнет вовсе (круг 4 гаунтлета, G-067): «еще не внесен» отвечало 404, и\nсписок договоров нанимателя писал по ошибке на каждый договор. Теперь\nненайденным остается сам договор, а невнесенный депозит - `null`.\n\nПраво читать проверяется по договору, а не по счету: у отсутствующего\nсчета владельца нет, и проверять по нему было бы нечего. Наниматель\nдоговора - тот же, кто владеет его депозитным счетом.",
         "operationId": "contract_deposit",
         "parameters": [
           {
@@ -4683,11 +4773,18 @@
         ],
         "responses": {
           "200": {
-            "description": "Депозитный счет",
+            "description": "Депозитный счет; `null` - депозит не вносился",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/LedgerAccountDto"
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LedgerAccountDto"
+                    }
+                  ]
                 }
               }
             }
@@ -4702,7 +4799,7 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "description": "Счет не открыт",
+            "description": "Договор не найден",
             "content": {
               "application/json": {
                 "schema": {
@@ -5445,6 +5542,85 @@
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
+          }
+        },
+        "security": [
+          {
+            "tou_session": []
+          }
+        ]
+      }
+    },
+    "/api/v1/finance/pending-fees": {
+      "get": {
+        "tags": [
+          "ledger"
+        ],
+        "summary": "Очередь заявок, ждущих подтверждения взноса (FR-405, п. 23).",
+        "description": "Рабочий список департамента финансов: пришла выписка банка - здесь\nвидно, по какой заявке ждут денег, сколько положено взносом лота\n(FR-206) и когда заявка подана. Право то же, что у самого подтверждения\n([`Action::FeeConfirm`]): очередь показывает ровно те заявки, по которым\nэто право дает нажать кнопку.",
+        "operationId": "finance_pending_fees",
+        "parameters": [
+          {
+            "name": "after",
+            "in": "query",
+            "description": "Курсор: id последнего элемента предыдущей страницы (`next_after`)",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Размер страницы; значение вне 1..=100 подтягивается к границе",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64",
+              "maximum": 100,
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Заявки, ждущие подтверждения взноса",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FinancePendingFeePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
           }
         },
         "security": [
@@ -8949,7 +9125,14 @@
             "$ref": "#/components/responses/MethodNotAllowed"
           },
           "409": {
-            "$ref": "#/components/responses/IdempotencyInFlight"
+            "description": "Версия на эту дату уже заведена (FR-202)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
@@ -9371,6 +9554,109 @@
           },
           "422": {
             "description": "Год или величина недопустимы",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "tou_csrf": [],
+            "tou_session": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "refdata"
+        ],
+        "summary": "Удаление заведенного по ошибке года МРП (FR-1901, Прил. 4).",
+        "description": "Круг 1 гаунтлета (G-141). МРП правится значением, а не версией, поэтому\nгод, заведенный с опечаткой, оставался в справочнике навсегда: удаления\nне было ни в контракте, ни в правах роли приложения.\n\nУдаляется только год, на котором ничего не стоит: величина попадает в\nзамороженный снимок расчета лота и инвестиционного договора (FR-202), а\nпо текущему году считаются новые ставки. Оба случая стережет триггер БД\n`core.check_mrp_year_in_use` и отказывает причиной `mrp_year_in_use`.",
+        "operationId": "delete_mrp",
+        "parameters": [
+          {
+            "name": "year",
+            "in": "path",
+            "description": "Год",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "maximum": 2100,
+              "minimum": 2000
+            }
+          },
+          {
+            "name": "x-csrf-token",
+            "in": "header",
+            "description": "Обязателен: значение cookie `tou_csrf`. Без него мутация отклоняется 403 `csrf_rejected` (арх. § 5)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Необязателен: с ним повтор мутации отдает ответ первой попытки, а не выполняет ее второй раз (ТЗ § 7)",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Год удален"
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "description": "Недостаточно прав",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Год не заведен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "description": "Год участвует в расчетах (FR-201, FR-202)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "422": {
+            "description": "Год вне допустимых границ",
             "content": {
               "application/json": {
                 "schema": {
@@ -11361,6 +11647,7 @@
           "admission"
         ],
         "summary": "Реквизиты протокола допуска (без содержимого) - состояние для UI.",
+        "description": "Несформированный протокол - состояние процедуры, а не ошибка адреса\n(G-067): вкладка спрашивает его на каждой загрузке и до заседания\nкомиссии получала 404. Ненайденным остается сам тендер.",
         "operationId": "admission_protocol_meta",
         "parameters": [
           {
@@ -11376,11 +11663,18 @@
         ],
         "responses": {
           "200": {
-            "description": "Протокол сформирован",
+            "description": "Реквизиты протокола; `null` - еще не сформирован",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/GeneratedProtocolDto"
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/GeneratedProtocolDto"
+                    }
+                  ]
                 }
               }
             }
@@ -11395,7 +11689,7 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "description": "Протокол не сформирован",
+            "description": "Тендер не найден",
             "content": {
               "application/json": {
                 "schema": {
@@ -13005,6 +13299,7 @@
           "admission"
         ],
         "summary": "Заседание допуска: состав комиссии, явка, кворум, декларации и отводы.",
+        "description": "Заседания может еще не быть - это состояние процедуры, а не ошибка\nадреса (круг 4 гаунтлета, G-067). Раньше «еще не назначено» отвечало\n404, и каждая загрузка карточки тендера писала ошибку в консоль\nкабинета. Теперь ненайденным остается только сам тендер, а\nненаступившее заседание - `null` в теле ответа.",
         "operationId": "qualification_meeting",
         "parameters": [
           {
@@ -13020,11 +13315,18 @@
         ],
         "responses": {
           "200": {
-            "description": "Заседание допуска",
+            "description": "Заседание допуска; `null` - еще не назначено",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MeetingDto"
+                  "oneOf": [
+                    {
+                      "type": "null"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MeetingDto"
+                    }
+                  ]
                 }
               }
             }
@@ -13039,7 +13341,7 @@
             "$ref": "#/components/responses/Forbidden"
           },
           "404": {
-            "description": "Заседание не назначено",
+            "description": "Тендер не найден",
             "content": {
               "application/json": {
                 "schema": {
@@ -15076,7 +15378,11 @@
         "required": [
           "id",
           "tender_id",
+          "tender_title",
+          "tender_title_kk",
           "lot_id",
+          "lot_seq",
+          "object_name",
           "participant_id",
           "status",
           "applicant_kind",
@@ -15106,6 +15412,15 @@
           "lot_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "lot_seq": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Порядковый номер лота в тендере (Прил. 12)"
+          },
+          "object_name": {
+            "type": "string",
+            "description": "Наименование объекта лота (ru)"
           },
           "package_complete": {
             "type": "boolean",
@@ -15147,6 +15462,13 @@
           "tender_id": {
             "type": "string",
             "format": "uuid"
+          },
+          "tender_title": {
+            "type": "string",
+            "description": "Заголовок тендера (ru) - чтобы список заявок называл предмет,\nа не идентификатор"
+          },
+          "tender_title_kk": {
+            "type": "string"
           },
           "withdrawn_at": {
             "type": [
@@ -16568,6 +16890,7 @@
           "unauthorized",
           "forbidden",
           "invalid_credentials",
+          "email_not_confirmed",
           "email_taken",
           "id_number_taken",
           "verification_failed",
@@ -16846,6 +17169,83 @@
             "type": "integer",
             "description": "Сколько несостоявшихся уже было в цепочке повторов",
             "minimum": 0
+          }
+        }
+      },
+      "FinancePendingFeeDto": {
+        "type": "object",
+        "description": "Заявка, ждущая подтверждения гарантийного взноса (FR-405, п. 23).",
+        "required": [
+          "application_id",
+          "tender_id",
+          "tender_title",
+          "lot_id",
+          "lot_seq",
+          "applicant_name",
+          "guarantee_fee",
+          "submitted_at"
+        ],
+        "properties": {
+          "applicant_name": {
+            "type": "string",
+            "description": "Имя заявителя из формы Прил. 2 - оно же стоит в выписке банка"
+          },
+          "application_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Заявка - по ней и подтверждается поступление"
+          },
+          "guarantee_fee": {
+            "type": "string",
+            "description": "Размер взноса, заданный лотом (FR-206): с ним сверяется поступление",
+            "example": "36000.00"
+          },
+          "lot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lot_seq": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "tender_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "tender_title": {
+            "type": "string"
+          }
+        }
+      },
+      "FinancePendingFeePage": {
+        "type": "object",
+        "description": "Страница очереди на подтверждение взносов (ТЗ § 7): старое сверху.",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FinancePendingFeeDto"
+            }
+          },
+          "next_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Курсор продолжения для `after` - `application_id` последней строки;\n`null` - очередь показана до конца"
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Показана не вся выборка"
           }
         }
       },
@@ -17426,6 +17826,19 @@
           "designation_label": {
             "type": "string"
           },
+          "designation_label_en": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "designation_label_kk": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Та же подпись на казахском и английском (NFR-01); `null` - перевода\nв справочнике нет, и кабинет откатывается на `designation_label`.\nПока их не отдавали, портал показывал русскую подпись во всех локалях"
+          },
           "min_investment": {
             "type": [
               "string",
@@ -17547,7 +17960,8 @@
           "id",
           "kind",
           "owner_name",
-          "balance"
+          "balance",
+          "refundable"
         ],
         "properties": {
           "application_id": {
@@ -17587,6 +18001,10 @@
           "owner_name": {
             "type": "string"
           },
+          "refundable": {
+            "type": "boolean",
+            "description": "Депозит можно вернуть прямо сейчас: объект возвращен по акту и на\nсчете есть остаток (FR-1003, п. 136).\n\nКруг 1 гаунтлета (G-128): кабинет предлагал возврат кнопкой всегда,\nа условие п. 136 узнавалось только из отказа после нажатия. Признак\nсчитает сервер - правило одно, и второй его копии в кабинете быть\nне должно"
+          },
           "required_amount": {
             "type": [
               "string",
@@ -17594,6 +18012,14 @@
             ],
             "description": "Сколько должно быть на счете: у депозита - месячная плата договора\n(FR-1003, п. 132); у счета взноса размер задает лот (FR-206)",
             "example": "60500.00"
+          },
+          "return_act_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Дата акта возврата объекта по договору счета (Прил. 8): до него\nдепозит не возвращается (п. 136). `null` - объект не возвращен либо\nсчет не депозитный"
           },
           "tender_id": {
             "type": [
@@ -18056,6 +18482,7 @@
           },
           "value": {
             "type": "string",
+            "description": "Величина множителя (> 0)",
             "example": "1.2000"
           }
         }
@@ -18346,6 +18773,14 @@
             "type": "string",
             "description": "Роль-исполнитель (snake_case, enum `Role`)"
           },
+          "contract_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Договор, к которому привязан срок (возврат взноса, регистрация,\nакт приема-передачи). У сроков договора тендера нет, и без этого\nполя дашборд не мог сослаться на предмет просрочки"
+          },
           "due_at": {
             "type": "string",
             "format": "date-time"
@@ -18454,13 +18889,34 @@
           "kind_title_ru": {
             "type": "string"
           },
+          "object_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Наименование объекта материала; `null` - объекта у заявки нет\n\nКруг 1 гаунтлета (G-134): у обоснований ставки заголовок один на\nвсех - «Обоснование ставки договора особого порядка», и очередь из\nнескольких строк не давала различить, какой договор публикуется"
+          },
           "occurred_at": {
             "type": "string",
             "format": "date-time"
           },
+          "party_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Заявитель (результат рассмотрения) либо наниматель (ставка, акт)"
+          },
           "ready": {
             "type": "boolean",
             "description": "Материал готов: печатная форма сформирована либо расчет заморожен"
+          },
+          "reference": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Регистрационный номер договора, если он присвоен (п. 126)"
           },
           "rule_ref": {
             "type": "string"
@@ -18681,6 +19137,19 @@
           },
           "title": {
             "type": "string"
+          },
+          "title_en": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title_kk": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Тот же заголовок на казахском и английском (NFR-01); `null` -\nперевода нет, и портал показывает `title`. У материалов\n«результат рассмотрения» он собирается из подписи категории\nсправочника в момент публикации, у остальных видов пока пуст"
           },
           "unpublish_at": {
             "type": "string",
@@ -19363,6 +19832,17 @@
           "receipts"
         ]
       },
+      "ResendConfirmationRequest": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "string"
+          }
+        }
+      },
       "Rule": {
         "type": "string",
         "description": "Причина отказа по правилу предметной области (закрытый перечень)",
@@ -19427,7 +19907,14 @@
           "overlapping_period",
           "duplicate_record",
           "related_record_missing",
-          "other_rule"
+          "other_rule",
+          "tender_amendment_not_extended",
+          "tender_amendment_extension_too_short",
+          "tender_amendment_intake_closed",
+          "vote_already_cast",
+          "coefficient_version_exists",
+          "deposit_before_return_act",
+          "mrp_year_in_use"
         ]
       },
       "SaveSiteAnnouncementRequest": {
@@ -19641,7 +20128,7 @@
           },
           "rationale": {
             "type": "string",
-            "description": "Обоснование решения - публикуется (п. 97)"
+            "description": "Обоснование решения - публикуется (п. 97)\n\nКруг 1 гаунтлета (G-131): текст из одних пробелов проходил\n`length(min = 1)`, а после `trim()` упирался в CHECK\n`special_decision_rationale_not_empty` - Правление получало отказ\n`other_rule` вместо названного поля"
           }
         }
       },
@@ -19748,6 +20235,19 @@
           },
           "category_label": {
             "type": "string"
+          },
+          "category_label_en": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "category_label_kk": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Та же подпись категории на казахском и английском из\n`refdata.special_categories` (NFR-01); `null` - перевода нет,\nи кабинет откатывается на `category_label`. Пока их не отдавали,\nкатегория особого порядка уезжала на портал готовой русской строкой"
           },
           "category_rule_ref": {
             "type": "string"
@@ -20091,6 +20591,21 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "cancel_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Причина отмены - ее пишет тот, кто отменяет. Пока ее не отдавали,\nотмененный тендер на портале объяснялся одним словом «отменен»"
+          },
+          "cancelled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Момент отмены тендера (п. 82); `null` - тендер не отменен"
           },
           "id": {
             "type": "string",
