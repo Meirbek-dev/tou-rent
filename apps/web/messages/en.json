@@ -1200,5 +1200,9 @@
   "rule_tender_amendment_intake_closed": "Application intake is over: the deadline has passed or the envelopes have been opened, so the tender terms no longer change (cl. 27, 50).",
   "error_email_not_confirmed": "The account is not confirmed: enter the code from the email or request a new one.",
   "rule_vote_already_cast": "Your vote on this application has been cast and cannot be changed.",
-  "auth_password_current_wrong": "The current password is incorrect."
+  "auth_password_current_wrong": "The current password is incorrect.",
+  "rule_coefficient_version_exists": "A version of this coefficient already exists for that date: choose a different effective date.",
+  "rule_deposit_before_return_act": "The deposit is refunded after the object is returned under a handover act (cl. 136).",
+  "rule_mrp_year_in_use": "This MRP year is in use: it is the current year, or its value is fixed in a frozen rate calculation.",
+  "deadline_hold_opening": "Hold the envelope opening (cl. 41-43)"
 }
