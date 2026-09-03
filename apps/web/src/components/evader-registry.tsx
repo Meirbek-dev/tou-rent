@@ -5,7 +5,8 @@ import { m } from "#/paraglide/messages"
 import { Panel } from "@/components/panel"
 import { QueryBoundary } from "@/components/query-boundary"
 import { Skeleton } from "@/components/ui/skeleton"
-import { evaderRegistryQuery } from "@/lib/evasion"
+import { evaderRegistryQuery, evasionGroundsQuery } from "@/lib/evasion"
+import { codeLabel } from "@/lib/finance"
 import { formatDateTime } from "@/lib/format"
 
 /**
@@ -17,6 +18,9 @@ import { formatDateTime } from "@/lib/format"
  */
 export function EvaderRegistry() {
   const registry = useQuery(evaderRegistryQuery)
+  // Основание уклонения приходит кодом закрытого перечня (п. 116): без
+  // подписи реестр называл человека уклонившимся, не говоря, за что
+  const { data: grounds } = useQuery(evasionGroundsQuery)
 
   return (
     <div data-testid="evader-registry">
@@ -54,25 +58,39 @@ export function EvaderRegistry() {
                 </p>
               )}
               <ul className="flex flex-col gap-1 text-sm">
-                {page.items.map((evader) => (
-                  <li
-                    key={evader.user_id}
-                    className="flex flex-wrap items-center gap-x-3"
-                  >
-                    <span className="font-medium">{evader.full_name}</span>
-                    <span className="text-muted-foreground">
-                      {m.evaders_count({ count: evader.evasions })}
-                    </span>
-                    {evader.last_declared_at != null && (
-                      <span
-                        className="text-muted-foreground"
-                        suppressHydrationWarning
-                      >
-                        {formatDateTime(evader.last_declared_at)}
+                {page.items.map((evader) => {
+                  const ground = codeLabel(evader.last_ground, grounds)
+                  return (
+                    <li
+                      key={evader.user_id}
+                      className="flex flex-wrap items-center gap-x-3"
+                    >
+                      <span className="font-medium">{evader.full_name}</span>
+                      <span className="text-muted-foreground">
+                        {m.evaders_count({ count: evader.evasions })}
                       </span>
-                    )}
-                  </li>
-                ))}
+                      {/* За что признан уклонившимся: перечень оснований
+                          закрыт п. 116, и без него реестр - обвинение
+                          без состава */}
+                      {ground !== null && (
+                        <span
+                          className="text-muted-foreground"
+                          data-testid="evader-ground"
+                        >
+                          {ground}
+                        </span>
+                      )}
+                      {evader.last_declared_at != null && (
+                        <span
+                          className="text-muted-foreground"
+                          suppressHydrationWarning
+                        >
+                          {formatDateTime(evader.last_declared_at)}
+                        </span>
+                      )}
+                    </li>
+                  )
+                })}
               </ul>
             </>
           )}

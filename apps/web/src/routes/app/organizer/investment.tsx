@@ -20,7 +20,7 @@ import {
   investmentContractsQuery,
 } from "@/lib/investment"
 import { defaultRateOptions, rateOptionsQuery } from "@/lib/organizer"
-import { specialRequestsQuery } from "@/lib/special"
+import { requestCategoryLabel, specialRequestsQuery } from "@/lib/special"
 
 import type { RateOptions } from "@/lib/organizer"
 
@@ -107,7 +107,7 @@ function InvestmentPage() {
               </NativeSelectOption>
               {available.map((request) => (
                 <NativeSelectOption key={request.id} value={request.id}>
-                  {request.category_label} · {request.object_name ?? "-"}
+                  {requestCategoryLabel(request)} · {request.object_name ?? "-"}
                 </NativeSelectOption>
               ))}
             </NativeSelect>

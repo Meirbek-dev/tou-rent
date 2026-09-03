@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test"
 
-import { formatDate, formatDateTime } from "./format"
+import { formatDate, formatDateTime, formatTenge } from "./format"
 
 import { overwriteGetLocale } from "#/paraglide/runtime"
 
@@ -75,5 +75,46 @@ describe("печать дат", () => {
   it("пустой момент остается пустым", () => {
     expect(formatDateTime(null)).toBeNull()
     expect(formatDate(undefined)).toBeNull()
+  })
+})
+
+describe("печать сумм", () => {
+  it("одинакова во всех локалях: пробел разрядов, запятая, знак после числа", () => {
+    const rendered = LOCALES.map((locale) =>
+      withLocale(locale, () => formatTenge("1234567.89"))
+    )
+
+    expect(rendered).toStrictEqual([
+      "1\u00a0234\u00a0567,89\u00a0₸",
+      "1\u00a0234\u00a0567,89\u00a0₸",
+      "1\u00a0234\u00a0567,89\u00a0₸",
+    ])
+  })
+
+  it("не печатает корневой шаблон ICU ни в одной локали", () => {
+    // Chrome и Edge берут для kk корневой шаблон: «₸ 55,000.00» - знак перед
+    // числом, запятая между разрядами, точка перед копейками
+    for (const locale of LOCALES) {
+      const rendered = withLocale(locale, () => formatTenge("55000"))
+      expect(rendered).toBe("55\u00a0000,00\u00a0₸")
+      expect(rendered).not.toMatch(/^₸/)
+      expect(rendered).not.toMatch(/,\d\d\d/)
+    }
+  })
+
+  it("копеек всегда два знака - суммы стоят столбцом", () => {
+    expect(formatTenge("21000")).toBe("21\u00a0000,00\u00a0₸")
+    expect(formatTenge("0.5")).toBe("0,50\u00a0₸")
+    expect(formatTenge("999999999999.99")).toBe(
+      "999\u00a0999\u00a0999\u00a0999,99\u00a0₸"
+    )
+  })
+
+  it("знак минуса остается перед числом", () => {
+    expect(formatTenge("-1500")).toBe("-1\u00a0500,00\u00a0₸")
+  })
+
+  it("неразбираемая сумма остается как пришла", () => {
+    expect(formatTenge("не число")).toBe("не число")
   })
 })

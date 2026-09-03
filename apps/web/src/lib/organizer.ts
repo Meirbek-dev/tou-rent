@@ -1,4 +1,4 @@
-import { queryOptions } from "@tanstack/react-query"
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query"
 
 import { api } from "#/lib/api"
 import { serverLabel } from "#/lib/server-label"
@@ -98,6 +98,50 @@ export const rateOptionsQuery = queryOptions({
   },
 })
 
+/**
+ * Правка и удаление объекта (FR-101).
+ *
+ * `PUT` отвечает телом, `DELETE` - 204 без тела, поэтому успех проверяется
+ * по отсутствию `error`, а не по наличию `data` (та же ошибка стоила
+ * отмене тендера ложного «не удалось», гаунтлет G-098).
+ */
+export async function updateObject(
+  id: string,
+  body: ObjectRequest
+): Promise<ObjectDto> {
+  const { data, error } = await api.PUT("/api/v1/objects/{id}", {
+    params: { path: { id } },
+    body,
+  })
+  if (error !== undefined) throw error
+  return data
+}
+
+export async function deleteObject(id: string): Promise<void> {
+  const { error } = await api.DELETE("/api/v1/objects/{id}", {
+    params: { path: { id } },
+  })
+  if (error !== undefined) throw error
+}
+
+/**
+ * Поля объекта, хранящие коды опций Прил. 4, и коэффициенты, к которым эти
+ * коды относятся (`core.objects.*_coefficient` - генерируемые колонки, FK
+ * на `refdata.rate_options`).
+ *
+ * Таблица перечисляет поля поименно: справочник опций общий с калькулятором,
+ * и без нее селекты формы объекта пришлось бы связывать с коэффициентами
+ * строками по месту.
+ */
+export const OBJECT_OPTION_FIELDS = [
+  ["premises_type_code", "kt"],
+  ["premises_kind_code", "ksk"],
+  ["comfort_code", "kk"],
+  ["location_code", "kr"],
+] as const satisfies readonly (readonly [keyof ObjectRequest, string])[]
+
+export type ObjectOptionField = (typeof OBJECT_OPTION_FIELDS)[number][0]
+
 /** Реестр глазами организатора (видит черновики) - ключ отдельный от публичного. */
 export const organizerTendersQuery = queryOptions({
   queryKey: ["tenders", "organizer"],
@@ -111,6 +155,119 @@ export const organizerTendersQuery = queryOptions({
     return data
   },
 })
+
+/** Размер страницы реестра организатора: столько строк читается за раз. */
+export const TENDERS_PAGE_SIZE = 20
+
+/**
+ * Реестр организатора страницами (FR-301).
+ *
+ * Список отдавался одним запросом на сто записей, и `next_after` контракта
+ * никто не читал: на пятидесяти семи тендерах экран был сплошной лентой без
+ * конца. Ключ - продолжение `organizerTendersQuery`, поэтому инвалидация
+ * реестра после публикации или отмены задевает и его.
+ */
+export const organizerTendersPagesQuery = infiniteQueryOptions({
+  queryKey: ["tenders", "organizer", "pages"],
+  queryFn: async ({ pageParam }) => {
+    const { data, error } = await api.GET("/api/v1/tenders", {
+      params: {
+        query: {
+          limit: TENDERS_PAGE_SIZE,
+          ...(pageParam === null ? {} : { after: pageParam }),
+        },
+      },
+    })
+    if (error !== undefined || data === undefined) {
+      throw error ?? new Error("failed to load tenders")
+    }
+    return data
+  },
+  initialPageParam: null as string | null,
+  getNextPageParam: (last) => last.next_after ?? null,
+})
+
+/**
+ * Отбор строки реестра по фильтру статуса и подстроке названия.
+ *
+ * Названия ведутся в двух колонках (ru/kk), и искать нужно по обеим: реестр
+ * организатора один на обе локали, а тендер заведен под тем названием, под
+ * которым его помнят.
+ */
+export function matchesTenderFilter(
+  tender: {
+    status: string
+    title: string
+    title_kk: string
+  },
+  filter: { status: string; query: string }
+): boolean {
+  if (filter.status !== "" && tender.status !== filter.status) return false
+  const needle = filter.query.trim().toLocaleLowerCase()
+  if (needle === "") return true
+  return (
+    tender.title.toLocaleLowerCase().includes(needle) ||
+    tender.title_kk.toLocaleLowerCase().includes(needle)
+  )
+}
+
+/**
+ * Статусы, после которых секретарю на тендере делать нечего.
+ *
+ * Договор заключен, тендер отменен или признан несостоявшимся - работа
+ * закрыта. В общем списке такие тендеры занимали верх (даты у них самые
+ * старые) и отодвигали живое заседание на тридцать восьмую строку.
+ */
+export const TERMINAL_TENDER_STATUSES = [
+  "contracted",
+  "cancelled",
+  "failed",
+] as const
+
+/** Дальняя дата: тендер без сроков уходит вниз, а не выдает себя за срочный. */
+const FAR_FUTURE = "9999"
+
+/**
+ * Ближайшая из двух дат тендера: заседание по вскрытию и окончание приема
+ * заявок. Именно они и есть работа секретаря, а порядок выдачи реестра
+ * (по созданию) к ней отношения не имеет. Сравниваются строки ISO, а не
+ * `Date.now()`: порядок обязан совпасть на сервере и в браузере.
+ */
+export function nearestTenderDate(tender: {
+  opening_at?: string | null | undefined
+  submission_deadline?: string | null | undefined
+}): string {
+  const dates = [tender.opening_at, tender.submission_deadline].filter(
+    (value): value is string => value != null
+  )
+  return dates.length === 0 ? FAR_FUTURE : (dates.toSorted()[0] ?? FAR_FUTURE)
+}
+
+/**
+ * Рабочий список секретаря: сперва то, что требует действия.
+ *
+ * Порядок по возрастанию ближайшей даты сам ставит просроченное наверх -
+ * прошедшая дата меньше будущей. Завершенные уезжают в отдельный список:
+ * они не работа, а история, и сворачиваются на экране.
+ */
+export function splitSecretaryWorkList<
+  T extends {
+    status: string
+    opening_at?: string | null | undefined
+    submission_deadline?: string | null | undefined
+  },
+>(items: readonly T[]): { active: T[]; completed: T[] } {
+  const byNearest = (left: T, right: T) =>
+    nearestTenderDate(left).localeCompare(nearestTenderDate(right))
+  const relevant = items.filter((tender) => tender.status !== "draft")
+  const terminal = (tender: T) =>
+    (TERMINAL_TENDER_STATUSES as readonly string[]).includes(tender.status)
+
+  return {
+    active: relevant.filter((tender) => !terminal(tender)).toSorted(byNearest),
+    completed: relevant.filter(terminal).toSorted(byNearest),
+  }
+}
 
 // NFR-03: ввод и отображение дат кабинета - Asia/Almaty (фиксированный UTC+5)
 

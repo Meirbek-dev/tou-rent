@@ -21,20 +21,28 @@ export const benefitSchemesQuery = queryOptions({
   },
 })
 
-/** Льгота договора с расписанием платы; null - льгота не применялась. */
+/**
+ * Льгота договора с расписанием платы; `null` - льгота не применялась.
+ *
+ * «Льготы нет» сервер отдает пустым телом с кодом 200 (G-067): 404 остался
+ * за ненайденным договором, и молчаливо превращать его в «льготы нет»
+ * кабинету больше нельзя - это разные вещи.
+ *
+ * Читать льготу вправе не всякая роль (`Compound::BENEFIT_READ`), и панель
+ * льготы не монтируется там, где права заведомо нет: 403 в консоли на
+ * каждой загрузке карточки договора - не диагностика, а шум.
+ */
 export const contractBenefitQuery = (contractId: string) =>
   queryOptions({
     queryKey: ["contract-benefit", contractId],
     queryFn: async () => {
-      const { data, response, error } = await api.GET(
-        "/api/v1/contracts/{id}/benefit",
-        { params: { path: { id: contractId } } }
-      )
-      if (response.status === 404) return null
-      if (error !== undefined || data === undefined) {
-        throw (error as unknown) ?? new Error("failed to load benefit")
+      const { data, error } = await api.GET("/api/v1/contracts/{id}/benefit", {
+        params: { path: { id: contractId } },
+      })
+      if (error !== undefined) {
+        throw error as unknown
       }
-      return data
+      return data ?? null
     },
   })
 

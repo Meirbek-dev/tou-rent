@@ -5,8 +5,10 @@ import { describe, expect, it } from "vite-plus/test"
 
 import {
   MAX_UPLOAD_BYTES,
+  PDF_ACCEPT,
   PHONE_MAX_DIGITS,
   PHONE_MIN_DIGITS,
+  PRICE_MAX,
   UPLOAD_ACCEPT,
   applicantDetailsErrors,
   controlDigit,
@@ -15,7 +17,11 @@ import {
   isValidIdNumber,
   optionalEmailSchema,
   passwordSchema,
+  pdfUploadError,
   phoneSchema,
+  priceError,
+  priceProblem,
+  serverPriceError,
   uploadError,
 } from "./validation"
 
@@ -201,5 +207,76 @@ describe("ограничения загрузки досье (upload.rs)", () =>
 
   it("несделанный выбор файла - тоже ошибка формы", () => {
     expect(uploadError(undefined)).toBeDefined()
+  })
+})
+
+describe("пакет заявки - только PDF (applications.rs)", () => {
+  it("диалог выбора файла предлагает один формат", () => {
+    expect(PDF_ACCEPT).toBe("application/pdf,.pdf")
+  })
+
+  it("прочие форматы досье в пакет заявки не идут", () => {
+    // upload.rs пропустил бы JPEG, но applications.rs отвечает 415, а
+    // CHECK `encrypted_application_file_is_pdf` не пустит строку в БД
+    expect(pdfUploadError(fakeFile("скан.jpg", 1024))).toBeDefined()
+    expect(pdfUploadError(fakeFile("скан.png", 1024))).toBeDefined()
+    expect(pdfUploadError(fakeFile("скан.pdf", 1024))).toBeUndefined()
+    expect(pdfUploadError(fakeFile("скан.PDF", 1024))).toBeUndefined()
+  })
+
+  it("потолок 10 МБ и несделанный выбор - те же, что у досье", () => {
+    expect(
+      pdfUploadError(fakeFile("скан.pdf", MAX_UPLOAD_BYTES + 1))
+    ).toBeDefined()
+    expect(pdfUploadError(undefined)).toBeDefined()
+  })
+})
+
+describe("ценовое предложение (FR-401, Прил. 9)", () => {
+  it("пустая, нечисловая и неположительная цена - ошибки поля", () => {
+    expect(priceProblem("")).toBe("required")
+    expect(priceProblem("   ")).toBe("required")
+    expect(priceProblem("сто тысяч")).toBe("number")
+    expect(priceProblem("0")).toBe("nonpositive")
+    expect(priceProblem("-5000")).toBe("nonpositive")
+  })
+
+  it("потолок - тот же, что у numeric(14,2) домена", () => {
+    expect(priceProblem(`${PRICE_MAX}`)).toBeUndefined()
+    expect(priceProblem("1000000000000")).toBe("too_large")
+  })
+
+  it("годная цена ошибки не дает", () => {
+    expect(priceProblem("36000.00")).toBeUndefined()
+    expect(priceError("36000.00")).toBeUndefined()
+  })
+
+  it("сообщение поля локализовано, а не машинно", () => {
+    expect(priceError("0")).toBe("Цена должна быть больше нуля.")
+    expect(priceError("1e13")).toMatch(/^Цена не должна превышать /u)
+  })
+
+  it("машинные подробности отказа 422 переводятся у поля", () => {
+    expect(
+      serverPriceError({
+        code: "validation_failed",
+        detail: "value_out_of_range",
+      })
+    ).toMatch(/^Цена не должна превышать /u)
+    expect(
+      serverPriceError({
+        code: "validation_failed",
+        detail: "price_amount: цена должна быть > 0",
+      })
+    ).toBe("Цена должна быть больше нуля.")
+  })
+
+  it("отказ не про цену остается общему абзацу формы", () => {
+    expect(
+      serverPriceError({ code: "validation_failed", detail: "email: неверный" })
+    ).toBeUndefined()
+    expect(serverPriceError({ code: "forbidden" })).toBeUndefined()
+    expect(serverPriceError(null)).toBeUndefined()
+    expect(serverPriceError("оборвалась сеть")).toBeUndefined()
   })
 })

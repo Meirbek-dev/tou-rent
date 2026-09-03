@@ -11,6 +11,7 @@ import { api } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
 import { activeCommissionQuery, memberRoleLabel } from "@/lib/commission"
 import { formatDateTime } from "@/lib/format"
+import { notifySuccess } from "@/lib/toast"
 
 import type { MeetingDto } from "@/lib/participant"
 
@@ -73,7 +74,12 @@ export function MeetingPanel({
       }
       return data
     },
-    onSuccess: onChanged,
+    // 200 без единого слова на экране: секретарь не знал, засчиталась ли
+    // отметка, и жал «Сохранить явку» повторно
+    onSuccess: async () => {
+      notifySuccess(m.attendance_saved_toast())
+      await onChanged()
+    },
   })
 
   const openMeeting = useMutation({
@@ -214,6 +220,18 @@ export function MeetingPanel({
               </NativeSelect>
             </div>
 
+            {/* Сколько отмечено и сколько нужно - до открытия заседания,
+                а не после отказа по кворуму */}
+            <p
+              className="text-sm text-muted-foreground"
+              data-testid="attendance-count"
+            >
+              {m.attendance_present_count({
+                present: members.filter((member) => isPresent(member.member_id))
+                  .length,
+                required: commission.quorum_required,
+              })}
+            </p>
             <div className="flex flex-wrap gap-3">
               <Button
                 type="submit"

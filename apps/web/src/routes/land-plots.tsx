@@ -7,7 +7,7 @@ import { PublicShell } from "@/components/public-shell"
 import { RegistryPending } from "@/components/registry-skeleton"
 import { Badge } from "@/components/ui/badge"
 import { formatTenge, trimZeros } from "@/lib/format"
-import { landPlotsQuery } from "@/lib/land"
+import { landDesignationLabel, landPlotsQuery } from "@/lib/land"
 import { cn } from "@/lib/utils"
 
 import type { LandPlot } from "@/lib/land"
@@ -87,10 +87,20 @@ function Fact({
   intl?: boolean
 }) {
   return (
-    <div className={cn("flex gap-2", wide && "sm:col-span-2")}>
+    // Узкий экран: сумма инвестиций и кадастровый номер - «слова», которые
+    // переносить негде, и строкой рядом с подписью они выносили страницу за
+    // вьюпорт (G-153). На телефоне значение встает под подпись и получает
+    // всю ширину карточки; `break-words` остается на случай значения,
+    // которому и ее не хватит
+    <div
+      className={cn(
+        "flex min-w-0 flex-col gap-0.5 sm:flex-row sm:gap-2",
+        wide && "sm:col-span-2"
+      )}
+    >
       <dt className="shrink-0 text-muted-foreground">{label}</dt>
       <dd
-        className={cn(numeric && "tabular-nums")}
+        className={cn("min-w-0 break-words", numeric && "tabular-nums")}
         suppressHydrationWarning={intl}
       >
         {value}
@@ -103,7 +113,7 @@ function PlotCard({ plot }: { plot: LandPlot }) {
   return (
     <article className="flex flex-col gap-3 rounded-xl border bg-card p-5 shadow-xs">
       <div className="flex flex-wrap items-center gap-3">
-        <Badge variant="outline">{plot.designation_label}</Badge>
+        <Badge variant="outline">{landDesignationLabel(plot)}</Badge>
         <span className="text-sm text-muted-foreground">{plot.address}</span>
       </div>
       <h2 className="text-base font-semibold">{plot.name}</h2>

@@ -14,6 +14,7 @@ import {
   emptyLot,
   lotDraftToRequest,
 } from "@/components/lot-draft-fields"
+import { FormAlert } from "@/components/form-alert"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,8 +25,22 @@ import {
   organizerTendersQuery,
   rateOptionsQuery,
 } from "@/lib/organizer"
+import { problemFieldMessages } from "@/lib/problem-fields"
 
 import type { LotDraft } from "@/components/lot-draft-fields"
+import type { FieldLabels } from "@/lib/problem-fields"
+
+/**
+ * Поля формы для разбора отказа (G-106): сервер называет поле именем
+ * контракта, а на экране у него подпись - ее и показываем.
+ */
+const FIELD_LABELS: FieldLabels = {
+  title: m.tender_title_ru_label,
+  title_kk: m.tender_title_kk_label,
+  purpose: m.lot_purpose,
+  purpose_kk: m.lot_purpose,
+  lease_months: m.lot_lease_months,
+}
 
 // FR-301: тендер с лотами; снимок ставки считает сервер по опциям Прил. 4.
 export const Route = createFileRoute("/app/organizer/tenders/new")({
@@ -166,11 +181,23 @@ function NewTenderPage() {
           {m.tender_create_submit()}
         </Button>
       </div>
-      {create.isError && (
-        <p role="alert" className="text-sm text-destructive">
-          {problemMessage(create.error)}
-        </p>
-      )}
+      {create.isError && <CreateError error={create.error} />}
     </form>
+  )
+}
+
+/**
+ * Отказ создания: сперва поля, которые сервер назвал, и только потом общий
+ * текст. Машинная подробность («name_kk: must not be blank») наружу не идет.
+ */
+function CreateError({ error }: { error: unknown }) {
+  const fields = problemFieldMessages(error, FIELD_LABELS)
+  if (fields.length === 0) return <FormAlert>{problemMessage(error)}</FormAlert>
+  return (
+    <div className="flex flex-col gap-2">
+      {fields.map((message) => (
+        <FormAlert key={message}>{message}</FormAlert>
+      ))}
+    </div>
   )
 }

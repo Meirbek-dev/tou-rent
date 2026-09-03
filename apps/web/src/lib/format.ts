@@ -1,5 +1,3 @@
-import { getLocale } from "#/paraglide/runtime"
-
 // NFR-03: юридически значимое время - серверное (UTC), отображение - Астана.
 //
 // Зона задана постоянным смещением, а не именем `Asia/Almaty`, и вот почему.
@@ -93,20 +91,36 @@ export function trimZeros(value: string): string {
   return value.replace(/0+$/, "").replace(/\.$/, "")
 }
 
+/** Неразрывный пробел: ни группа разрядов, ни знак валюты не переносятся. */
+const NBSP = "\u00a0"
+
 /**
  * Денежные суммы контракта приходят строками ("21000").
  *
- * `currencyDisplay: "narrowSymbol"` - иначе на локали ru Intl печатает код
- * «KZT» вместо «₸»: тот же лот выглядел как «52 495,00 KZT» по-русски и
- * «52 495,00 ₸» по-казахски.
+ * Запись собирается здесь, а не берется у `Intl.NumberFormat`, по той же
+ * причине, что и дата выше: состав ICU браузера решал, как выглядит сумма.
+ * Chrome и Edge везут `kk` по корневому шаблону, и «55 000,00 ₸» после
+ * гидратации становилось «₸ 55,000.00» - знак перед числом, запятая
+ * разделяет разряды, точка - копейки. На /en/ выходило «₸55,000.00». Node
+ * с полным ICU (то есть SSR) печатал во всех трех локалях одно и то же,
+ * поэтому расхождение видел только читатель.
+ *
+ * Форма одна на весь портал: пробел между разрядами, запятая перед
+ * копейками, знак после числа - так суммы набраны в Правилах и в печатных
+ * формах, и так их печатает `format_decimal_ru` на стороне api.
  */
 export function formatTenge(amount: string): string {
   const value = Number(amount)
   if (!Number.isFinite(value)) return amount
-  return new Intl.NumberFormat(getLocale(), {
-    style: "currency",
-    currency: "KZT",
-    currencyDisplay: "narrowSymbol",
-    maximumFractionDigits: 2,
-  }).format(value)
+
+  // Копейки - всегда два знака: «21 000 ₸» и «21 000,50 ₸» в одном столбце
+  // не выравниваются, а суммы стоят столбцами почти всюду
+  const fixed = Math.abs(value).toFixed(2)
+  const dot = fixed.indexOf(".")
+  // Экспоненциальная запись (от 1e21) разрядами не разбивается; в домене
+  // сумма - numeric(14,2), сюда такое число не приходит
+  if (dot < 0) return amount
+
+  const whole = fixed.slice(0, dot).replaceAll(/\B(?=(\d{3})+$)/gu, NBSP)
+  return `${value < 0 ? "-" : ""}${whole},${fixed.slice(dot + 1)}${NBSP}₸`
 }

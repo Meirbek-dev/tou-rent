@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
+import { ConfirmAction } from "@/components/confirm-action"
 import { Panel } from "@/components/panel"
 import { QueryBoundary } from "@/components/query-boundary"
 import { Button } from "@/components/ui/button"
@@ -82,15 +83,29 @@ export function FailurePanel({
               <FailureFacts state={state} />
 
               <div className="flex flex-wrap gap-3">
+                {/* Признание закрывает тендер и запускает возврат
+                    взносов (п. 82–83) - назад это не отыгрывается */}
                 {canDeclare && !state.failed && (
-                  <Button
-                    variant="outline"
-                    data-testid="declare-failed"
+                  <ConfirmAction
+                    title={m.failure_declare_confirm_title()}
+                    description={m.failure_declare_confirm_description({
+                      ground: groundLabel(state.ground),
+                      consequence: consequenceLabel(state.consequence),
+                    })}
+                    confirmLabel={m.failure_declare()}
+                    variant="destructive-solid"
                     disabled={declare.isPending}
-                    onClick={() => declare.mutate()}
-                  >
-                    {m.failure_declare()}
-                  </Button>
+                    onConfirm={() => declare.mutate()}
+                    trigger={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        data-testid="declare-failed"
+                      >
+                        {m.failure_declare()}
+                      </Button>
+                    }
+                  />
                 )}
                 {canDeclare && state.failed && (
                   <>

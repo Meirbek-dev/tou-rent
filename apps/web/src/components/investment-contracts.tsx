@@ -304,11 +304,17 @@ function ContractCard({
         }
       </QueryBoundary>
 
-      {/* FR-1205 (п. 95–96): льготная схема договора и расписание платы */}
-      <BenefitPanel
-        contractId={contract.contract_id}
-        editable={roles.includes("organizer")}
-      />
+      {/* FR-1205 (п. 95–96): льготная схема договора и расписание платы.
+          Льготу видят организатор и Правление (`Compound::BENEFIT_READ`);
+          секретарю сервер отвечает 403, и панель у него не разворачивается
+          вовсе - пустая колонка с ошибкой в консоли хуже, чем ее отсутствие
+          (G-067) */}
+      {(roles.includes("organizer") || roles.includes("board")) && (
+        <BenefitPanel
+          contractId={contract.contract_id}
+          editable={roles.includes("organizer")}
+        />
+      )}
 
       {roles.includes("organizer") && (
         <AttachmentForm contractId={contract.id} onUploaded={refresh} />

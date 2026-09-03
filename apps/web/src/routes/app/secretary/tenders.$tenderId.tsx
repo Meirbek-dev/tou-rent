@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table"
 import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
+import { applicantName } from "@/lib/commission"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import {
   admissionProtocolQuery,
@@ -37,7 +38,9 @@ import {
   tenderApplicationsQuery,
   tenderJournalQuery,
 } from "@/lib/participant"
+import { tenderProtocolsQuery } from "@/lib/publications"
 import { tabSearch } from "@/lib/tabs"
+import { notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 
 import type { MeetingDto } from "@/lib/participant"
@@ -126,6 +129,12 @@ function SecretaryTenderPage() {
       queryClient.invalidateQueries({
         queryKey: admissionProtocolQuery(tenderId).queryKey,
       }),
+      // Список протоколов живет своим запросом: без него сформированный
+      // протокол появлялся в шапке ссылкой на PDF, а вкладка «Протоколы»
+      // до перезагрузки показывала «Протоколов нет» и прятала «Опубликовать»
+      queryClient.invalidateQueries({
+        queryKey: tenderProtocolsQuery(tenderId).queryKey,
+      }),
     ])
   }
 
@@ -153,7 +162,10 @@ function SecretaryTenderPage() {
       }
       return data
     },
-    onSuccess: refresh,
+    onSuccess: async () => {
+      notifySuccess(m.protocols_created_toast())
+      await refresh()
+    },
   })
 
   // FR-504: после протокола - уведомление допущенных (стартовая ставка,
@@ -175,6 +187,9 @@ function SecretaryTenderPage() {
   const decidable = applications.filter(
     (a) => a.status === "submitted" || a.status === "fee_confirmed"
   )
+  // Журнал несет только идентификатор заявки - имя берется из списка,
+  // который на этом же экране уже загружен
+  const byId = new Map(applications.map((a) => [a.id, a]))
 
   return (
     <div className="flex flex-col gap-6">
@@ -216,18 +231,26 @@ function SecretaryTenderPage() {
         actions={
           <>
             {tender.status === "accepting" && (
-              <Button
-                data-testid="open-tender"
-                onClick={() => open.mutate()}
-                disabled={open.isPending || meeting?.opened_at == null}
-                title={
-                  meeting?.opened_at == null
-                    ? m.meeting_open_first()
-                    : undefined
-                }
-              >
-                {m.opening_button()}
-              </Button>
+              // Причина недоступности стояла в `title`: у выключенной кнопки
+              // всплывающей подсказки нет - она не получает указатель, - и с
+              // клавиатуры ее не прочесть. Теперь она просто написана рядом
+              <div className="flex flex-col gap-1">
+                <Button
+                  data-testid="open-tender"
+                  onClick={() => open.mutate()}
+                  disabled={open.isPending || meeting?.opened_at == null}
+                >
+                  {m.opening_button()}
+                </Button>
+                {meeting?.opened_at == null && (
+                  <span
+                    data-testid="open-tender-hint"
+                    className="max-w-56 text-xs text-muted-foreground"
+                  >
+                    {m.meeting_open_first()}
+                  </span>
+                )}
+              </div>
             )}
             {!sealed && protocol === null && (
               <Button
@@ -293,10 +316,9 @@ function SecretaryTenderPage() {
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          void navigate({
-            search: { tab: value as (typeof TABS)[number] },
-            replace: true,
-          })
+          // Вкладка пишется в историю, а не подменяет запись: «Назад»
+          // возвращает к предыдущей вкладке, а не уводит из карточки
+          void navigate({ search: { tab: value as (typeof TABS)[number] } })
         }}
         className="gap-6"
       >
@@ -367,13 +389,12 @@ function SecretaryTenderPage() {
                     value={quorumLabel(meeting)}
                     mono
                   />
+                  {/* «Явка 9» и «Кворум 7 из требуемых 5» противоречили
+                      друг другу: первое считает всех отмеченных, второе -
+                      только голосующих. Теперь это одна фраза, а не две цифры */}
                   <Term
                     label={m.attendance_legend()}
-                    value={String(
-                      (meeting?.attendance ?? []).filter((row) => row.present)
-                        .length
-                    )}
-                    mono
+                    value={attendanceLabel(meeting)}
                   />
                 </dl>
               </Panel>
@@ -426,8 +447,8 @@ function SecretaryTenderPage() {
                             >
                               {formatDateTime(entry.occurred_at)}
                             </TableCell>
-                            <TableCell className="text-muted-foreground tabular-nums">
-                              {entry.application_id?.slice(0, 8) ?? "-"}
+                            <TableCell className="whitespace-normal text-muted-foreground">
+                              {journalApplicant(entry.application_id, byId)}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -457,7 +478,7 @@ function SecretaryTenderPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead scope="col">
-                            {m.application_card_short()}
+                            {m.application_applicant_column()}
                           </TableHead>
                           <TableHead scope="col">
                             {m.object_status_label()}
@@ -476,8 +497,20 @@ function SecretaryTenderPage() {
                       <TableBody>
                         {applications.map((application) => (
                           <TableRow key={application.id}>
-                            <TableCell className="font-medium tabular-nums">
-                              {application.id.slice(0, 8)}
+                            {/* Восемь символов UUIDv7 у заявок одного
+                                тендера совпадают: строку опознает имя, а
+                                идентификатор остается вторичной подписью */}
+                            <TableCell className="min-w-48 whitespace-normal">
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-medium">
+                                  {applicantName(application)}
+                                </span>
+                                <span className="text-xs text-muted-foreground tabular-nums">
+                                  {m.application_card_title({
+                                    id: application.id.slice(0, 8),
+                                  })}
+                                </span>
+                              </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col gap-1">
@@ -595,6 +628,32 @@ function SecretaryTenderPage() {
       </Tabs>
     </div>
   )
+}
+
+/**
+ * Явка одной фразой: сколько отмечено присутствующими и сколько из них
+ * голосуют (резервные члены в кворум не входят, п. 11–12).
+ */
+function attendanceLabel(meeting: MeetingDto | null): string {
+  const present = (meeting?.attendance ?? []).filter(
+    (row) => row.present
+  ).length
+  const voting = meeting?.quorum_present
+  return voting == null
+    ? String(present)
+    : m.attendance_overview_value({ present, voting })
+}
+
+/** Заявка в журнале: имя заявителя, если оно известно этому же экрану. */
+function journalApplicant(
+  applicationId: string | null | undefined,
+  byId: ReadonlyMap<string, { id: string; applicant_details?: unknown }>
+): string {
+  if (applicationId == null) return "-"
+  const application = byId.get(applicationId)
+  return application === undefined
+    ? applicationId.slice(0, 8)
+    : applicantName(application)
 }
 
 /** Кворум одной строкой: «нет заседания» и «кворум не собран» - разные вещи. */

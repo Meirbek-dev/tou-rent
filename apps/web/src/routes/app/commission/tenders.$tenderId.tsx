@@ -20,14 +20,20 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
-import { problemMessage } from "@/lib/auth"
-import { applicationVotesQuery } from "@/lib/commission"
+import { meQuery, problemMessage } from "@/lib/auth"
+import {
+  activeCommissionQuery,
+  applicantName,
+  applicationVotesQuery,
+  commissionSeat,
+  ownVote,
+} from "@/lib/commission"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { meetingQuery, tenderApplicationsQuery } from "@/lib/participant"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { ArrowLeftIcon } from "lucide-react"
 
-import type { VoteValue } from "@/lib/commission"
+import type { CommissionMember, VoteValue } from "@/lib/commission"
 import type { ApplicationDto } from "@/lib/participant"
 
 // Заседание глазами члена комиссии (FR-1103–1104): декларация конфликта
@@ -44,6 +50,10 @@ export const Route = createFileRoute("/app/commission/tenders/$tenderId")({
       context.queryClient.ensureQueryData(
         tenderApplicationsQuery(params.tenderId)
       ),
+      // Право голоса определяется составом (п. 9–11), а не ролью кабинета:
+      // резервный член голосует только после замещения выбывшего
+      context.queryClient.ensureQueryData(activeCommissionQuery),
+      context.queryClient.ensureQueryData(meQuery),
     ])
   },
   head: () => ({ meta: [{ title: `${m.meeting_title()} - ToU Rent` }] }),
@@ -64,9 +74,18 @@ function CommissionTenderPage() {
   const { data: applications } = useSuspenseQuery(
     tenderApplicationsQuery(tenderId)
   )
+  const { data: commission } = useSuspenseQuery(activeCommissionQuery)
+  const { data: me } = useSuspenseQuery(meQuery)
   const [details, setDetails] = useState("")
 
   if (tender === null) throw notFound()
+
+  // До вскрытия конвертов заявителей не существует: цены запечатаны, решений
+  // нет, а голос до открытия заседания сервер все равно не примет (п. 12).
+  // Кнопки «За/Против» стояли живыми, и отказ приходил уже после
+  // подтверждения «необратимого» голоса
+  const sealed = tender.opened_at == null || meeting?.opened_at == null
+  const seat = commissionSeat(commission, me?.id)
 
   const refresh = async () => {
     await queryClient.invalidateQueries({
@@ -196,11 +215,25 @@ function CommissionTenderPage() {
         <h2 id="voting" className="font-heading text-lg font-semibold">
           {m.voting_title()}
         </h2>
-        {votable.length === 0 ? (
+        {sealed ? (
+          <div
+            data-testid="voting-sealed"
+            className="flex flex-col gap-1 rounded-xl bg-muted/50 p-5 ring-1 ring-border"
+          >
+            <p className="font-medium">{m.commission_sealed_title()}</p>
+            <p className="text-sm text-muted-foreground">
+              {m.commission_sealed_hint()}
+            </p>
+          </div>
+        ) : votable.length === 0 ? (
           <p className="text-muted-foreground">{m.voting_empty()}</p>
         ) : (
           votable.map((application) => (
-            <VoteForm key={application.id} application={application} />
+            <VoteForm
+              key={application.id}
+              application={application}
+              seat={seat}
+            />
           ))
         )}
       </section>
@@ -208,7 +241,14 @@ function CommissionTenderPage() {
   )
 }
 
-function VoteForm({ application }: { application: ApplicationDto }) {
+function VoteForm({
+  application,
+  seat,
+}: {
+  application: ApplicationDto
+  /** Место голосующего в составе комиссии; `null` - он в составе не значится */
+  seat: CommissionMember | null
+}) {
   const queryClient = useQueryClient()
   const votes = useQuery(applicationVotesQuery(application.id))
   const [dissent, setDissent] = useState("")
@@ -233,14 +273,12 @@ function VoteForm({ application }: { application: ApplicationDto }) {
     onError: (error: unknown) => notifyError(problemMessage(error)),
   })
 
-  const applicantName =
-    typeof application.applicant_details === "object" &&
-    application.applicant_details !== null &&
-    "name" in application.applicant_details
-      ? String(
-          (application.applicant_details as Record<string, unknown>)["name"]
-        )
-      : application.id.slice(0, 8)
+  const applicant = applicantName(application)
+  const reserve = seat?.member_role === "reserve"
+  // Голос - процессуальный акт и отзыву не подлежит (п. 13–14): поданный
+  // виден, а вторая пара кнопок не рисуется. Сервер откажет правилом
+  // `vote_already_cast`, но узнать об этом до щелчка - работа экрана
+  const myVote = ownVote(votes.data, seat?.member_id)
 
   return (
     <div
@@ -248,7 +286,7 @@ function VoteForm({ application }: { application: ApplicationDto }) {
       className="flex flex-col gap-4 rounded-lg border p-4"
     >
       <div className="flex flex-wrap items-center gap-3">
-        <span className="font-medium">{applicantName}</span>
+        <span className="font-medium">{applicant}</span>
         <ApplicationStatusBadge status={application.status} />
         <span className="text-sm text-muted-foreground tabular-nums">
           {application.price_amount != null
@@ -321,58 +359,78 @@ function VoteForm({ application }: { application: ApplicationDto }) {
         }
       </QueryBoundary>
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`dissent-${application.id}`}>
-          {m.voting_dissent_label()}
-        </Label>
-        <Input
-          id={`dissent-${application.id}`}
-          value={dissent}
-          onChange={(event) => setDissent(event.target.value)}
-        />
-      </div>
+      {reserve ? (
+        <p
+          data-testid="vote-reserve-note"
+          className="text-sm text-muted-foreground"
+        >
+          {m.commission_reserve_note()}
+        </p>
+      ) : myVote !== null ? (
+        <p
+          data-testid="vote-already-cast"
+          className="text-sm text-muted-foreground"
+        >
+          {m.commission_vote_already_cast({
+            value: VOTE_LABELS[myVote.value](),
+          })}
+        </p>
+      ) : (
+        <>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor={`dissent-${application.id}`}>
+              {m.voting_dissent_label()}
+            </Label>
+            <Input
+              id={`dissent-${application.id}`}
+              value={dissent}
+              onChange={(event) => setDissent(event.target.value)}
+            />
+          </div>
 
-      {/* Голос члена комиссии - процессуальный акт: он заносится в протокол
-          и отзыву не подлежит (п. 13–14). До сих пор он подавался первым
-          щелчком, без единого вопроса */}
-      <div className="flex flex-wrap gap-3">
-        <ConfirmAction
-          title={m.commission_vote_confirm_title()}
-          description={m.commission_vote_confirm_description({
-            vote: m.vote_for(),
-            applicant: applicantName,
-          })}
-          confirmLabel={m.vote_for()}
-          variant="default"
-          onConfirm={() => cast.mutate("for")}
-          trigger={
-            <Button
-              data-testid={`vote-for-${application.id}`}
-              disabled={cast.isPending}
-            >
-              {m.vote_for()}
-            </Button>
-          }
-        />
-        <ConfirmAction
-          title={m.commission_vote_confirm_title()}
-          description={m.commission_vote_confirm_description({
-            vote: m.vote_against(),
-            applicant: applicantName,
-          })}
-          confirmLabel={m.vote_against()}
-          onConfirm={() => cast.mutate("against")}
-          trigger={
-            <Button
-              variant="outline"
-              data-testid={`vote-against-${application.id}`}
-              disabled={cast.isPending}
-            >
-              {m.vote_against()}
-            </Button>
-          }
-        />
-      </div>
+          {/* Голос члена комиссии - процессуальный акт: он заносится в
+              протокол и отзыву не подлежит (п. 13–14). До сих пор он
+              подавался первым щелчком, без единого вопроса */}
+          <div className="flex flex-wrap gap-3">
+            <ConfirmAction
+              title={m.commission_vote_confirm_title()}
+              description={m.commission_vote_confirm_description({
+                vote: m.vote_for(),
+                applicant,
+              })}
+              confirmLabel={m.vote_for()}
+              variant="default"
+              onConfirm={() => cast.mutate("for")}
+              trigger={
+                <Button
+                  data-testid={`vote-for-${application.id}`}
+                  disabled={cast.isPending}
+                >
+                  {m.vote_for()}
+                </Button>
+              }
+            />
+            <ConfirmAction
+              title={m.commission_vote_confirm_title()}
+              description={m.commission_vote_confirm_description({
+                vote: m.vote_against(),
+                applicant,
+              })}
+              confirmLabel={m.vote_against()}
+              onConfirm={() => cast.mutate("against")}
+              trigger={
+                <Button
+                  variant="outline"
+                  data-testid={`vote-against-${application.id}`}
+                  disabled={cast.isPending}
+                >
+                  {m.vote_against()}
+                </Button>
+              }
+            />
+          </div>
+        </>
+      )}
 
       {cast.isError && (
         <p role="alert" className="text-sm text-destructive">

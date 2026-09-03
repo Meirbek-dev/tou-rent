@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 
 import { api } from "@/lib/api"
+import { serverLabel } from "@/lib/server-label"
 
 import type { components } from "@tou/api-client"
 
@@ -91,6 +92,22 @@ export function landStatusLabel(status: string): string {
     default:
       return status
   }
+}
+
+/**
+ * Назначение участка в текущей локали (п. 104).
+ *
+ * Назначение - позиция справочника раздела 14 (`LandRefdataDto`), и подписи
+ * у него три. В `LandPlotDto` русская лежит в самом `designation_label`,
+ * казахская и английская - рядом; до этого портал и кабинет печатали
+ * русскую во всех локалях (G-075, G-107).
+ */
+export function landDesignationLabel(plot: {
+  designation_label: string
+  designation_label_kk?: string | null
+  designation_label_en?: string | null
+}): string {
+  return serverLabel(plot, "designation_label")
 }
 
 /** Решение Правления по заявке (п. 106). */

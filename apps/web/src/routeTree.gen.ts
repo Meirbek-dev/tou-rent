@@ -25,6 +25,7 @@ import { Route as AppOrganizerRouteRouteImport } from './routes/app/organizer/ro
 import { Route as AppParticipantRouteRouteImport } from './routes/app/participant/route'
 import { Route as AppReportsRouteImport } from './routes/app/reports'
 import { Route as AppSecretaryRouteRouteImport } from './routes/app/secretary/route'
+import { Route as AuthConfirmRouteImport } from './routes/auth/confirm'
 import { Route as AuthLoginRouteImport } from './routes/auth/login'
 import { Route as AuthPasswordRouteImport } from './routes/auth/password'
 import { Route as AuthRegisterRouteImport } from './routes/auth/register'
@@ -134,6 +135,11 @@ const AppSecretaryRouteRoute = AppSecretaryRouteRouteImport.update({
   id: '/secretary',
   path: '/secretary',
   getParentRoute: () => AppRouteRoute,
+} as any)
+const AuthConfirmRoute = AuthConfirmRouteImport.update({
+  id: '/auth/confirm',
+  path: '/auth/confirm',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthLoginRoute = AuthLoginRouteImport.update({
   id: '/auth/login',
@@ -305,6 +311,7 @@ export interface FileRoutesByFullPath {
   '/app/secretary': typeof AppSecretaryRouteRouteWithChildren
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
@@ -344,6 +351,7 @@ export interface FileRoutesByTo {
   '/special-orders': typeof SpecialOrdersRoute
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
@@ -392,6 +400,7 @@ export interface FileRoutesById {
   '/app/secretary': typeof AppSecretaryRouteRouteWithChildren
   '/app/notifications': typeof AppNotificationsRoute
   '/app/reports': typeof AppReportsRoute
+  '/auth/confirm': typeof AuthConfirmRoute
   '/auth/login': typeof AuthLoginRoute
   '/auth/password': typeof AuthPasswordRoute
   '/auth/register': typeof AuthRegisterRoute
@@ -441,6 +450,7 @@ export interface FileRouteTypes {
     | '/app/secretary'
     | '/app/notifications'
     | '/app/reports'
+    | '/auth/confirm'
     | '/auth/login'
     | '/auth/password'
     | '/auth/register'
@@ -480,6 +490,7 @@ export interface FileRouteTypes {
     | '/special-orders'
     | '/app/notifications'
     | '/app/reports'
+    | '/auth/confirm'
     | '/auth/login'
     | '/auth/password'
     | '/auth/register'
@@ -527,6 +538,7 @@ export interface FileRouteTypes {
     | '/app/secretary'
     | '/app/notifications'
     | '/app/reports'
+    | '/auth/confirm'
     | '/auth/login'
     | '/auth/password'
     | '/auth/register'
@@ -566,6 +578,7 @@ export interface RootRouteChildren {
   HowToRoute: typeof HowToRoute
   LandPlotsRoute: typeof LandPlotsRoute
   SpecialOrdersRoute: typeof SpecialOrdersRoute
+  AuthConfirmRoute: typeof AuthConfirmRoute
   AuthLoginRoute: typeof AuthLoginRoute
   AuthPasswordRoute: typeof AuthPasswordRoute
   AuthRegisterRoute: typeof AuthRegisterRoute
@@ -687,6 +700,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/app/secretary'
       preLoaderRoute: typeof AppSecretaryRouteRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/auth/confirm': {
+      id: '/auth/confirm'
+      path: '/auth/confirm'
+      fullPath: '/auth/confirm'
+      preLoaderRoute: typeof AuthConfirmRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/auth/login': {
       id: '/auth/login'
@@ -1044,6 +1064,7 @@ const rootRouteChildren: RootRouteChildren = {
   HowToRoute: HowToRoute,
   LandPlotsRoute: LandPlotsRoute,
   SpecialOrdersRoute: SpecialOrdersRoute,
+  AuthConfirmRoute: AuthConfirmRoute,
   AuthLoginRoute: AuthLoginRoute,
   AuthPasswordRoute: AuthPasswordRoute,
   AuthRegisterRoute: AuthRegisterRoute,

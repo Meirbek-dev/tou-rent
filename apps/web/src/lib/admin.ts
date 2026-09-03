@@ -1,6 +1,7 @@
-import { queryOptions } from "@tanstack/react-query"
+import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query"
 
-import { api } from "@/lib/api"
+// `#/` вместо `@/`: этот псевдоним разрешает и раннер тестов (см. `lib/auth.ts`)
+import { api } from "#/lib/api"
 
 import type { components } from "@tou/api-client"
 
@@ -43,17 +44,54 @@ async function mutate<T>(
   return data
 }
 
-/** Пользователи и их роли (FR-1902). */
-export const usersQuery = queryOptions({
+/** Размер страницы перечня пользователей: столько записей читается за раз. */
+export const USERS_PAGE_SIZE = 50
+
+/**
+ * Пользователи и их роли (FR-1902) - страницами.
+ *
+ * Запрос шел без `after` и `limit`, и сервер отдавал первые пятьдесят из
+ * девяноста шести без единого признака усечения: заведенная сегодня учетка
+ * в кабинет не попадала, и выдать ей роль было нельзя.
+ */
+export const usersQuery = infiniteQueryOptions({
   queryKey: ["admin", "users"],
-  queryFn: async () => {
-    const { data, error } = await api.GET("/api/v1/admin/users")
+  queryFn: async ({ pageParam }) => {
+    const { data, error } = await api.GET("/api/v1/admin/users", {
+      params: {
+        query: {
+          limit: USERS_PAGE_SIZE,
+          ...(pageParam === null ? {} : { after: pageParam }),
+        },
+      },
+    })
     if (error !== undefined || data === undefined) {
       throw (error as unknown) ?? new Error("failed to load users")
     }
     return data
   },
+  initialPageParam: null as string | null,
+  getNextPageParam: (last) => last.next_after ?? null,
 })
+
+/**
+ * Отбор учетной записи по подстроке.
+ *
+ * Поиска на стороне контракта нет (`GET /api/v1/admin/users` знает только
+ * `after` и `limit`), поэтому отбор идет по уже загруженным страницам, и
+ * экран честно говорит, сколько записей прочитано. Ищется и по имени, и по
+ * почте: админ помнит человека либо так, либо так.
+ */
+export function matchesUser(
+  user: { full_name: string; email: string },
+  query: string
+): boolean {
+  const needle = query.trim().toLocaleLowerCase()
+  if (needle === "") return true
+  return [user.full_name, user.email].some((field) =>
+    field.toLocaleLowerCase().includes(needle)
+  )
+}
 
 export const grantRole = (userId: string, role: GrantableRole) =>
   mutate(
@@ -275,6 +313,21 @@ export const setMrp = (year: number, amount: string) =>
     api.PUT("/api/v1/refdata/mrp/{year}", {
       params: { path: { year } },
       body: { amount },
+    })
+  )
+
+/**
+ * Удаление величины МРП (FR-1901).
+ *
+ * МРП правится значением, а не версией, поэтому год, заведенный с
+ * опечаткой, оставался в справочнике навсегда. Удаляется только год, на
+ * котором ничего не стоит: занятый год сервер отвергает причиной
+ * `mrp_year_in_use`.
+ */
+export const removeMrp = (year: number) =>
+  mutate(
+    api.DELETE("/api/v1/refdata/mrp/{year}", {
+      params: { path: { year } },
     })
   )
 

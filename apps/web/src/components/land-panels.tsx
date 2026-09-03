@@ -28,6 +28,7 @@ import {
   decideLandApplication,
   landApplicationsQuery,
   landDecisionLabel,
+  landDesignationLabel,
   landPlotsQuery,
   landRefdataQuery,
   landStatusLabel,
@@ -171,7 +172,7 @@ export function LandInvestorPanel() {
                         key={plot.object_id}
                         value={plot.object_id}
                       >
-                        {plot.name} · {plot.designation_label}
+                        {plot.name} · {landDesignationLabel(plot)}
                       </NativeSelectOption>
                     ))}
                   </NativeSelect>
@@ -674,7 +675,7 @@ function PlotRow({ plot }: { plot: LandPlot }) {
     <article className="flex flex-wrap items-center gap-3 rounded-lg border p-4">
       <span className="font-medium">{plot.name}</span>
       <span className="text-sm text-muted-foreground">
-        {plot.designation_label} · {plot.cadastral_number}
+        {landDesignationLabel(plot)} · {plot.cadastral_number}
       </span>
       {plot.published_at == null ? (
         // Публикация открывает участок инвесторам: снять ее портал не умеет

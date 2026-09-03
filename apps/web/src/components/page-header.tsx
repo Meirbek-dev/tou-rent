@@ -51,8 +51,11 @@ export function PageHeader({
             </p>
           )}
         </div>
+        {/* Без `shrink-0`: на 375 px ряд кнопок карточки тендера растягивал
+            шапку до 451 px и срезал заголовок. Контейнеру нужно уметь
+            сжиматься - переносом занимается `flex-wrap` внутри него */}
         {actions !== undefined && (
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             {actions}
           </div>
         )}

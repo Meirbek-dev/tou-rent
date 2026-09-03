@@ -17,7 +17,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { api } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
-import { pendingSpecialRequestsQuery, specialStatusLabel } from "@/lib/special"
+import {
+  pendingSpecialRequestsQuery,
+  requestCategoryLabel,
+  specialStatusLabel,
+} from "@/lib/special"
 
 import type { SpecialRequest } from "@/lib/special"
 
@@ -110,7 +114,7 @@ function RequestCard({ request }: { request: SpecialRequest }) {
             {specialStatusLabel(request.status)}
           </span>
           <span className="text-sm text-muted-foreground">
-            {request.category_label}
+            {requestCategoryLabel(request)}
           </span>
           <span
             className="text-sm text-muted-foreground"

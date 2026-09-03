@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
 import { cva, type VariantProps } from "class-variance-authority"
 
@@ -24,7 +25,7 @@ function Tabs({
 }
 
 const tabsListVariants = cva(
-  "group/tabs-list inline-flex w-fit items-center justify-center overflow-y-hidden rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col data-[variant=line]:rounded-none",
+  "group/tabs-list inline-flex w-fit max-w-full items-center justify-start overflow-x-auto overflow-y-hidden rounded-lg p-[3px] text-muted-foreground group-data-horizontal/tabs:h-8 group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col group-data-vertical/tabs:overflow-x-visible data-[variant=line]:rounded-none",
   {
     variants: {
       variant: {
@@ -38,13 +39,44 @@ const tabsListVariants = cva(
   }
 )
 
+/**
+ * Полоса вкладок, из которой активная вкладка не уезжает за край.
+ *
+ * На узком экране список шире вьюпорта, и базовый компонент подводит к
+ * активной вкладке подчеркивание смещением - сама полоса при этом остается
+ * прокрученной в начало, а активная вкладка оказывалась левее нуля
+ * (x = −295 в кабинете админа) и первые вкладки были недостижимы.
+ * Прокрутка здесь настоящая (`overflow-x: auto`), а активная вкладка
+ * подтягивается в видимую часть при монтировании и при каждой смене.
+ */
 function TabsList({
   className,
   variant = "default",
   ...props
 }: TabsPrimitive.List.Props & VariantProps<typeof tabsListVariants>) {
+  const list = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const node = list.current
+    if (node === null) return
+    const scrollActive = () => {
+      const active = node.querySelector<HTMLElement>("[data-active]")
+      active?.scrollIntoView({ block: "nearest", inline: "nearest" })
+    }
+    scrollActive()
+    // Активность переключает сам примитив, атрибутом на кнопке
+    const observer = new MutationObserver(scrollActive)
+    observer.observe(node, {
+      attributes: true,
+      attributeFilter: ["data-active"],
+      subtree: true,
+    })
+    return () => observer.disconnect()
+  }, [])
+
   return (
     <TabsPrimitive.List
+      ref={list}
       data-slot="tabs-list"
       data-variant={variant}
       className={cn(tabsListVariants({ variant }), className)}

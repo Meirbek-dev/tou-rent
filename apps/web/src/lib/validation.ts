@@ -1,6 +1,10 @@
 import * as v from "valibot"
 import { m } from "#/paraglide/messages"
 
+// `#/` вместо `@/`: оба псевдонима ведут в `src/`, но `#/` объявлен полем
+// `imports` в package.json и потому разрешается и раннером тестов
+import { formatTenge } from "#/lib/format"
+
 /**
  * Схемы форм (арх. v3 § 7): одна схема на форму, те же правила, что и у
  * `garde` на входе api.
@@ -54,6 +58,37 @@ const UPLOAD_EXTENSIONS = ["pdf", "jpg", "jpeg", "png", "tif", "tiff"] as const
 export const UPLOAD_ACCEPT = UPLOAD_EXTENSIONS.map(
   (extension) => `.${extension}`
 ).join(",")
+
+/**
+ * Пакет заявки (FR-401, п. 46) - только PDF, в отличие от прочего досье.
+ *
+ * Так решают оба нижних рубежа: `applications.rs` отвечает 415 «пакет
+ * заявки принимается только в формате PDF» на любой другой тип, а
+ * `encrypted_application_file_is_pdf` не пускает в БД строку, у которой
+ * шифрование включено, а тип не PDF. Форма же проверяла файл общим списком
+ * досье и разрешала JPEG - о котором сервер узнавал уже после того, как
+ * файл ушел целиком, и отвечал отказом.
+ */
+export const PDF_ACCEPT = "application/pdf,.pdf"
+
+/**
+ * Проверка файла пакета заявки: тот же потолок 10 МБ, но единственный
+ * допустимый формат. Расширение проверяется только когда оно есть - как и
+ * на сервере, где файл без расширения опознается по сигнатуре.
+ */
+export function pdfUploadError(file: File | undefined): string | undefined {
+  if (file === undefined) return m.file_not_selected()
+
+  const dot = file.name.lastIndexOf(".")
+  const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : ""
+  if (extension !== "" && extension !== "pdf")
+    return m.validation_file_pdf_only()
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return m.validation_file_too_large({ max: MAX_UPLOAD_MB })
+  }
+  return undefined
+}
 
 /**
  * Контрольный разряд по одиннадцати старшим цифрам; двенадцатая в расчет
@@ -211,6 +246,71 @@ export function fieldError(
 ): string | undefined {
   const result = v.safeParse(schema, value)
   return result.success ? undefined : result.issues[0]?.message
+}
+
+/**
+ * Потолок ценового предложения. `numeric(14,2)` домена держит двенадцать
+ * знаков до запятой, и все, что больше, PostgreSQL отвергает уже в
+ * транзакции подачи (SQLSTATE 22003).
+ */
+export const PRICE_MAX = 999_999_999_999.99
+
+/** Что не так с ценой; `undefined` - цена годится. */
+export type PriceProblem = "required" | "number" | "nonpositive" | "too_large"
+
+export function priceProblem(value: string): PriceProblem | undefined {
+  const trimmed = value.trim()
+  if (trimmed === "") return "required"
+
+  const amount = Number(trimmed)
+  if (!Number.isFinite(amount)) return "number"
+  if (amount <= 0) return "nonpositive"
+  if (amount > PRICE_MAX) return "too_large"
+  return undefined
+}
+
+const PRICE_MESSAGES: Record<PriceProblem, () => string> = {
+  required: m.validation_required,
+  number: m.apply_price_number,
+  nonpositive: m.apply_price_positive,
+  too_large: () =>
+    m.apply_price_too_large({ max: formatTenge(`${PRICE_MAX}`) }),
+}
+
+/**
+ * Сообщение о цене рядом с полем.
+ *
+ * Атрибут `min` на поле цены был мертв: отправку ведет кнопка-триггер
+ * подтверждения (`type="button"`), браузерная проверка формы до нее не
+ * доходит, и ноль с минусом доезжали до диалога и до сервера.
+ */
+export function priceError(value: string): string | undefined {
+  const problem = priceProblem(value)
+  return problem === undefined ? undefined : PRICE_MESSAGES[problem]()
+}
+
+/**
+ * Отказ api, который относится к цене, - словами и у поля.
+ *
+ * Сервер отвечает машинной причиной (NFR-07): `value_out_of_range` от
+ * PostgreSQL и `price_amount: цена должна быть > 0` от garde. Обе доезжали
+ * до страницы как есть, в скобках после общей фразы «одно из полей
+ * заполнено неверно». Разбор стоит здесь, а не в `error-codes`: тот словарь
+ * переводит коды, а это - `detail` одного маршрута, где из чисел клиент
+ * присылает только цену.
+ *
+ * `undefined` - отказ не про цену: его показывает общий абзац формы.
+ */
+export function serverPriceError(error: unknown): string | undefined {
+  if (error === null || typeof error !== "object") return undefined
+
+  const problem = error as { code?: unknown; detail?: unknown }
+  if (problem.code !== "validation_failed") return undefined
+
+  const detail = typeof problem.detail === "string" ? problem.detail : ""
+  if (detail.includes("value_out_of_range")) return PRICE_MESSAGES.too_large()
+  if (detail.includes("price_amount")) return PRICE_MESSAGES.nonpositive()
+  return undefined
 }
 
 /**

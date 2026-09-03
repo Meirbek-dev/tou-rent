@@ -39,21 +39,24 @@ export const myContractsQuery = queryOptions({
   queryFn: () => mutate(api.GET("/api/v1/contracts/my")),
 })
 
-/** Депозит по договору (FR-1003, п. 132–136): счет и остаток. */
+/**
+ * Депозит по договору (FR-1003, п. 132–136): счет и остаток.
+ *
+ * Счета нет, пока депозит не внесен, и это состояние договора, а не ошибка
+ * адреса: сервер отдает пустое тело с кодом 200 (G-067). 404 снова значит
+ * «договора нет» и до кабинета доходит ошибкой.
+ */
 export const contractDepositQuery = (contractId: string) =>
   queryOptions({
     queryKey: ["contracts", "deposit", contractId],
     queryFn: async () => {
-      const { data, error, response } = await api.GET(
-        "/api/v1/contracts/{id}/deposit",
-        { params: { path: { id: contractId } } }
-      )
-      // Счета нет, пока договор не заключен - это не ошибка страницы
-      if (response.status === 404) return null
-      if (error !== undefined || data === undefined) {
-        throw (error as unknown) ?? new Error("failed to load deposit")
+      const { data, error } = await api.GET("/api/v1/contracts/{id}/deposit", {
+        params: { path: { id: contractId } },
+      })
+      if (error !== undefined) {
+        throw error as unknown
       }
-      return data
+      return data ?? null
     },
   })
 

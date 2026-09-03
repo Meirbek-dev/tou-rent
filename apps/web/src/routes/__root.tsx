@@ -49,11 +49,19 @@ const OG_LOCALES: Record<(typeof locales)[number], string> = {
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-  head: ({ matches }) => {
+  head: ({ match, matches }) => {
     // Локаль живет в пути (стратегия "url": /kk/..., /en/..., ru без
     // префикса), поэтому у каждой страницы есть три различимых адреса -
     // и поисковику надо сказать, что это одна и та же страница.
     const pathname = matches.at(-1)?.pathname ?? "/"
+    // Корень - последняя граница для ненайденного адреса (notFoundMode
+    // "fuzzy"): если ни один маршрут не подошел или `notFound()` бросили
+    // там, где своего экрана нет, показывать будет `NotFoundPage` ниже.
+    // Заголовок вкладки обязан говорить то же самое: «ToU Rent» на 404 -
+    // это страница без имени в истории и в списке вкладок.
+    // Признак приходит полем с подчеркиванием - деструктуризация вместо
+    // чтения через точку: имя чужое, переименовать его здесь нельзя
+    const { _notFound: notFound } = match
     const locale = getLocale()
     // Один и тот же адрес и для canonical, и для og:url - абсолютный:
     // относительный путь краулер не разворачивает, а разнобой в адресах
@@ -151,7 +159,9 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
           content: "summary_large_image",
         },
         {
-          title: "ToU Rent",
+          title: notFound
+            ? `${m.page_not_found_title()} - ToU Rent`
+            : "ToU Rent",
         },
       ],
       links: [

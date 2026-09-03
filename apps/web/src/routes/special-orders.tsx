@@ -8,7 +8,11 @@ import { RegistryPending } from "@/components/registry-skeleton"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { formatDate, formatDateTime } from "@/lib/format"
-import { publicRecordKindLabel, publicRecordsQuery } from "@/lib/public-records"
+import {
+  publicRecordKindLabel,
+  publicRecordsQuery,
+  publicRecordTitle,
+} from "@/lib/public-records"
 import { cn } from "@/lib/utils"
 
 import type { PublicRecord } from "@/lib/public-records"
@@ -110,7 +114,7 @@ function PublicRecordCard({ record }: { record: PublicRecord }) {
             </span>
           </span>
         </div>
-        <h2 className="text-base font-semibold">{record.title}</h2>
+        <h2 className="text-base font-semibold">{publicRecordTitle(record)}</h2>
 
         {/* Обоснование ставки - сам расчет Прил. 4 (FR-201, п. 97) */}
         {calculation?.monthly_rate != null && (

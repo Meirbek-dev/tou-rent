@@ -3,6 +3,7 @@ import { queryOptions } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 // `#/` вместо `@/`: этот псевдоним разрешает и раннер тестов (см. `lib/auth.ts`)
 import { api } from "#/lib/api"
+import { serverLabel } from "#/lib/server-label"
 
 import type { components } from "@tou/api-client"
 
@@ -71,4 +72,39 @@ export function publicRecordKindLabel(record: {
   kind_title_ru: string
 }): string {
   return KIND_LABELS[record.kind]?.() ?? record.kind_title_ru
+}
+
+/**
+ * Заголовок материала на портале (FR-1403, п. 90, 97).
+ *
+ * У результата рассмотрения он собирается из подписи категории справочника
+ * в момент публикации, и переводы едут колонками `title_kk` / `title_en`;
+ * пусто - перевода нет, показываем `title` (NFR-01, G-066).
+ */
+export function publicRecordTitle(record: {
+  title: string
+  title_kk?: string | null
+  title_en?: string | null
+}): string {
+  return serverLabel(record, "title")
+}
+
+/**
+ * Чем очередь публикаций отличает материал от соседнего (п. 97).
+ *
+ * Заголовок у обоснований ставки один на все договоры особого порядка, и
+ * очередь из нескольких строк была неразличима (G-134). Различают договор
+ * его регистрационный номер, объект и вторая сторона - те же реквизиты,
+ * которыми материал называют в делопроизводстве. Чего в заявке нет
+ * (номер до регистрации, объект у заявки без объекта), в подпись не идет.
+ */
+export function publicationSubject(item: {
+  reference?: string | null
+  object_name?: string | null
+  party_name?: string | null
+}): string {
+  return [item.reference, item.object_name, item.party_name]
+    .map((part) => part?.trim() ?? "")
+    .filter((part) => part !== "")
+    .join(" · ")
 }

@@ -3,6 +3,10 @@ import { join, relative } from "node:path"
 
 import { describe, expect, it } from "vite-plus/test"
 
+import { serverLabel } from "./server-label"
+
+import { overwriteGetLocale } from "#/paraglide/runtime"
+
 /**
  * Справочники сервера показываются через `serverLabel` (NFR-01).
  *
@@ -54,6 +58,47 @@ function directRenders(): string[] {
   }
   return hits
 }
+
+function withLocale<T>(locale: "ru" | "kk" | "en", body: () => T): T {
+  overwriteGetLocale(() => locale)
+  try {
+    return body()
+  } finally {
+    overwriteGetLocale(() => "ru")
+  }
+}
+
+describe("русская колонка подписи", () => {
+  /** Справочники админа: `label_ru` рядом с `label_kk` / `label_en`. */
+  const refdata = { label_ru: "Общежитие", label_kk: "Жатақхана", label_en: "" }
+
+  /**
+   * DTO, где подпись была одна: перевод приехал колонками `_kk`/`_en`,
+   * а русская осталась в самом поле (`designation_label`, G-075).
+   */
+  const plot = {
+    designation_label: "Строительство общежития",
+    designation_label_kk: "Жатақхана салу",
+    designation_label_en: null,
+  }
+
+  it("читается и как `<base>_ru`, и как сам `<base>`", () => {
+    expect(withLocale("kk", () => serverLabel(refdata))).toBe("Жатақхана")
+    expect(withLocale("kk", () => serverLabel(plot, "designation_label"))).toBe(
+      "Жатақхана салу"
+    )
+  })
+
+  it("без перевода откатывается на русскую подпись", () => {
+    expect(withLocale("en", () => serverLabel(refdata))).toBe("Общежитие")
+    expect(withLocale("en", () => serverLabel(plot, "designation_label"))).toBe(
+      "Строительство общежития"
+    )
+    expect(withLocale("ru", () => serverLabel(plot, "designation_label"))).toBe(
+      "Строительство общежития"
+    )
+  })
+})
 
 describe("подписи справочников сервера", () => {
   it("разметка не читает колонку *_ru в обход serverLabel", () => {

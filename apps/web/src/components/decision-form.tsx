@@ -6,13 +6,15 @@ import {
 } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
+import { ConfirmAction } from "@/components/confirm-action"
+import { FormAlert } from "@/components/form-alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { api } from "@/lib/api"
 import { problemMessage } from "@/lib/auth"
-import { applicationVotesQuery } from "@/lib/commission"
+import { applicantName, applicationVotesQuery } from "@/lib/commission"
 import { formatTenge } from "@/lib/format"
 import { reasonLabel } from "@/lib/participant"
 
@@ -38,7 +40,9 @@ export function DecisionForm({
   const { data: votes } = useSuspenseQuery(
     applicationVotesQuery(application.id)
   )
-  const [reason, setReason] = useState(reasons[0]?.code ?? "")
+  // Основание не предвыбирается: первым пунктом п. 52 стоит «аффилированность»,
+  // и юридическое основание отказа фиксировалось бы без единого выбора
+  const [reason, setReason] = useState("")
 
   // Вердикт считает сервер по голосам комиссии (FR-1103): секретарь его не
   // выбирает - он лишь фиксирует решение и, при отклонении, основание п. 52
@@ -47,6 +51,8 @@ export function DecisionForm({
 
   const decide = useMutation({
     mutationFn: async () => {
+      if (rejecting && reason === "")
+        throw new Error(m.decide_reason_required())
       const { data, error } = await api.POST(
         "/api/v1/applications/{id}/decide",
         {
@@ -67,14 +73,13 @@ export function DecisionForm({
     },
   })
 
-  const applicantName =
-    typeof application.applicant_details === "object" &&
-    application.applicant_details !== null &&
-    "name" in application.applicant_details
-      ? String(
-          (application.applicant_details as Record<string, unknown>)["name"]
-        )
-      : application.id.slice(0, 8)
+  const applicant = applicantName(application)
+  // В подтверждении вердикт стоит одним словом: полная формулировка
+  // («Решение комиссии: отклонить») внутри фразы читается дважды
+  const outcomeLabel =
+    tally?.outcome === "admitted"
+      ? m.decide_outcome_short_admitted()
+      : m.decide_outcome_short_rejected()
 
   return (
     <Card>
@@ -90,9 +95,7 @@ export function DecisionForm({
           }}
         >
           <div className="flex flex-wrap items-baseline justify-between gap-3">
-            <h3 className="font-heading text-base font-medium">
-              {applicantName}
-            </h3>
+            <h3 className="font-heading text-base font-medium">{applicant}</h3>
             <span className="text-sm tabular-nums" suppressHydrationWarning>
               {application.price_amount != null
                 ? formatTenge(application.price_amount)
@@ -145,9 +148,13 @@ export function DecisionForm({
               </Label>
               <NativeSelect
                 id={`reason-${application.id}`}
+                required
                 value={reason}
                 onChange={(event) => setReason(event.target.value)}
               >
+                <NativeSelectOption value="">
+                  {m.decide_reason_placeholder()}
+                </NativeSelectOption>
                 {reasons.map((r) => (
                   <NativeSelectOption key={r.code} value={r.code}>
                     {reasonLabel(reasons, r.code)}
@@ -158,18 +165,37 @@ export function DecisionForm({
           )}
 
           {decide.isError && (
-            <p role="alert" className="text-sm text-destructive">
-              {problemMessage(decide.error)}
-            </p>
+            <FormAlert>
+              {decide.error instanceof Error &&
+              decide.error.message === m.decide_reason_required()
+                ? decide.error.message
+                : problemMessage(decide.error)}
+            </FormAlert>
           )}
+          {/* Решение вносится в протокол допуска и правке не подлежит:
+              соседние «Отметить неявку» и «Завершить торги» спрашивают, а
+              это - нет */}
           <div>
-            <Button
-              type="submit"
-              data-testid="decide-submit"
-              disabled={decide.isPending || tally?.outcome == null}
-            >
-              {m.decide_submit()}
-            </Button>
+            <ConfirmAction
+              title={m.decide_confirm_title()}
+              description={m.decide_confirm_description({
+                applicant,
+                outcome: outcomeLabel,
+              })}
+              confirmLabel={m.decide_submit()}
+              variant="default"
+              disabled={
+                decide.isPending ||
+                tally?.outcome == null ||
+                (rejecting && reason === "")
+              }
+              onConfirm={() => decide.mutate()}
+              trigger={
+                <Button type="button" data-testid="decide-submit">
+                  {m.decide_submit()}
+                </Button>
+              }
+            />
           </div>
         </form>
       </CardContent>

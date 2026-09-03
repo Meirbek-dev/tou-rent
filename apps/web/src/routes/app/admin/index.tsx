@@ -1,6 +1,11 @@
 import { useMemo, useState } from "react"
 import { createFileRoute } from "@tanstack/react-router"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 import { getLocale } from "#/paraglide/runtime"
 import { ConfirmAction } from "@/components/confirm-action"
@@ -42,11 +47,13 @@ import {
   dataOverviewQuery,
   deactivateDemoAccounts,
   grantRole,
+  matchesUser,
   mrpQuery,
   purgeData,
   purgeRecord,
   recordsQuery,
   removeHoliday,
+  removeMrp,
   resetPassword,
   revokeRole,
   setMrp,
@@ -57,7 +64,7 @@ import {
   usersQuery,
 } from "@/lib/admin"
 import { meQuery, problemMessage } from "@/lib/auth"
-import { formatDateTime, formatTenge } from "@/lib/format"
+import { formatDate, formatDateTime, formatTenge } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
 import { fromAlmatyInput, toAlmatyInput } from "@/lib/organizer"
 import { serverLabel } from "@/lib/server-label"
@@ -118,10 +125,9 @@ function AdminHome() {
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          void navigate({
-            search: { tab: value as (typeof TABS)[number] },
-            replace: true,
-          })
+          // Вкладка пишется в историю: «Назад» возвращает к предыдущему
+          // справочнику, а не уводит из кабинета
+          void navigate({ search: { tab: value as (typeof TABS)[number] } })
         }}
         className="gap-6"
       >
@@ -309,8 +315,12 @@ function DataPanel() {
   const enabled = overview.purge_enabled
   const { counts } = overview
   // Слово набрано целиком: массовые кнопки спят до этого момента, а
-  // подтверждение в диалоге - второй рубеж, не единственный
-  const armed = enabled && phrase.trim() === PURGE_CONFIRMATION
+  // подтверждение в диалоге - второй рубеж, не единственный.
+  // Отключение демо-учеток обратимо и рубежом `ALLOW_DATA_PURGE` не
+  // закрыто (сервер его не требует), но слова подтверждения ждет так же:
+  // одно нажатие отнимало вход у всех учеток стенда разом
+  const typed = phrase.trim() === PURGE_CONFIRMATION
+  const armed = enabled && typed
 
   return (
     <div className="flex flex-col gap-6">
@@ -447,11 +457,16 @@ function DataPanel() {
           <span className="text-sm" data-testid="admin-demo-count">
             {m.admin_data_demo_count({ count: counts.demo_accounts })}
           </span>
+          {!typed && (
+            <span className="text-sm text-muted-foreground">
+              {m.admin_data_phrase_required({ phrase: PURGE_CONFIRMATION })}
+            </span>
+          )}
           <ConfirmAction
             title={m.admin_data_demo_confirm_title()}
             description={m.admin_data_demo_confirm_description()}
             confirmLabel={m.admin_data_demo_button()}
-            disabled={demo.isPending || counts.demo_accounts === 0}
+            disabled={!typed || demo.isPending || counts.demo_accounts === 0}
             onConfirm={() => demo.mutate()}
             trigger={
               <Button variant="outline" data-testid="deactivate-demo">
@@ -998,6 +1013,10 @@ function SiteAnnouncementEditor({
           <FieldDescription>
             {m.admin_announcement_plain_text_hint()}
           </FieldDescription>
+          {/* Колонок `*_en` у объявления в контракте нет (Q-024): гость
+              на /en/ видит русский текст, и админ должен знать об этом до
+              публикации, а не из жалобы */}
+          <FieldDescription>{m.admin_announcement_en_hint()}</FieldDescription>
           <Field orientation="horizontal">
             <Switch
               id="site-announcement-published"
@@ -1098,9 +1117,10 @@ function AuditChainPanel() {
  */
 function UsersPanel() {
   const queryClient = useQueryClient()
-  const { data: page } = useQuery(usersQuery)
+  const users = useInfiniteQuery(usersQuery)
   const { data: me } = useQuery(meQuery)
   const [role, setRole] = useState<Record<string, GrantableRole>>({})
+  const [query, setQuery] = useState("")
   // Выданный одноразовый пароль живет только в состоянии страницы: ни в
   // кеш запросов, ни в хранилище браузера он не кладется - перезагрузка
   // его теряет, и это правильно
@@ -1147,6 +1167,12 @@ function UsersPanel() {
   const chosen = (user: UserDto): GrantableRole =>
     role[user.id] ?? GRANTABLE_ROLES[0]
 
+  // Прочитанные страницы: поиска на стороне контракта нет, поэтому
+  // подстрока отбирает уже загруженное, а «Показать еще» дочитывает
+  // остальное - иначе заведенная сегодня учетка недостижима
+  const loaded = users.data?.pages.flatMap((item) => item.items) ?? []
+  const shown = loaded.filter((user) => matchesUser(user, query))
+
   return (
     <section aria-labelledby="admin-users" className="flex flex-col gap-3">
       <h2 id="admin-users" className="font-heading text-lg font-semibold">
@@ -1173,8 +1199,23 @@ function UsersPanel() {
           </span>
         </div>
       )}
-      {page === undefined || page.items.length === 0 ? (
+      <div className="flex w-full flex-col gap-1.5 sm:w-80">
+        <Label htmlFor="admin-users-query">
+          {m.admin_users_search_label()}
+        </Label>
+        <Input
+          id="admin-users-query"
+          data-testid="admin-users-query"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
+      {loaded.length === 0 ? (
         <p className="text-sm text-muted-foreground">{m.admin_users_empty()}</p>
+      ) : shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {m.admin_users_filtered_empty()}
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <Table data-testid="admin-users">
@@ -1187,7 +1228,7 @@ function UsersPanel() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {page.items.map((user) => (
+              {shown.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
                     <span className="font-medium">{user.full_name}</span>
@@ -1321,21 +1362,54 @@ function UsersPanel() {
                           {m.admin_activate()}
                         </Button>
                       )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        data-testid={`reset-password-${user.id}`}
+                      {/* Сброс отнимает у владельца текущий пароль и
+                          выдает одноразовый - отыграть это нажатие назад
+                          нельзя */}
+                      <ConfirmAction
+                        title={m.admin_reset_password_confirm_title()}
+                        description={m.admin_reset_password_confirm_description(
+                          { user: user.full_name }
+                        )}
+                        confirmLabel={m.admin_reset_password()}
                         disabled={reset.isPending}
-                        onClick={() => reset.mutate(user)}
-                      >
-                        {m.admin_reset_password()}
-                      </Button>
+                        onConfirm={() => reset.mutate(user)}
+                        trigger={
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            data-testid={`reset-password-${user.id}`}
+                          >
+                            {m.admin_reset_password()}
+                          </Button>
+                        }
+                      />
                     </div>
                   </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
+        </div>
+      )}
+      {loaded.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-sm text-muted-foreground">
+            {m.admin_users_loaded({
+              shown: shown.length,
+              loaded: loaded.length,
+            })}
+          </span>
+          {users.hasNextPage && (
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="admin-users-more"
+              disabled={users.isFetchingNextPage}
+              onClick={() => void users.fetchNextPage()}
+            >
+              {m.list_load_more()}
+            </Button>
+          )}
         </div>
       )}
       {(grant.isError || revoke.isError) && (
@@ -1368,12 +1442,25 @@ function MrpPanel() {
   const [year, setYear] = useState(String(new Date().getFullYear()))
   const [amount, setAmount] = useState("")
 
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ["refdata", "mrp"] })
+
   const save = useMutation({
     mutationFn: () => setMrp(Number(year), amount),
     onSuccess: async () => {
       setAmount("")
-      await queryClient.invalidateQueries({ queryKey: ["refdata", "mrp"] })
+      await refresh()
     },
+  })
+  // МРП правится значением, а не версией: год с опечаткой оставался в
+  // справочнике навсегда. Занятый год отвергает сервер (`mrp_year_in_use`)
+  const remove = useMutation({
+    mutationFn: (value: number) => removeMrp(value),
+    onSuccess: async () => {
+      notifySuccess(m.admin_mrp_removed_toast())
+      await refresh()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
   })
 
   return (
@@ -1387,12 +1474,33 @@ function MrpPanel() {
           {years.map((entry) => (
             <li
               key={entry.year}
-              className="rounded-lg border px-3 py-1.5 text-sm"
+              className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm"
             >
               {/* `amount` - строка Decimal («9999.00»): склеенная руками,
                   она печаталась без разрядных пробелов и с точкой вместо
                   запятой, мимо Intl и мимо локали */}
-              {entry.year}: {formatTenge(entry.amount)}
+              <span>
+                {entry.year}: {formatTenge(entry.amount)}
+              </span>
+              <ConfirmAction
+                title={m.admin_mrp_remove_confirm_title()}
+                description={m.admin_mrp_remove_confirm_description({
+                  year: entry.year,
+                })}
+                confirmLabel={m.admin_remove()}
+                disabled={remove.isPending}
+                onConfirm={() => remove.mutate(entry.year)}
+                trigger={
+                  <button
+                    type="button"
+                    aria-label={`${m.admin_remove()}: ${entry.year}`}
+                    data-testid={`remove-mrp-${entry.year}`}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    ×
+                  </button>
+                }
+              />
             </li>
           ))}
         </ul>
@@ -1438,9 +1546,9 @@ function MrpPanel() {
           {m.admin_save()}
         </Button>
       </form>
-      {save.isError && (
+      {(save.isError || remove.isError) && (
         <p role="alert" className="text-sm text-destructive">
-          {problemMessage(save.error)}
+          {problemMessage(save.error ?? remove.error)}
         </p>
       )}
     </section>
@@ -1555,8 +1663,9 @@ function CoefficientsPanel() {
                     </span>
                   </TableCell>
                   <TableCell>{version.value}</TableCell>
-                  <TableCell>
-                    {version.effective_from}
+                  <TableCell suppressHydrationWarning>
+                    {/* «Действует с» печаталась в ISO, а не по локали */}
+                    {formatDate(version.effective_from)}
                     {version.current && (
                       <Badge variant="secondary" className="ml-2">
                         {m.admin_current_version()}
@@ -1653,9 +1762,15 @@ function HolidaysPanel() {
       await refresh()
     },
   })
+  // Удаление праздника сдвигает все сроки Правил, которые считаются в
+  // рабочих днях: одно нажатие по «×» этого не стоило
   const remove = useMutation({
     mutationFn: (value: string) => removeHoliday(value),
-    onSuccess: refresh,
+    onSuccess: async () => {
+      notifySuccess(m.admin_holiday_removed_toast())
+      await refresh()
+    },
+    onError: (error: unknown) => notifyError(problemMessage(error)),
   })
 
   return (
@@ -1671,17 +1786,28 @@ function HolidaysPanel() {
               key={holiday.day}
               className="flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm"
             >
-              <span>
-                {holiday.day} - {holiday.label_ru}
+              <span suppressHydrationWarning>
+                {formatDate(holiday.day)} - {holiday.label_ru}
               </span>
-              <button
-                type="button"
-                aria-label={`${m.admin_remove()}: ${holiday.day}`}
-                className="text-muted-foreground hover:text-destructive"
-                onClick={() => remove.mutate(holiday.day)}
-              >
-                ×
-              </button>
+              <ConfirmAction
+                title={m.admin_holiday_remove_confirm_title()}
+                description={m.admin_holiday_remove_confirm_description({
+                  day: holiday.label_ru,
+                })}
+                confirmLabel={m.admin_remove()}
+                disabled={remove.isPending}
+                onConfirm={() => remove.mutate(holiday.day)}
+                trigger={
+                  <button
+                    type="button"
+                    aria-label={`${m.admin_remove()}: ${holiday.label_ru}`}
+                    data-testid={`remove-holiday-${holiday.day}`}
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    ×
+                  </button>
+                }
+              />
             </li>
           ))}
         </ul>

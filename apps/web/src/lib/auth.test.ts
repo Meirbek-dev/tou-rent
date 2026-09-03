@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vite-plus/test"
 
-import { problemDetail, problemMessage } from "./auth"
+import {
+  problemCode,
+  problemDetail,
+  problemMessage,
+  safeRedirectPath,
+} from "./auth"
 
 /**
  * Сообщение об отказе - всегда строка интерфейса (NFR-01, NFR-08).
@@ -60,5 +65,86 @@ describe("сообщение об отказе", () => {
     expect(problemDetail({ detail: "Срок истек", title: "Conflict" })).toBe(
       "Срок истек"
     )
+  })
+})
+
+/**
+ * Адрес возврата после входа (FR-1501, G-074).
+ *
+ * Параметр `?redirect=` приезжает из чужой ссылки, и страница входа - самое
+ * подходящее место для открытого перенаправителя: письмо с адресом портала
+ * уводило бы на чужой домен уже после ввода пароля. Проверка одна и здесь же
+ * закреплена: наружу проходит только путь этого же сайта.
+ */
+describe("safeRedirectPath (FR-1501: возврат после входа)", () => {
+  it("пропускает путь внутри портала вместе с запросом", () => {
+    expect(safeRedirectPath("/app/participant/contracts")).toBe(
+      "/app/participant/contracts"
+    )
+    expect(safeRedirectPath("/tenders?status=accepting")).toBe(
+      "/tenders?status=accepting"
+    )
+    expect(safeRedirectPath("/")).toBe("/")
+  })
+
+  it("отвергает чужой адрес в любом написании", () => {
+    for (const value of [
+      "https://evil.example/app",
+      "http://evil.example",
+      "//evil.example",
+      "/\\evil.example",
+      "javascript:alert(1)",
+      "app/participant",
+      "",
+    ]) {
+      expect(safeRedirectPath(value)).toBeUndefined()
+    }
+  })
+
+  it("отвергает управляющие символы: браузер выбрасывает их из адреса", () => {
+    // после выброса табуляции остается «//evil.example» - снова чужой хост
+    expect(safeRedirectPath("/\t/evil.example")).toBeUndefined()
+    expect(safeRedirectPath("/app\n")).toBeUndefined()
+  })
+
+  it("не возвращает на сам вход: это замкнутая петля", () => {
+    expect(safeRedirectPath("/auth/login")).toBeUndefined()
+    expect(safeRedirectPath("/auth/register")).toBeUndefined()
+  })
+
+  it("отвергает не-строку", () => {
+    for (const value of [undefined, null, 42, {}, ["/app"]]) {
+      expect(safeRedirectPath(value)).toBeUndefined()
+    }
+  })
+})
+
+/**
+ * Код отказа читается отдельно от текста (G-080, G-081): один и тот же
+ * `invalid_credentials` значит «email или пароль» на входе и ровно «текущий
+ * пароль» на смене пароля, а `email_taken` называет поле, которое надо
+ * пометить.
+ */
+describe("problemCode (NFR-08: машинный код отказа)", () => {
+  it("достает код из problem+json", () => {
+    expect(problemCode({ code: "invalid_credentials" })).toBe(
+      "invalid_credentials"
+    )
+    expect(problemCode({ code: "id_number_taken", status: 409 })).toBe(
+      "id_number_taken"
+    )
+  })
+
+  it("на неразбираемом отказе кода нет", () => {
+    for (const value of [
+      new Error("failed to load contracts"),
+      null,
+      undefined,
+      "502",
+      {},
+      { code: 401 },
+    ]) {
+      expect(problemCode(value)).toBeUndefined()
+    }
   })
 })

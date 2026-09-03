@@ -112,6 +112,21 @@ export function localeLabel(item: {
   return serverLabel(item)
 }
 
+/**
+ * Подпись категории заявки особого порядка (FR-1203, п. 87).
+ *
+ * Категория - позиция `refdata.special_categories`, и подписи у нее три.
+ * В `SpecialRequestDto` русская лежит в самом `category_label`, казахская и
+ * английская - рядом; кабинеты печатали русскую во всех локалях (G-066).
+ */
+export function requestCategoryLabel(request: {
+  category_label: string
+  category_label_kk?: string | null
+  category_label_en?: string | null
+}): string {
+  return serverLabel(request, "category_label")
+}
+
 /** Минимум, которого хватает для подписи категории: сам справочник шире. */
 export type CategoryLabelSource = {
   code: string

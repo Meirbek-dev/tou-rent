@@ -566,22 +566,34 @@ function BidForm({
         >
           {m.auction_place_bid()}
         </Button>
-        <Button
-          variant="outline"
-          data-testid="pass-turn"
-          onClick={() => pass.mutate()}
+        {/* Пас необратим: участник выбывает из торгов по лоту, и вернуться
+            к ставкам нельзя (FR-601). Одного щелчка для этого мало */}
+        <ConfirmAction
+          title={m.auction_pass_confirm_title()}
+          description={m.auction_pass_confirm_description()}
+          confirmLabel={m.auction_pass()}
           disabled={pass.isPending || !myTurn}
-        >
-          {m.auction_pass()}
-        </Button>
+          onConfirm={() => pass.mutate()}
+          trigger={
+            <Button variant="outline" data-testid="pass-turn">
+              {m.auction_pass()}
+            </Button>
+          }
+        />
       </div>
       {pass.error !== null && (
         <p role="alert" className="text-sm text-destructive">
           {problemMessage(pass.error)}
         </p>
       )}
+      {/* Отказ по ставке озвучивается, как и отказ паса: до сих пор роли
+          у этого абзаца не было, и о нем узнавал только зрячий */}
       {place.error !== null && (
-        <p data-testid="bid-error" className="text-sm text-destructive">
+        <p
+          role="alert"
+          data-testid="bid-error"
+          className="text-sm text-destructive"
+        >
           {problemMessage(place.error)}
         </p>
       )}

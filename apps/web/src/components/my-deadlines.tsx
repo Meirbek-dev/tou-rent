@@ -1,12 +1,13 @@
-import { Link } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import { CalendarCheckIcon } from "lucide-react"
 
 import { m } from "#/paraglide/messages"
+import { ObligationLink } from "@/components/obligation-link"
 import { QueryBoundary } from "@/components/query-boundary"
 import { Skeleton } from "@/components/ui/skeleton"
 import { deadlineLabel } from "@/lib/obligation-labels"
 import { myObligationsQuery } from "@/lib/obligations"
+import { compareObligations } from "@/lib/relative-time"
 import { formatDateTime } from "@/lib/format"
 
 /**
@@ -25,6 +26,9 @@ export function MyDeadlines() {
       <h2 id="deadlines" className="font-heading text-lg font-semibold">
         {m.deadlines_title()}
       </h2>
+      <p className="text-sm text-muted-foreground">
+        {m.participant_deadlines_hint()}
+      </p>
       <QueryBoundary
         query={obligations}
         skeleton={
@@ -54,8 +58,11 @@ export function MyDeadlines() {
                 {m.list_truncated({ count: page.items.length })}
               </p>
             )}
+            {/* Просроченное - сверху, дальше по близости срока: порядок
+                выдачи сервера не обещан, а пропущенный срок стоит дороже
+                любой сортировки по идентификатору */}
             <ul className="flex flex-col gap-2" data-testid="my-deadlines">
-              {page.items.map((obligation) => (
+              {page.items.toSorted(compareObligations).map((obligation) => (
                 <li
                   key={obligation.id}
                   className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border p-3 text-sm"
@@ -63,16 +70,12 @@ export function MyDeadlines() {
                   <span className="font-medium">
                     {deadlineLabel(obligation.action)}
                   </span>
-                  {obligation.tender_id != null &&
-                    obligation.tender_title != null && (
-                      <Link
-                        to="/tenders/$tenderId"
-                        params={{ tenderId: obligation.tender_id }}
-                        className="underline-offset-4 hover:underline"
-                      >
-                        {obligation.tender_title}
-                      </Link>
-                    )}
+                  {/* Договорный срок ссылается на договор: `tender_id` у него
+                      пуст, и строка висела в списке без единой зацепки */}
+                  <ObligationLink
+                    obligation={obligation}
+                    className="underline-offset-4 hover:underline"
+                  />
                   <span
                     className={
                       obligation.status === "overdue"

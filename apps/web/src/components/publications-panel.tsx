@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CheckCheckIcon } from "lucide-react"
 
 import { m } from "#/paraglide/messages"
+import { ConfirmAction } from "@/components/confirm-action"
 import { QueryBoundary } from "@/components/query-boundary"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,7 @@ import { problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
 import {
   pendingPublicationsQuery,
+  publicationSubject,
   publicRecordsQuery,
   publishRecord,
 } from "@/lib/public-records"
@@ -82,6 +84,10 @@ export function PublicationsPanel() {
 function PendingCard({ item }: { item: PendingPublication }) {
   const queryClient = useQueryClient()
 
+  // Заголовок у обоснований ставки один на все договоры особого порядка:
+  // отличают материал номер договора, объект и вторая сторона (G-134)
+  const subject = publicationSubject(item)
+
   const publish = useMutation({
     mutationFn: () => publishRecord(item.kind, item.source_id),
     onSuccess: async () => {
@@ -111,21 +117,38 @@ function PendingCard({ item }: { item: PendingPublication }) {
         </span>
       </div>
       <p className="font-medium">{item.title}</p>
+      {subject !== "" && (
+        <p
+          className="text-sm text-muted-foreground"
+          data-testid="publication-subject"
+        >
+          {subject}
+        </p>
+      )}
       {publish.isError && (
         <p role="alert" className="text-sm text-destructive">
           {problemMessage(publish.error)}
         </p>
       )}
       <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          size="sm"
-          data-testid="publish-record"
+        {/* Публикация выкладывает материал на портал на шесть месяцев
+            (п. 97) и снятию досрочно не подлежит - спрашиваем до, а не
+            объясняем после */}
+        <ConfirmAction
+          title={m.publications_publish_confirm_title()}
+          description={m.publications_publish_confirm_description({
+            title: subject === "" ? item.title : `${item.title} · ${subject}`,
+          })}
+          confirmLabel={m.publications_publish()}
+          variant="default"
           disabled={!item.ready || publish.isPending}
-          onClick={() => publish.mutate()}
-        >
-          {m.publications_publish()}
-        </Button>
+          onConfirm={() => publish.mutate()}
+          trigger={
+            <Button type="button" size="sm" data-testid="publish-record">
+              {m.publications_publish()}
+            </Button>
+          }
+        />
         {/* Публикуется сформированный документ либо замороженный расчет */}
         {!item.ready && (
           <span className="text-sm text-muted-foreground">

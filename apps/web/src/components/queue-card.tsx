@@ -15,6 +15,8 @@ export type QueueItem = {
   label: string
   /** Адрес самой записи готовой строкой; без него строка остается текстом */
   to?: string | undefined
+  /** Якорь внутри страницы адреса - когда запись живет в списке карточек */
+  hash?: string | undefined
   /** Метка времени записи (ISO): рисуется относительной подписью */
   at?: string | null | undefined
   /** Приписка справа от подписи - статус, сумма */
@@ -82,6 +84,7 @@ export function QueueCard({
               ) : (
                 <Link
                   to={item.to}
+                  {...(item.hash === undefined ? {} : { hash: item.hash })}
                   className="min-w-0 flex-1 truncate underline-offset-4 hover:underline"
                 >
                   {item.label}

@@ -18,6 +18,7 @@ import {
   refundDeposit,
 } from "@/lib/contracts"
 import { formatTenge } from "@/lib/format"
+import { ruleMessage } from "@/lib/rule-messages"
 import { notifySuccess } from "@/lib/toast"
 
 /**
@@ -147,7 +148,7 @@ export function DepositPanel({
                       title={m.deposit_refund_confirm_title()}
                       description={m.deposit_refund_confirm_description()}
                       confirmLabel={m.deposit_refund_cta()}
-                      disabled={Number(data.balance) <= 0 || refund.isPending}
+                      disabled={!data.refundable || refund.isPending}
                       onConfirm={() => refund.mutate()}
                       trigger={
                         <Button variant="outline">
@@ -156,6 +157,17 @@ export function DepositPanel({
                       }
                     />
                   </div>
+                  {/* Причину отказа знал только лог: кнопка была активна и
+                      предлагала невозможное. Возврат открывает акт возврата
+                      объекта (Прил. 8), и до него об этом говорят на месте */}
+                  {Number(data.balance) > 0 && data.return_act_at == null && (
+                    <p
+                      className="text-sm text-muted-foreground"
+                      data-testid="deposit-refund-blocked"
+                    >
+                      {ruleMessage("deposit_before_return_act")}
+                    </p>
+                  )}
                 </div>
               )}
 

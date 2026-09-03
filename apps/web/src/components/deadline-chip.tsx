@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 
 import { m } from "#/paraglide/messages"
+import { ObligationLink } from "@/components/obligation-link"
 import { Button } from "@/components/ui/button"
 import {
   Popover,
@@ -11,7 +12,11 @@ import {
 import { formatDateTime } from "@/lib/format"
 import { deadlineLabel } from "@/lib/obligation-labels"
 import { myObligationsQuery } from "@/lib/obligations"
-import { deadlineUrgency, formatRelative } from "@/lib/relative-time"
+import {
+  compareObligations,
+  formatRelative,
+  obligationUrgency,
+} from "@/lib/relative-time"
 import { cn } from "@/lib/utils"
 import { useNowMs } from "@/hooks/use-now"
 import { AlarmClockIcon } from "lucide-react"
@@ -41,14 +46,17 @@ export function DeadlineChip() {
     return null
   }
 
-  const sorted = [...obligations].toSorted(
-    (left, right) => Date.parse(left.due_at) - Date.parse(right.due_at)
-  )
+  // Просроченное - вперед, дальше по близости срока: подпись значка обязана
+  // называть самое горящее, а не самое раннее по дате
+  const sorted = [...obligations].toSorted(compareObligations)
   const nearest = sorted[0]
   if (nearest === undefined) return null
 
-  const urgency = deadlineUrgency(nearest.due_at, now)
-  const relative = formatRelative(nearest.due_at, now)
+  const urgency = obligationUrgency(nearest, now)
+  const relative =
+    urgency === "overdue"
+      ? m.deadline_chip_overdue()
+      : formatRelative(nearest.due_at, now)
 
   return (
     <Popover>
@@ -120,11 +128,12 @@ function DeadlineRow({
   obligation: ObligationDto
   now: number
 }) {
-  const urgency = deadlineUrgency(obligation.due_at, now)
+  const urgency = obligationUrgency(obligation, now)
 
   return (
     <li className="flex flex-col gap-1 border-b px-4 py-3 text-sm last:border-b-0">
       <span className="font-medium">{deadlineLabel(obligation.action)}</span>
+      <ObligationLink obligation={obligation} />
       <span className="flex flex-wrap items-center gap-x-2 text-xs">
         <span
           className={cn(
@@ -136,7 +145,13 @@ function DeadlineRow({
           )}
           suppressHydrationWarning
         >
-          {formatDateTime(obligation.due_at) ?? "-"}
+          {urgency === "overdue"
+            ? m.deadline_overdue({
+                date: formatDateTime(obligation.due_at) ?? "-",
+              })
+            : m.deadline_due({
+                date: formatDateTime(obligation.due_at) ?? "-",
+              })}
         </span>
       </span>
     </li>
