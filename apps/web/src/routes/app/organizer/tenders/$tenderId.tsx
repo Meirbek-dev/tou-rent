@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { TenderChangesPanel } from "@/components/tender-changes-panel"
 import { FailurePanel } from "@/components/failure-panel"
+import { TenderCancelledBanner } from "@/components/tender-cancelled-banner"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { Button } from "@/components/ui/button"
 import { buttonVariants } from "@/components/ui/button"
@@ -182,6 +183,7 @@ function ManageTender({
       // Новые сроки делают прежний отказ публикации неактуальным.
       // Сбрасываем состояние отдельной мутации сразу, без перезагрузки страницы.
       transition.reset()
+      notifySuccess(m.tender_dates_saved_toast())
       await refresh()
     },
   })
@@ -198,7 +200,16 @@ function ManageTender({
       }
       return data
     },
-    onSuccess: refresh,
+    // Единственным признаком публикации была исчезнувшая кнопка: переход
+    // необратим, и подтвердить его исход обязан сам экран
+    onSuccess: async (_data, action) => {
+      notifySuccess(
+        action === "publish"
+          ? m.tender_published_toast()
+          : m.tender_acceptance_opened_toast()
+      )
+      await refresh()
+    },
   })
 
   // Удалить можно только черновик (FR-301): объявленный тендер отменяют
@@ -274,22 +285,38 @@ function ManageTender({
         }
         actions={
           <>
+            {/* Публикация выводит объявление на портал (FR-303) и назад не
+                отыгрывается: объявленный тендер только отменяют, а условия
+                меняют редакцией документации */}
             {isDraft && (
-              <Button
-                data-testid="publish-tender"
-                onClick={() => transition.mutate("publish")}
+              <ConfirmAction
+                title={m.tender_publish_confirm_title()}
+                description={m.tender_publish_confirm_description()}
+                confirmLabel={m.tender_publish()}
+                variant="default"
                 disabled={transition.isPending}
-              >
-                {m.tender_publish()}
-              </Button>
+                onConfirm={() => transition.mutate("publish")}
+                trigger={
+                  <Button type="button" data-testid="publish-tender">
+                    {m.tender_publish()}
+                  </Button>
+                }
+              />
             )}
             {tender.status === "announced" && (
-              <Button
-                onClick={() => transition.mutate("open-acceptance")}
+              <ConfirmAction
+                title={m.tender_open_acceptance_confirm_title()}
+                description={m.tender_open_acceptance_confirm_description()}
+                confirmLabel={m.tender_open_acceptance()}
+                variant="default"
                 disabled={transition.isPending}
-              >
-                {m.tender_open_acceptance()}
-              </Button>
+                onConfirm={() => transition.mutate("open-acceptance")}
+                trigger={
+                  <Button type="button" data-testid="open-acceptance">
+                    {m.tender_open_acceptance()}
+                  </Button>
+                }
+              />
             )}
             {/* Удаление стоит рядом с публикацией и только у черновика:
                 объявленный тендер отсюда исчезает, и остается отмена */}
@@ -335,6 +362,10 @@ function ManageTender({
         </p>
       )}
 
+      {/* Отмена (п. 82): организатору она нужна тем же текстом, что и
+          порталу, - дата и основание, а не один значок в шапке */}
+      <TenderCancelledBanner tender={tender} />
+
       {/* Новая редакция документации касается всего экрана, а не одной
           вкладки: баннер остается на виду */}
       <AmendmentsBanner tenderId={tenderId} />
@@ -342,10 +373,9 @@ function ManageTender({
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          void navigate({
-            search: { tab: value as (typeof TABS)[number] },
-            replace: true,
-          })
+          // Вкладка пишется в историю, а не подменяет запись: «Назад»
+          // возвращает к предыдущей вкладке, а не уводит из карточки
+          void navigate({ search: { tab: value as (typeof TABS)[number] } })
         }}
         className="gap-6"
       >
@@ -665,6 +695,7 @@ function LotCancellation({
     mutationFn: () => cancelLot(lot.id, reason),
     onSuccess: async () => {
       setReason("")
+      notifySuccess(m.lot_cancelled_toast())
       await onChanged()
     },
   })
@@ -678,31 +709,44 @@ function LotCancellation({
     )
   }
 
+  // Отмена лота (п. 78) назад не отыгрывается: объект освобождается, взносы
+  // идут на возврат. Поэтому здесь не форма с отправкой, а подтверждаемое
+  // действие - и отказ сервера остается на экране, а не пропадает молча
   return (
-    <form
-      className="flex items-center gap-2"
-      onSubmit={(event) => {
-        event.preventDefault()
-        cancel.mutate()
-      }}
-    >
-      <Input
-        aria-label={m.cancel_reason_label()}
-        className="max-w-40"
-        placeholder={m.cancel_reason_label()}
-        value={reason}
-        onChange={(event) => setReason(event.target.value)}
-      />
-      <Button
-        type="submit"
-        variant="outline"
-        size="sm"
-        data-testid="cancel-lot"
-        disabled={cancel.isPending || reason === ""}
-      >
-        {m.lot_cancel()}
-      </Button>
-    </form>
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <Input
+          aria-label={m.cancel_reason_label()}
+          className="max-w-40"
+          placeholder={m.cancel_reason_label()}
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+        />
+        <ConfirmAction
+          title={m.lot_cancel_confirm_title()}
+          description={m.lot_cancel_confirm_description()}
+          confirmLabel={m.lot_cancel()}
+          variant="destructive-solid"
+          disabled={cancel.isPending || reason === ""}
+          onConfirm={() => cancel.mutate()}
+          trigger={
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              data-testid="cancel-lot"
+            >
+              {m.lot_cancel()}
+            </Button>
+          }
+        />
+      </div>
+      {cancel.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {problemMessage(cancel.error)}
+        </p>
+      )}
+    </div>
   )
 }
 

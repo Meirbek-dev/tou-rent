@@ -33,6 +33,7 @@ const DEADLINE_LABELS: Record<string, () => string> = {
   deposit_payment: m.deadline_deposit_payment,
   deposit_top_up: m.deadline_deposit_top_up,
   deposit_refund: m.deadline_deposit_refund,
+  hold_opening: m.deadline_hold_opening,
 }
 
 /** Читаемая подпись срока; неизвестный код остается кодом, а не пустотой. */

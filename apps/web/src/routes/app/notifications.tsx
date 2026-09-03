@@ -1,5 +1,4 @@
-import { useState } from "react"
-import { Link, createFileRoute } from "@tanstack/react-router"
+import { Link, createFileRoute, useRouteContext } from "@tanstack/react-router"
 import {
   useMutation,
   useQuery,
@@ -32,6 +31,21 @@ import type { NotificationKind } from "@/components/notification-bell"
 // Страница истории уведомлений (FR-1301): полный список получателя,
 // непрочитанные выделены, отметка о прочтении.
 export const Route = createFileRoute("/app/notifications")({
+  /**
+   * Вид события - в адресе страницы, а не в состоянии компонента (как
+   * вкладки в `lib/tabs.ts`). В `useState` фильтр терялся кнопкой «назад»
+   * и не переживал пересылку ссылки: «посмотри свои сроки по обязательствам»
+   * приводило собеседника к неотфильтрованной ленте.
+   *
+   * Неизвестное значение молча выбрасывается: адрес приходит извне, и пустой
+   * экран за опечатку в нем наказывал бы читателя.
+   */
+  validateSearch: (
+    search: Record<string, unknown>
+  ): { kind?: NotificationKind } => {
+    const known = NOTIFICATION_KINDS.find((value) => value === search["kind"])
+    return known === undefined ? {} : { kind: known }
+  },
   loader: async ({ context }) => {
     await context.queryClient.ensureQueryData(notificationsQuery)
   },
@@ -43,6 +57,7 @@ export const Route = createFileRoute("/app/notifications")({
 const ALL_KINDS = "all"
 
 function NotificationsPage() {
+  const { user } = useRouteContext({ from: "/app" })
   const queryClient = useQueryClient()
   const query = useSuspenseQuery(notificationsQuery)
   // Подпись категории особого порядка - из справочника на языке
@@ -53,9 +68,12 @@ function NotificationsPage() {
       (notification) => notification.kind === "special_decided"
     ),
   })
-  const [kind, setKind] = useState<NotificationKind | typeof ALL_KINDS>(
-    ALL_KINDS
-  )
+  const navigate = Route.useNavigate()
+  const { kind = ALL_KINDS } = Route.useSearch()
+
+  // Переход, а не замена: «назад» обязано возвращать к прежнему фильтру
+  const setKind = (next: NotificationKind | typeof ALL_KINDS) =>
+    void navigate({ search: next === ALL_KINDS ? {} : { kind: next } })
 
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: ["notifications"] })
@@ -162,7 +180,7 @@ function NotificationsPage() {
                 <ul className="flex flex-col gap-3">
                   {items.map((notification) => {
                     const unread = notification.read_at == null
-                    const target = notificationTarget(notification)
+                    const target = notificationTarget(notification, user.roles)
                     const body = (
                       <>
                         <span className={unread ? "font-medium" : undefined}>
@@ -192,7 +210,10 @@ function NotificationsPage() {
                           // «вы допущены к торгам» было текстом, и заявку
                           // приходилось искать руками
                           <Link
-                            to={target}
+                            to={target.to}
+                            {...(target.hash === undefined
+                              ? {}
+                              : { hash: target.hash })}
                             className="flex min-w-0 flex-1 flex-col gap-1 underline-offset-4 hover:underline"
                           >
                             {body}

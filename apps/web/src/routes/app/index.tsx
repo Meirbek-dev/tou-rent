@@ -57,12 +57,16 @@ function AppHome() {
   const stats = queueStats(user.roles, counts)
   const recent: QueueItem[] = (notifications.data?.items ?? [])
     .slice(0, 5)
-    .map((notification) => ({
-      id: notification.id,
-      label: notificationText(notification, categories),
-      to: notificationTarget(notification),
-      at: notification.created_at,
-    }))
+    .map((notification) => {
+      const target = notificationTarget(notification, user.roles)
+      return {
+        id: notification.id,
+        label: notificationText(notification, categories),
+        to: target?.to,
+        hash: target?.hash,
+        at: notification.created_at,
+      }
+    })
 
   return (
     <PageShell>

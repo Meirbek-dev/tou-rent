@@ -44,6 +44,33 @@ export async function changePassword(
 }
 
 /**
+ * Новый код подтверждения на тот же адрес (FR-1501).
+ *
+ * Ответ сервера всегда 204 - и на неизвестный адрес, и на уже подтвержденный:
+ * маршрут открыт до входа, и разные ответы перечисляли бы учетные записи
+ * (NFR-07). Поэтому здесь нет ветки «такого адреса нет»: интерфейс говорит
+ * ровно то, что знает сервер, - «если учетная запись ждет подтверждения,
+ * письмо отправлено».
+ */
+export async function resendConfirmation(email: string): Promise<void> {
+  const { error } = await api.POST("/api/v1/auth/resend-confirmation", {
+    body: { email },
+  })
+  if (error !== undefined) throw error as unknown
+}
+
+/** Подтверждение регистрации кодом из письма (FR-1501); 204 без тела. */
+export async function confirmRegistration(
+  email: string,
+  code: string
+): Promise<void> {
+  const { error } = await api.POST("/api/v1/auth/confirm-registration", {
+    body: { email, verification_channel: "email", code },
+  })
+  if (error !== undefined) throw error as unknown
+}
+
+/**
  * Подробность отказа из problem+json (RFC 9457, NFR-08); `null` - ответ
  * не разбирается.
  *
@@ -88,6 +115,46 @@ export function problemDetail(error: unknown): string | null {
     }
   }
   return null
+}
+
+/**
+ * Машинный код отказа из problem+json; `undefined` - ответ не разбирается.
+ *
+ * `problemDetail` отвечает на вопрос «что показать», а форме нужен другой:
+ * «какое поле сервер отверг». Один и тот же `invalid_credentials` на входе
+ * значит «email или пароль», а на смене пароля - ровно «текущий пароль»,
+ * и различает их только код.
+ */
+export function problemCode(error: unknown): string | undefined {
+  if (error !== null && typeof error === "object") {
+    const code = (error as Partial<Problem>).code
+    if (typeof code === "string") return code
+  }
+  return undefined
+}
+
+/**
+ * Адрес возврата после входа (FR-1501); `undefined` - значение не годится.
+ *
+ * Путь приезжает в query-параметре, то есть из чужой ссылки: без проверки
+ * `?redirect=https://evil.example` превратил бы страницу входа в открытый
+ * перенаправитель. Годится ровно один вид значения - путь этого же портала:
+ * начинается с одного «/», а не с «//» и не с «/\» - оба браузер читает как
+ * адрес другого хоста. Управляющие символы браузер из адреса молча
+ * выбрасывает, и `/<TAB>/evil.example` после этого снова протокольно-
+ * относительный, поэтому строка с ними отвергается целиком. Сам вход
+ * исключен отдельно: возврат на `/auth/...` замкнул бы петлю.
+ */
+export function safeRedirectPath(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  if (!value.startsWith("/")) return undefined
+  if (value.startsWith("//") || value.startsWith("/\\")) return undefined
+  if (value.startsWith("/auth/")) return undefined
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+    if (code < 0x20 || code === 0x7f) return undefined
+  }
+  return value
 }
 
 /**

@@ -22,7 +22,13 @@ import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { deadlinePassed } from "@/lib/intake"
 import { myApplicationsQuery } from "@/lib/participant"
-import { ID_NUMBER_LENGTH, applicantDetailsErrors } from "@/lib/validation"
+import {
+  ID_NUMBER_LENGTH,
+  PRICE_MAX,
+  applicantDetailsErrors,
+  priceError,
+  serverPriceError,
+} from "@/lib/validation"
 
 import type { TenderDto } from "@/lib/api"
 import type { ApplicantKind } from "@/lib/participant"
@@ -136,10 +142,24 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
     },
   })
 
+  // Цена проверяется до диалога подтверждения. Атрибут `min` на поле мертв:
+  // отправку ведет кнопка-триггер `ConfirmAction` (`type="button"`), до
+  // браузерной проверки формы дело не доходит - и ноль с минусом доезжали
+  // до сервера, а его отказ печатался машинным кодом в скобках
+  const priceProblemMessage = priceError(price)
+  const serverPrice = submit.isError
+    ? serverPriceError(submit.error)
+    : undefined
+  const shownPriceError =
+    (submitAttempted || price !== "" ? priceProblemMessage : undefined) ??
+    serverPrice
+
   // Подтверждение показывается только по заполненной форме: пока она неполна,
   // та же кнопка остается обычной отправкой и вскрывает ошибки полей
   const complete =
-    Object.keys(errors).length === 0 && price !== "" && lotId !== ""
+    Object.keys(errors).length === 0 &&
+    priceProblemMessage === undefined &&
+    lotId !== ""
 
   // Срок вышел - заявку уже не принимают (FR-401, п. 45). Раньше мастер
   // оставался открытым, и участник узнавал об этом отказом
@@ -171,6 +191,15 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
         >
           <Panel title={`1. ${m.apply_details_legend()}`} titleAs="h2">
             <div className="flex flex-col gap-4">
+              {/* Об обязательном пакете из пяти PDF (п. 46) участник узнавал
+                  после подачи - из карточки заявки. Здесь он назван до того,
+                  как форма заполнена: собрать документы придется все равно */}
+              <p
+                className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground"
+                data-testid="apply-package-notice"
+              >
+                {m.apply_package_notice()}
+              </p>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="apply-lot">{m.tender_lot_object()}</Label>
                 <NativeSelect
@@ -314,17 +343,23 @@ function ApplyForm({ tender }: { tender: TenderDto }) {
                 type="number"
                 min="0.01"
                 step="0.01"
+                max={PRICE_MAX}
                 className="max-w-56 tabular-nums"
+                aria-invalid={shownPriceError !== undefined}
+                aria-describedby="apply-price-error"
                 value={price}
                 onChange={(event) => setPrice(event.target.value)}
               />
+              <FieldError id="apply-price-error" message={shownPriceError} />
               <p className="text-sm text-muted-foreground">
                 {m.apply_price_hint()}
               </p>
             </div>
           </Panel>
 
-          {submit.isError && (
+          {/* Отказ по цене уже стоит у поля - в общем абзаце он был бы вторым
+              и с машинным кодом в скобках */}
+          {submit.isError && serverPrice === undefined && (
             <p role="alert" className="text-sm text-destructive">
               {problemMessage(submit.error)}
             </p>

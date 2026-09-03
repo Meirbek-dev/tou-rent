@@ -9,6 +9,7 @@ import { DeadlineBlock } from "@/components/deadline-block"
 import { EmptyState } from "@/components/empty-state"
 import { ProtocolsPanel } from "@/components/protocols-panel"
 import { PublicShell } from "@/components/public-shell"
+import { TenderCancelledBanner } from "@/components/tender-cancelled-banner"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { buttonVariants } from "@/components/ui/button"
 import {
@@ -61,14 +62,23 @@ export const Route = createFileRoute("/tenders/$tenderId")({
 
     return tender
   },
-  head: ({ loaderData }) => {
+  head: ({ match, loaderData }) => {
     // Без данных загрузчика (404) og:* не трогаем: корневые значения
-    // портала уместнее пустой или служебной карточки ссылки
-    const title = loaderData ? localizedTenderTitle(loaderData) : null
+    // портала уместнее пустой или служебной карточки ссылки. А вот
+    // заголовок вкладки на 404 обязан назвать причину: «ToU Rent» на
+    // экране «Тендер не найден» - страница без имени в истории браузера
+    // и в списке вкладок, и по ней не отличить ошибку в ссылке от
+    // работающей карточки
+    if (loaderData === undefined) {
+      return match.status === "notFound"
+        ? { meta: [{ title: `${m.tender_not_found_title()} - ToU Rent` }] }
+        : { meta: [] }
+    }
+    const title = localizedTenderTitle(loaderData)
     return {
       meta: [
-        { title: title === null ? "ToU Rent" : `${title} - ToU Rent` },
-        ...(title === null ? [] : [{ property: "og:title", content: title }]),
+        { title: `${title} - ToU Rent` },
+        { property: "og:title", content: title },
       ],
     }
   },
@@ -251,6 +261,10 @@ function TenderPage() {
             />
           </div>
         </header>
+
+        {/* Отмена (п. 82) - словами и с датой: до сих пор об этом сообщал
+            один значок в углу, и карточка читалась как живое объявление */}
+        <TenderCancelledBanner tender={tender} />
 
         <AmendmentsBanner tenderId={tender.id} />
 

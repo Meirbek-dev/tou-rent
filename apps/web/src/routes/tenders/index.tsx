@@ -135,37 +135,39 @@ function TendersPage() {
           </ul>
         )}
 
-        <nav
-          aria-label={m.tenders_next_page()}
-          className="flex flex-wrap items-center gap-3 border-t pt-6"
-        >
-          <p className="text-sm text-muted-foreground">
-            {m.pagination_on_page()}:{" "}
-            <span className="font-medium text-foreground tabular-nums">
-              {page.items.length}
-            </span>
-          </p>
-          <div className="ml-auto flex items-center gap-3">
-            {search.after !== undefined && (
-              <Link
-                to="/tenders"
-                search={{ status: search.status, q: search.q }}
-                className={cn(buttonVariants({ variant: "outline" }))}
-              >
-                {m.tenders_first_page()}
-              </Link>
-            )}
-            {page.next_after != null && (
-              <Link
-                to="/tenders"
-                search={{ ...search, after: page.next_after }}
-                className={cn(buttonVariants({ variant: "outline" }))}
-              >
-                {m.tenders_next_page()}
-              </Link>
-            )}
-          </div>
-        </nav>
+        {/* Счетчик здесь был второй: «На этой странице» считало элементы
+            ответа api, а фильтры реестра применяются к странице уже
+            на клиенте (A-017) - и два числа про один и тот же список
+            расходились, стоило отфильтровать. Осталось одно, над списком,
+            и оно про то, что видно. Сама навигация появляется только тогда,
+            когда есть куда идти: иначе под списком висела пустая линейка */}
+        {(search.after !== undefined || page.next_after != null) && (
+          <nav
+            aria-label={m.tenders_next_page()}
+            className="flex flex-wrap items-center gap-3 border-t pt-6"
+          >
+            <div className="ml-auto flex items-center gap-3">
+              {search.after !== undefined && (
+                <Link
+                  to="/tenders"
+                  search={{ status: search.status, q: search.q }}
+                  className={cn(buttonVariants({ variant: "outline" }))}
+                >
+                  {m.tenders_first_page()}
+                </Link>
+              )}
+              {page.next_after != null && (
+                <Link
+                  to="/tenders"
+                  search={{ ...search, after: page.next_after }}
+                  className={cn(buttonVariants({ variant: "outline" }))}
+                >
+                  {m.tenders_next_page()}
+                </Link>
+              )}
+            </div>
+          </nav>
+        )}
       </div>
     </PublicShell>
   )

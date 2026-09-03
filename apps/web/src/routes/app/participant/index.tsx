@@ -6,16 +6,21 @@ import { Panel } from "@/components/panel"
 import { ApplicationStatusBadge } from "@/components/application-status-badge"
 import { EmptyState } from "@/components/empty-state"
 import { LandInvestorPanel } from "@/components/land-panels"
+import { MyDeadlines } from "@/components/my-deadlines"
 import { MyProtocols } from "@/components/my-protocols"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
-import { Button, buttonVariants } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { DeadlineBlock } from "@/components/deadline-block"
 import { useNowMs } from "@/hooks/use-now"
 import { localizedTenderTitle, tendersPageQuery } from "@/lib/api"
 import { formatDateTime, formatTenge } from "@/lib/format"
-import { deadlinePassed } from "@/lib/intake"
-import { myApplicationsQuery } from "@/lib/participant"
-import { mySpecialRequestsQuery, specialStatusLabel } from "@/lib/special"
+import { intakeClosed } from "@/lib/intake"
+import { applicationSubject, myApplicationsQuery } from "@/lib/participant"
+import {
+  mySpecialRequestsQuery,
+  requestCategoryLabel,
+  specialStatusLabel,
+} from "@/lib/special"
 import { cn } from "@/lib/utils"
 import { ClipboardListIcon, InboxIcon } from "lucide-react"
 
@@ -61,10 +66,18 @@ function ParticipantHome() {
   const { data: applications } = useSuspenseQuery(myApplicationsQuery)
   const { data: tendersPage } = useSuspenseQuery(tendersPageQuery())
   const { data: specialRequests } = useSuspenseQuery(mySpecialRequestsQuery)
-  const accepting = tendersPage.items.filter((t) => t.status === "accepting")
   // Прием закрывает срок, а статус переводит процедура: пока она не прошла,
-  // тендер остается `accepting` с вышедшим сроком (FR-401, п. 45)
+  // тендер остается `accepting` с вышедшим сроком (FR-401, п. 45). Витрина
+  // звала участника подавать заявку по таким тендерам и тут же отвечала ему
+  // «Прием заявок закрыт» - дважды в одной строке, кнопкой и блоком срока
   const nowMs = useNowMs()
+  const accepting = tendersPage.items.filter((t) => t.status === "accepting")
+  const open = accepting.filter(
+    (t) => !intakeClosed(t.status, t.submission_deadline, nowMs)
+  )
+  const awaitingOpening = accepting.filter((t) =>
+    intakeClosed(t.status, t.submission_deadline, nowMs)
+  )
 
   const ordered = applications.toSorted(
     (left, right) =>
@@ -87,7 +100,12 @@ function ParticipantHome() {
         }
       />
 
-      {/* Свои заявки - первым: это и есть рабочая очередь участника */}
+      {/* Сроки Правил - до заявок: просроченный срок стоит дороже, чем
+          порядок дел, и до сих пор участник видел его только значком в шапке
+          или письмом-эскалацией - на дашборде блока не было вовсе */}
+      <MyDeadlines />
+
+      {/* Свои заявки: рабочая очередь участника */}
       <Panel title={m.my_applications_title()} titleAs="h2">
         {ordered.length === 0 ? (
           <EmptyState
@@ -108,9 +126,7 @@ function ParticipantHome() {
                   params={{ applicationId: application.id }}
                   className="font-medium underline-offset-4 hover:underline"
                 >
-                  {m.application_card_title({
-                    id: application.id.slice(0, 8),
-                  })}
+                  {applicationSubject(application)}
                 </Link>
                 {NEXT_STEP[application.status] !== undefined && (
                   <span className="text-sm text-muted-foreground">
@@ -179,7 +195,7 @@ function ParticipantHome() {
                   {m.special_card_title({ id: request.id.slice(0, 8) })}
                 </Link>
                 <span className="text-sm text-muted-foreground">
-                  {request.category_label}
+                  {requestCategoryLabel(request)}
                 </span>
                 <span
                   className="ml-auto text-xs text-muted-foreground tabular-nums"
@@ -195,7 +211,7 @@ function ParticipantHome() {
 
       {/* Открытый прием - последним: это витрина, а не работа по своим делам */}
       <Panel title={m.open_tenders_title()} titleAs="h2">
-        {accepting.length === 0 ? (
+        {open.length === 0 ? (
           <EmptyState
             icon={InboxIcon}
             title={m.open_tenders_empty()}
@@ -210,8 +226,8 @@ function ParticipantHome() {
             }
           />
         ) : (
-          <ul className="flex flex-col gap-3">
-            {accepting.map((tender) => (
+          <ul className="flex flex-col gap-3" data-testid="open-tenders">
+            {open.map((tender) => (
               <li
                 key={tender.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
@@ -226,24 +242,45 @@ function ParticipantHome() {
                   </p>
                 </div>
                 <DeadlineBlock value={tender.submission_deadline} />
-                {deadlinePassed(tender.submission_deadline, nowMs) ? (
-                  /* Мастер подачи все равно отказал бы по правилу
-                     `application_deadline_passed` - но уже по заполненной форме */
-                  <Button disabled>{m.tender_closed()}</Button>
-                ) : (
-                  <Link
-                    to="/app/participant/apply/$tenderId"
-                    params={{ tenderId: tender.id }}
-                    className={cn(buttonVariants())}
-                  >
-                    {m.apply_cta()}
-                  </Link>
-                )}
+                <Link
+                  to="/app/participant/apply/$tenderId"
+                  params={{ tenderId: tender.id }}
+                  className={cn(buttonVariants())}
+                >
+                  {m.apply_cta()}
+                </Link>
               </li>
             ))}
           </ul>
         )}
       </Panel>
+
+      {/* Срок вышел, вскрытия еще не было: подавать нечего, но и прятать
+          такой тендер незачем - участник видит, чего ждет. Кнопки здесь нет
+          вовсе: «Прием заявок закрыт» уже сказано блоком срока */}
+      {awaitingOpening.length > 0 && (
+        <Panel title={m.participant_intake_over_title()} titleAs="h2">
+          <ul className="flex flex-col gap-3" data-testid="intake-over-tenders">
+            {awaitingOpening.map((tender) => (
+              <li
+                key={tender.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4"
+              >
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <TenderStatusBadge
+                    status={tender.status}
+                    deadline={tender.submission_deadline}
+                  />
+                  <p className="font-heading text-lg font-semibold">
+                    {localizedTenderTitle(tender)}
+                  </p>
+                </div>
+                <DeadlineBlock value={tender.submission_deadline} />
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      )}
     </div>
   )
 }

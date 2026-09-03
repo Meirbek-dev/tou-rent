@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link } from "@tanstack/react-router"
+import { Link, useRouteContext } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 import { Button } from "@/components/ui/button"
@@ -185,10 +185,16 @@ const KIND_LABELS: Record<NotificationKind, () => string> = {
  * участником, значит вести в 403. Тендер поэтому открывается публичной
  * карточкой, а заявка и заявка особого порядка - своими, они и так
  * принадлежат получателю.
+ *
+ * Исключение - договорный срок Правил: он приходит по роли, а не владельцу,
+ * и один и тот же `contract_id` уезжает секретарю, финансисту и нанимателю.
+ * Кабинет нанимателя открывается только тому, у кого эта роль есть; для
+ * остальных ссылки нет - лучше текст без ссылки, чем ссылка в чужой кабинет.
  */
 export function notificationTarget(
-  notification: NotificationDto
-): string | undefined {
+  notification: NotificationDto,
+  roles: readonly string[] = []
+): NotificationTarget | undefined {
   const payload = notification.payload
 
   switch (notification.kind) {
@@ -198,9 +204,20 @@ export function notificationTarget(
       return path("/app/participant/applications", payload, "application_id")
     case "application_rejected":
       return path("/app/participant/applications", payload, "application_id")
-    // Срок Правил может быть и внетендерным - тогда открывать нечего
+    // Срок Правил бывает договорным: `tender_id` у такого события пуст, и
+    // «Срок истек: представить документы для сверки» было текстом без цели -
+    // пять уведомлений из тринадцати. Договор открывается якорем карточки
+    // в кабинете нанимателя; совсем внетендерный срок остается без ссылки
     case "obligation_overdue":
-      return path("/tenders", payload, "tender_id")
+      return (
+        path("/tenders", payload, "tender_id") ??
+        // Договорный срок открывается в кабинете нанимателя, и потому только
+        // ему: тот же срок приходит по роли секретарю и финансисту, а их
+        // охрана `/app/participant` завернула бы на общий дашборд
+        (roles.includes("participant")
+          ? contractPath(payload, "contract_id")
+          : undefined)
+      )
     case "runner_up_offer":
       return path("/tenders", payload, "tender_id")
     case "tender_amended":
@@ -216,22 +233,48 @@ export function notificationTarget(
   }
 }
 
+/**
+ * Цель уведомления: маршрут и (для записи внутри списка) якорь.
+ *
+ * Пара, а не готовая строка: `<Link to>` разбирает только путь, и «/x#y»
+ * уехало бы в него куском пути. Якорь нужен договору - своего маршрута
+ * у него нет, кабинет нанимателя показывает их списком карточек.
+ */
+export type NotificationTarget = { to: string; hash?: string }
+
 /** Адрес записи по идентификатору из payload'а; без него ссылки нет. */
 function path(
   base: string,
   payload: unknown,
   field: string
-): string | undefined {
+): NotificationTarget | undefined {
+  const value = payloadId(payload, field)
+  return value === undefined ? undefined : { to: `${base}/${value}` }
+}
+
+/** Договор - якорь на своей карточке в кабинете нанимателя. */
+function contractPath(
+  payload: unknown,
+  field: string
+): NotificationTarget | undefined {
+  const value = payloadId(payload, field)
+  return value === undefined
+    ? undefined
+    : { to: "/app/participant/contracts", hash: `contract-${value}` }
+}
+
+function payloadId(payload: unknown, field: string): string | undefined {
   if (typeof payload !== "object" || payload === null) return undefined
   const value = (payload as Record<string, unknown>)[field]
   if (typeof value !== "string" || value === "") return undefined
-  return `${base}/${value}`
+  return value
 }
 
 /** Колокольчик центра уведомлений (FR-1301): счетчик непрочитанных,
  * последние события, SSE-доставка ≤1 с. */
 export function NotificationBell() {
   useNotificationStream()
+  const { user } = useRouteContext({ from: "/app" })
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const { data: unread } = useQuery(unreadCountQuery)
@@ -318,7 +361,7 @@ export function NotificationBell() {
           <ul className="flex max-h-80 flex-col overflow-y-auto overscroll-contain">
             {recent.map((notification) => {
               const unreadRow = notification.read_at == null
-              const target = notificationTarget(notification)
+              const target = notificationTarget(notification, user.roles)
               const body = (
                 <>
                   <span className="flex items-start gap-2">
@@ -363,7 +406,10 @@ export function NotificationBell() {
                     // Всплывающее окно закрывается само: после перехода оно
                     // осталось бы висеть поверх той самой страницы, куда вело
                     <Link
-                      to={target}
+                      to={target.to}
+                      {...(target.hash === undefined
+                        ? {}
+                        : { hash: target.hash })}
                       onClick={() => setOpen(false)}
                       className="flex flex-col gap-1 px-4 py-3 hover:bg-muted/50"
                     >

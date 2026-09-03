@@ -24,16 +24,23 @@ import { lotAuctionQuery } from "@/lib/auctions"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import {
+  REQUIRED_DOCUMENT_KINDS,
+  applicationPackageProgress,
   applicationPackageState,
+  applicationSubject,
   myApplicationsQuery,
   reasonLabel,
   rejectionReasonsQuery,
 } from "@/lib/participant"
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
-import { uploadError } from "@/lib/validation"
+import { PDF_ACCEPT, pdfUploadError } from "@/lib/validation"
 
-import type { ApplicationDto, PackageState } from "@/lib/participant"
+import type {
+  ApplicationDocumentKind,
+  ApplicationDto,
+  PackageState,
+} from "@/lib/participant"
 import type { ReactNode } from "react"
 
 /**
@@ -47,21 +54,6 @@ const PACKAGE_NOTE: Record<PackageState, () => string> = {
   not_required: m.application_package_not_required,
   incomplete: m.application_package_incomplete,
 }
-
-type ApplicationDocumentKind =
-  | "application_form"
-  | "registration_certificate"
-  | "tax_clearance"
-  | "guarantee_payment"
-  | "qualification_documents"
-
-const DOCUMENT_KINDS: readonly ApplicationDocumentKind[] = [
-  "application_form",
-  "registration_certificate",
-  "tax_clearance",
-  "guarantee_payment",
-  "qualification_documents",
-]
 
 function documentKindLabel(kind: string): string {
   switch (kind) {
@@ -193,10 +185,10 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
       </nav>
 
       <PageHeader
-        title={
-          tender?.title ??
-          m.application_card_title({ id: application.id.slice(0, 8) })
-        }
+        // Предмет, а не идентификатор: заголовком страницы стояло русское
+        // название тендера (на /kk/ - тоже русское), а подписью - восемь
+        // шестнадцатеричных цифр, по которым заявку не узнать
+        title={applicationSubject(application)}
         description={m.application_card_title({
           id: application.id.slice(0, 8),
         })}
@@ -275,9 +267,23 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
         title={m.application_files_title()}
         contentClassName="flex flex-col gap-4"
       >
-        <p className="text-sm text-muted-foreground">
-          {PACKAGE_NOTE[applicationPackageState(application)]()}
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-sm text-muted-foreground">
+            {PACKAGE_NOTE[applicationPackageState(application)]()}
+          </p>
+          {/* Сколько позиций пакета закрыто (п. 46): «собран / не собран»
+              не говорило, сколько документов осталось приложить */}
+          {applicationPackageState(application) !== "not_required" && (
+            <p
+              className="text-sm font-medium tabular-nums"
+              data-testid="package-progress"
+            >
+              {m.application_package_progress(
+                applicationPackageProgress(application)
+              )}
+            </p>
+          )}
+        </div>
         {application.files.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             {m.application_files_empty()}
@@ -314,7 +320,7 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
             className="flex flex-wrap items-end gap-3"
             onSubmit={(event) => {
               event.preventDefault()
-              const problem = uploadError(fileInput.current?.files?.[0])
+              const problem = pdfUploadError(fileInput.current?.files?.[0])
               setFileError(problem)
               if (problem !== undefined) return
               upload.mutate()
@@ -334,7 +340,7 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
                     )
                   }
                 >
-                  {DOCUMENT_KINDS.map((kind) => (
+                  {REQUIRED_DOCUMENT_KINDS.map((kind) => (
                     <NativeSelectOption key={kind} value={kind}>
                       {documentKindLabel(kind)}
                     </NativeSelectOption>
@@ -349,13 +355,13 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
                   id="application-file"
                   type="file"
                   required
-                  accept="application/pdf,.pdf"
+                  accept={PDF_ACCEPT}
                   aria-invalid={fileError !== undefined}
                   ref={fileInput}
                   onChange={() => {
                     const file = fileInput.current?.files?.[0]
                     setFileError(
-                      file === undefined ? undefined : uploadError(file)
+                      file === undefined ? undefined : pdfUploadError(file)
                     )
                   }}
                 />

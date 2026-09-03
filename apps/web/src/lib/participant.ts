@@ -4,6 +4,8 @@ import { queryOptions } from "@tanstack/react-query"
 // `imports` в package.json и потому разрешается и раннером тестов - без
 // этого `participant.test.ts` не поднимается (см. тот же комментарий в
 // `lib/auth.ts`)
+import { m } from "#/paraglide/messages"
+import { getLocale } from "#/paraglide/runtime"
 import { api } from "#/lib/api"
 import { serverLabel } from "#/lib/server-label"
 
@@ -14,6 +16,34 @@ export type ApplicationStatus = components["schemas"]["ApplicationStatusDto"]
 export type ApplicantKind = components["schemas"]["ApplicantKindDto"]
 export type ApplicationFile = components["schemas"]["ApplicationFileDto"]
 export type JournalEntry = components["schemas"]["JournalEntryDto"]
+
+/**
+ * Чем заявка называется в списках участника: предмет, а не идентификатор.
+ *
+ * «Заявка 01a063dd» - это восемь шестнадцатеричных цифр, по которым нельзя
+ * отличить одну заявку от другой, а в кабинете их было по несколько на разные
+ * тендеры. Название тендера, номер лота и объект приезжают теперь в самой
+ * `ApplicationDto`, и строка собирается здесь одна на все места вызова.
+ *
+ * Казахское название берется сохраненным (`tender_title_kk`), а не машинным
+ * переводом: заголовок тендера - реквизит объявления, и подменять его нельзя.
+ */
+export function applicationSubject(
+  application: Pick<
+    ApplicationDto,
+    "tender_title" | "tender_title_kk" | "lot_seq" | "object_name"
+  >
+): string {
+  const title =
+    getLocale() === "kk"
+      ? application.tender_title_kk
+      : application.tender_title
+  return m.application_subject({
+    title,
+    lot: application.lot_seq,
+    object: application.object_name,
+  })
+}
 
 /** Мои заявки (FR-401/404): своя цена видна всегда (RLS INV-040). */
 export const myApplicationsQuery = queryOptions({
@@ -143,4 +173,41 @@ export function applicationPackageState(application: {
 }): PackageState {
   if (!application.package_complete) return "incomplete"
   return application.files.length > 0 ? "complete" : "not_required"
+}
+
+export type ApplicationDocumentKind =
+  components["schemas"]["ApplicationDocumentKindDto"]
+
+/**
+ * Обязательный пакет заявки (FR-401, п. 46): пять типов PDF.
+ *
+ * Перечень тот же, что и в `core.application_package_complete`, и порядок
+ * тот же, в каком документы названы Правилами - это и есть порядок формы
+ * загрузки. `legacy` в него не входит: этот тип носят вложения заявок,
+ * поданных до появления пакета, и требованием он никогда не был.
+ */
+export const REQUIRED_DOCUMENT_KINDS = [
+  "application_form",
+  "registration_certificate",
+  "tax_clearance",
+  "guarantee_payment",
+  "qualification_documents",
+] as const satisfies readonly ApplicationDocumentKind[]
+
+/**
+ * Сколько позиций пакета закрыто - «n из 5» на карточке заявки.
+ *
+ * Считаются разные типы, а не файлы: сервер требует именно пять разных
+ * (`count(DISTINCT document_kind) = 5`), и пять копий одной справки пакета
+ * не собирают. До сих пор карточка знала только «собран / не собран», и
+ * участник, приложивший три документа из пяти, не видел, сколько осталось.
+ */
+export function applicationPackageProgress(application: {
+  files: readonly { document_kind: string }[]
+}): { done: number; total: number } {
+  const attached = new Set(application.files.map((file) => file.document_kind))
+  return {
+    done: REQUIRED_DOCUMENT_KINDS.filter((kind) => attached.has(kind)).length,
+    total: REQUIRED_DOCUMENT_KINDS.length,
+  }
 }

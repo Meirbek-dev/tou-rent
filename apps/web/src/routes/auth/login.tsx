@@ -14,20 +14,49 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
 import { api, authProvidersQuery } from "@/lib/api"
-import { meQuery, problemMessage } from "@/lib/auth"
+import {
+  meQuery,
+  problemCode,
+  problemMessage,
+  resendConfirmation,
+  safeRedirectPath,
+} from "@/lib/auth"
 import { cn } from "@/lib/utils"
 
 // FR-1501: email+пароль, сессии. FR-1502 (контур 2, ADR-0003): вход через
 // внешнего провайдера - обычная ссылка на api, поток идет редиректами и
 // работает без JS (NFR-04); кнопка появляется, только если провайдер настроен.
 // Кабинеты - client-only (ssr: false в /app), форма логина SSR-безопасна.
+type LoginSearch = {
+  oidc_error?: string
+  redirect?: string
+  /** Пришли с подтверждения почты: сказать об этом и не молчать */
+  confirmed?: boolean
+  /** Адрес, который уже назвали на предыдущем шаге - подставляется в поле */
+  email?: string
+}
+
 export const Route = createFileRoute("/auth/login")({
   // Причина возврата провайдером - только подсказка на странице; параметр
-  // необязателен, иначе ссылки на вход обязаны были бы его передавать
-  validateSearch: (search: Record<string, unknown>): { oidc_error?: string } =>
-    typeof search["oidc_error"] === "string"
-      ? { oidc_error: search["oidc_error"] }
-      : {},
+  // необязателен, иначе ссылки на вход обязаны были бы его передавать.
+  // `redirect` - адрес, за которым пришли: его ставит охрана `/app`, а
+  // проверяет `safeRedirectPath` - параметр приезжает из чужой ссылки.
+  validateSearch: (search: Record<string, unknown>): LoginSearch => {
+    const target = safeRedirectPath(search["redirect"])
+    const email = search["email"]
+    return {
+      ...(typeof search["oidc_error"] === "string"
+        ? { oidc_error: search["oidc_error"] }
+        : {}),
+      ...(target === undefined ? {} : { redirect: target }),
+      ...(search["confirmed"] === true || search["confirmed"] === "true"
+        ? { confirmed: true }
+        : {}),
+      ...(typeof email === "string" && email !== "" && email.length <= 254
+        ? { email }
+        : {}),
+    }
+  },
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(authProvidersQuery),
   head: () => ({ meta: [{ title: `${m.auth_login_title()} - ToU Rent` }] }),
@@ -37,10 +66,16 @@ export const Route = createFileRoute("/auth/login")({
 function LoginPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { oidc_error: oidcError } = Route.useSearch()
+  const {
+    oidc_error: oidcError,
+    redirect: redirectTo,
+    confirmed,
+    email: emailFromLink,
+  } = Route.useSearch()
   const { data: providers } = useSuspenseQuery(authProvidersQuery)
-  const [email, setEmail] = useState("")
+  const [email, setEmail] = useState(emailFromLink ?? "")
   const [password, setPassword] = useState("")
+  const [resent, setResent] = useState(false)
 
   const login = useMutation({
     mutationFn: async () => {
@@ -54,11 +89,25 @@ function LoginPage() {
     },
     onSuccess: async (user) => {
       queryClient.setQueryData(meQuery.queryKey, user)
-      await navigate({ to: "/app" })
+      // Возврат туда, откуда прислали: глубокая ссылка на кабинет переживает
+      // вход, а без параметра открывается кабинет по роли (`/app`)
+      await (redirectTo === undefined
+        ? navigate({ to: "/app" })
+        : navigate({ href: redirectTo, replace: true }))
     },
   })
 
-  const failed = login.isError
+  // Учетная запись есть, но канал не подтвержден (403 `email_not_confirmed`).
+  // Это не «неверный пароль»: повторять ввод бессмысленно, и до появления
+  // этой ветки незавершенная регистрация была тупиком - вход отвечал отказом,
+  // а повторная регистрация упиралась в занятый ИИН
+  const unconfirmed = problemCode(login.error) === "email_not_confirmed"
+  const failed = login.isError && !unconfirmed
+
+  const resend = useMutation({
+    mutationFn: () => resendConfirmation(email.trim()),
+    onSuccess: () => setResent(true),
+  })
 
   return (
     <>
@@ -82,6 +131,12 @@ function LoginPage() {
 
           {oidcError !== undefined && (
             <FormAlert>{m.auth_oidc_failed()}</FormAlert>
+          )}
+
+          {/* Пришли с подтверждения почты: сказать, что шаг пройден, - иначе
+              страница входа выглядит так же, как после отказа */}
+          {confirmed === true && (
+            <FormAlert tone="success">{m.auth_confirm_done()}</FormAlert>
           )}
 
           {providers.oidc && (
@@ -147,6 +202,52 @@ function LoginPage() {
               <FormAlert id="login-error">
                 {problemMessage(login.error)}
               </FormAlert>
+            )}
+            {unconfirmed && (
+              <div
+                data-testid="login-unconfirmed"
+                className="flex flex-col gap-2 rounded-lg bg-amber-500/10 px-3 py-3 text-sm ring-1 ring-amber-500/30"
+              >
+                <p role="alert" className="text-amber-700 dark:text-amber-400">
+                  {m.error_email_not_confirmed()}
+                </p>
+                {resent && !resend.isError && (
+                  <p
+                    role="status"
+                    className="text-emerald-700 dark:text-emerald-400"
+                  >
+                    {m.auth_confirm_resent({ email: email.trim() })}
+                  </p>
+                )}
+                {resend.isError && (
+                  <p role="alert" className="text-destructive">
+                    {problemMessage(resend.error)}
+                  </p>
+                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    data-testid="login-resend"
+                    disabled={resend.isPending || email.trim() === ""}
+                    onClick={() => resend.mutate()}
+                  >
+                    {resend.isPending && <Spinner data-icon="inline-start" />}
+                    {resend.isPending
+                      ? m.auth_confirm_resending()
+                      : m.auth_confirm_resend()}
+                  </Button>
+                  <Link
+                    to="/auth/confirm"
+                    search={{ email: email.trim() }}
+                    className="text-primary underline underline-offset-4"
+                    data-testid="login-enter-code"
+                  >
+                    {m.auth_confirm_enter_code()}
+                  </Link>
+                </div>
+              </div>
             )}
             <Button
               type="submit"

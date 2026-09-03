@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query"
+import { redirect } from "@tanstack/react-router"
 import { createApiClient } from "@tou/api-client"
-import { getLocale } from "#/paraglide/runtime"
+import { deLocalizeUrl, getLocale } from "#/paraglide/runtime"
 
 import type { components } from "@tou/api-client"
 
@@ -20,6 +21,54 @@ const baseUrl = import.meta.env.SSR
   : ""
 
 export const api = createApiClient(baseUrl)
+
+/** Свои маршруты аутентификации: там 401 - штатный ответ, а не конец сессии. */
+const AUTH_ROUTE_PREFIX = "/api/v1/auth/"
+
+/**
+ * Текущий адрес кабинета без префикса локали; `undefined` - мы не в кабинете.
+ *
+ * Возврат нужен роутеру, а он живет на де-локализованных путях (`rewrite`
+ * в `router.tsx`): `/kk/app/participant` и `/app/participant` - один и тот же
+ * маршрут, и в параметр должен попасть второй.
+ */
+function currentCabinetPath(): string | undefined {
+  if (typeof window === "undefined") return undefined
+  const url = deLocalizeUrl(window.location.href)
+  if (!url.pathname.startsWith("/app")) return undefined
+  return `${url.pathname}${url.search}`
+}
+
+/**
+ * Истекшая сессия внутри кабинета - на страницу входа, а не на экран сбоя
+ * (FR-1501).
+ *
+ * `beforeLoad` маршрута `/app` спрашивает про сессию один раз - на вход
+ * в поддерево. Сессия, кончившаяся после этого, доезжала до пользователя
+ * отказом дочернего загрузчика: общий экран «Что-то пошло не так» и кнопка
+ * «Повторить», которая повторяет тот же отказ. Перехват стоит на самом
+ * клиенте api, потому что ниже некуда: каждый из полусотни загрузчиков иначе
+ * обязан различать 401 сам, а большинство из них заворачивает любой отказ
+ * в `new Error("failed to load ...")`, где от кода ответа не остается ничего.
+ *
+ * Бросок, а не возврат: `onResponse` понимает возвращенный `Response` как
+ * подмену ответа, а `redirect()` - это как раз `Response`.
+ */
+api.use({
+  onResponse({ request, response }) {
+    if (response.status !== 401) return undefined
+    if (new URL(request.url).pathname.startsWith(AUTH_ROUTE_PREFIX)) {
+      return undefined
+    }
+    const from = currentCabinetPath()
+    if (from === undefined) return undefined
+    throw redirect({
+      to: "/auth/login",
+      search: { redirect: from },
+      replace: true,
+    })
+  },
+})
 
 /** Выбирает сохраненную локализованную строку без машинного перевода. */
 export function localizedTenderTitle(

@@ -1,8 +1,12 @@
+import { useEffect } from "react"
 import {
   Outlet,
   createFileRoute,
+  isRedirect,
   redirect,
+  useLocation,
   useNavigate,
+  useRouter,
 } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
@@ -12,6 +16,7 @@ import { CommandPalette } from "@/components/command-palette"
 import { DeadlineChip } from "@/components/deadline-chip"
 import LocaleSwitcher from "@/components/locale-switcher"
 import { NotificationBell } from "@/components/notification-bell"
+import { PendingPage } from "@/components/pending-page"
 import { ThemeToggle } from "@/components/theme-toggle"
 import {
   SidebarInset,
@@ -20,22 +25,63 @@ import {
 } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/toast"
 import { api } from "@/lib/api"
-import { meQuery } from "@/lib/auth"
+import { meQuery, problemCode, safeRedirectPath } from "@/lib/auth"
 
 // Каркас кабинетов (ТЗ § 8). Кабинеты - client-only (ssr: false):
 // NFR-04 требует работы без JS только от публичного портала, а клиентский
 // рендер избавляет SSR-загрузчики от проброса сессионных cookie.
 export const Route = createFileRoute("/app")({
   ssr: false,
-  beforeLoad: async ({ context }) => {
+  beforeLoad: async ({ context, location }) => {
     const user = await context.queryClient.ensureQueryData(meQuery)
     if (user === null) {
-      throw redirect({ to: "/auth/login" }) // FR-1501
+      // FR-1501. Адрес, за которым пришли, едет в параметре: глубокая ссылка
+      // на кабинет должна пережить вход, иначе гостя всегда высаживает
+      // на дашборд, а зачем он шел - забыто
+      throw redirect({
+        to: "/auth/login",
+        search: { redirect: location.href },
+      })
     }
     return { user }
   },
+  errorComponent: AppRouteError,
   component: AppLayout,
 })
+
+/**
+ * Отказ загрузчика или отрисовки внутри кабинета.
+ *
+ * `beforeLoad` выше спрашивает про сессию один раз - на вход в поддерево.
+ * Сессия, кончившаяся после этого, доезжала до пользователя отказом дочернего
+ * загрузчика: общий экран «Что-то пошло не так» и кнопка «Повторить»,
+ * повторяющая тот же отказ. Клиент api превращает такой 401 в перенаправление
+ * (`lib/api.ts`); здесь остается его выполнить - и выполнить самому, потому
+ * что до роутера брошенное из отрисовки перенаправление не доходит.
+ *
+ * Все прочие отказы уходят броском на боундари выше - общий экран корня
+ * (NFR-15): ровно так же роутер поступает с `notFound`, для которого этот
+ * маршрут не является границей.
+ */
+function AppRouteError({ error }: { error: Error }) {
+  const router = useRouter()
+  const { href } = useLocation()
+  const expired = isRedirect(error) || problemCode(error) === "unauthorized"
+
+  useEffect(() => {
+    if (!expired) return
+    void (isRedirect(error)
+      ? router.navigate(error.options)
+      : router.navigate({
+          to: "/auth/login",
+          search: { redirect: safeRedirectPath(href) ?? "/app" },
+          replace: true,
+        }))
+  }, [error, expired, href, router])
+
+  if (!expired) throw error
+  return <PendingPage />
+}
 
 function AppLayout() {
   const { user } = Route.useRouteContext()

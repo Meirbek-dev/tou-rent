@@ -6,6 +6,7 @@ import {
   useSuspenseQuery,
 } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
+import { ConfirmAction } from "@/components/confirm-action"
 import { SpecialProgress } from "@/components/special-progress"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,11 +17,13 @@ import { problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
 import {
   localeLabel,
+  requestCategoryLabel,
   mySpecialRequestsQuery,
   reviewTermLabel,
   specialCategoriesQuery,
   specialStatusLabel,
 } from "@/lib/special"
+import { notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { UPLOAD_ACCEPT, uploadError } from "@/lib/validation"
 
@@ -78,7 +81,10 @@ function SpecialRequestCard({ request }: { request: SpecialRequest }) {
       }
       return data
     },
-    onSuccess: refresh,
+    onSuccess: async () => {
+      notifySuccess(m.special_withdrawn_toast())
+      await refresh()
+    },
   })
 
   const upload = useMutation({
@@ -141,7 +147,7 @@ function SpecialRequestCard({ request }: { request: SpecialRequest }) {
               {m.special_category_label()}
             </dt>
             <dd className="font-medium">
-              {category ? localeLabel(category) : request.category_label}
+              {category ? localeLabel(category) : requestCategoryLabel(request)}
             </dd>
           </div>
           <div className="flex flex-col gap-0.5">
@@ -205,14 +211,21 @@ function SpecialRequestCard({ request }: { request: SpecialRequest }) {
           >
             {m.special_pdf()}
           </a>
+          {/* Отзыв назад не отыгрывается: рассмотрение прекращается, и
+              заявку придется подавать заново (FR-1201, п. 87) */}
           {isOpen && (
-            <Button
-              variant="destructive"
-              onClick={() => withdraw.mutate()}
+            <ConfirmAction
+              title={m.special_withdraw_confirm_title()}
+              description={m.special_withdraw_confirm_description()}
+              confirmLabel={m.special_withdraw()}
               disabled={withdraw.isPending}
-            >
-              {m.special_withdraw()}
-            </Button>
+              onConfirm={() => withdraw.mutate()}
+              trigger={
+                <Button variant="destructive" data-testid="special-withdraw">
+                  {m.special_withdraw()}
+                </Button>
+              }
+            />
           )}
         </div>
         {withdraw.isError && (

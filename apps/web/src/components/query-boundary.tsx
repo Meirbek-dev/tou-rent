@@ -1,3 +1,4 @@
+import { isNotFound, isRedirect } from "@tanstack/react-router"
 import { m } from "#/paraglide/messages"
 import { EmptyState } from "@/components/empty-state"
 import { Button } from "@/components/ui/button"
@@ -57,6 +58,16 @@ export function QueryBoundary<TData>({
 }) {
   if (query.isPending) {
     return <>{skeleton ?? <DefaultSkeleton className={className} />}</>
+  }
+
+  // Перенаправление и `notFound` - не отказ данных, а решение маршрутизатора,
+  // и панель с кнопкой «Повторить» его гасила: истекшая сессия внутри кабинета
+  // приезжает сюда броском `redirect()` из клиента api (`lib/api.ts`), и гость
+  // вместо страницы входа видел «Данные не загрузились», а «Повторить»
+  // повторяло тот же 401. Такие броски идут выше - их ловит граница маршрута
+  // (`routes/app/route.tsx`) и роутер; в панели остаются настоящие отказы.
+  if (isRedirect(query.error) || isNotFound(query.error)) {
+    throw query.error
   }
 
   // `data === undefined` при неподнятом isError - это отказ select-а или

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { FileSignatureIcon } from "lucide-react"
 
 import { m } from "#/paraglide/messages"
+import { ContractAmendmentsPanel } from "@/components/contract-amendments-panel"
 import { actKindLabel, stageLabel } from "@/components/contract-panel"
 import { DepositPanel } from "@/components/deposit-panel"
 import { PageHeader } from "@/components/page-header"
@@ -102,7 +103,14 @@ function MyContractsPage() {
             )}
             <ul className="flex flex-col gap-6">
               {page.items.map((contract) => (
-                <li key={contract.id}>
+                // Якорь карточки: сроки и уведомления по договору ведут сюда
+                // (`#contract-<id>`), а отдельного маршрута у договора нет.
+                // `scroll-mt` - чтобы шапка кабинета не накрыла заголовок
+                <li
+                  key={contract.id}
+                  id={`contract-${contract.id}`}
+                  className="scroll-mt-24"
+                >
                   <ContractCard contract={contract} />
                 </li>
               ))}
@@ -147,6 +155,21 @@ function ContractCard({ contract }: { contract: ContractDto }) {
       contentClassName="flex flex-col gap-5"
     >
       <ContractStages stage={contract.stage} />
+
+      {/* Печатная форма договора (FR-901): маршрут был описан контрактом
+          с самого начала, но у нанимателя ссылки на нее не было - свой
+          договор он видел только на бумаге */}
+      {contract.has_pdf && (
+        <div>
+          <a
+            href={`/api/v1/contracts/${contract.id}/pdf`}
+            className="text-sm underline-offset-4 hover:underline"
+            data-testid="contract-pdf"
+          >
+            {m.contract_pdf()}
+          </a>
+        </div>
+      )}
 
       <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="flex flex-col gap-0.5">
@@ -277,11 +300,23 @@ function ContractCard({ contract }: { contract: ContractDto }) {
                   className="flex flex-wrap items-center justify-between gap-2"
                 >
                   <span>{actKindLabel(act.kind)}</span>
-                  <span
-                    className="text-muted-foreground"
-                    suppressHydrationWarning
-                  >
-                    {formatDate(act.act_date)}
+                  <span className="flex flex-wrap items-center gap-x-3">
+                    {/* Прил. 7-8: акт подписывают обе стороны, и своя
+                        печатная форма нанимателю нужна не меньше */}
+                    {act.has_pdf && (
+                      <a
+                        href={`/api/v1/acts/${act.id}/pdf`}
+                        className="underline-offset-4 hover:underline"
+                      >
+                        {m.acts_pdf()}
+                      </a>
+                    )}
+                    <span
+                      className="text-muted-foreground"
+                      suppressHydrationWarning
+                    >
+                      {formatDate(act.act_date)}
+                    </span>
                   </span>
                 </li>
               ))}
@@ -289,6 +324,11 @@ function ContractCard({ contract }: { contract: ContractDto }) {
           )}
         </QueryBoundary>
       </section>
+
+      {/* FR-906 (п. 125): допсоглашение - двусторонний документ, и до сих
+          пор вторая сторона о нем не знала. Права заключать его у нанимателя
+          нет, поэтому панель без формы: при пустом перечне она молчит */}
+      <ContractAmendmentsPanel contractId={contract.id} />
     </Panel>
   )
 }

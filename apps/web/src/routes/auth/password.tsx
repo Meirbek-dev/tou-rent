@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Spinner } from "@/components/ui/spinner"
-import { changePassword, problemMessage } from "@/lib/auth"
+import { changePassword, problemCode, problemMessage } from "@/lib/auth"
 import {
   PASSWORD_MIN_LENGTH,
   fieldError,
@@ -59,6 +59,13 @@ function ChangePasswordPage() {
   const nextShown = shown(next, nextError)
   const repeatShown = shown(repeat, repeatError)
 
+  // `invalid_credentials` на этой форме означает не то же, что на входе:
+  // адреса почты здесь не спрашивают, и «Неверный адрес электронной почты
+  // или пароль» отправляло человека проверять поле, которого на экране нет.
+  // Отказ у формы ровно один и он про текущий пароль - там же его и видно
+  const currentWrong =
+    change.isError && problemCode(change.error) === "invalid_credentials"
+
   return (
     <>
       <SiteHeader />
@@ -100,12 +107,18 @@ function ChangePasswordPage() {
                 type="password"
                 autoComplete="current-password"
                 required
-                aria-invalid={change.isError}
-                {...(change.isError && {
-                  "aria-describedby": "password-change-error",
+                aria-invalid={currentWrong}
+                {...(currentWrong && {
+                  "aria-describedby": "password-current-error",
                 })}
                 value={current}
                 onChange={(event) => setCurrent(event.target.value)}
+              />
+              <FieldError
+                id="password-current-error"
+                message={
+                  currentWrong ? m.auth_password_current_wrong() : undefined
+                }
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -151,7 +164,7 @@ function ChangePasswordPage() {
               />
               <FieldError id="password-repeat-error" message={repeatShown} />
             </div>
-            {change.isError && (
+            {change.isError && !currentWrong && (
               <FormAlert id="password-change-error">
                 {problemMessage(change.error)}
               </FormAlert>
