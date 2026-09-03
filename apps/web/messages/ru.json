@@ -918,7 +918,7 @@
   "commission_vote_cast_toast": "Голос учтен",
   "commission_vote_confirm_title": "Подать голос?",
   "commission_vote_confirm_description": "Голос «{vote}» по заявке {applicant} вносится в протокол и не может быть изменен.",
-  "commission_votes_cast_title": "Голос подан",
+  "commission_votes_cast_title": "Поданные голоса",
   "commission_votes_none": "Голосов пока нет",
   "contract_act_created_toast": "{kind} оформлен",
   "contract_act_kind_handover": "Акт приема-передачи",

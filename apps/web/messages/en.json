@@ -918,7 +918,7 @@
   "commission_vote_cast_toast": "Vote recorded",
   "commission_vote_confirm_title": "Cast your vote?",
   "commission_vote_confirm_description": "Your vote “{vote}” on {applicant}'s application is entered into the protocol and cannot be changed.",
-  "commission_votes_cast_title": "Vote cast",
+  "commission_votes_cast_title": "Votes cast",
   "commission_votes_none": "No votes yet",
   "contract_act_created_toast": "{kind} created",
   "contract_act_kind_handover": "Handover act",

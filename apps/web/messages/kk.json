@@ -918,7 +918,7 @@
   "commission_vote_cast_toast": "Дауыс есепке алынды",
   "commission_vote_confirm_title": "Дауыс беру керек пе?",
   "commission_vote_confirm_description": "{applicant} өтінімі бойынша «{vote}» дауысы хаттамаға енгізіледі және оны өзгерту мүмкін емес.",
-  "commission_votes_cast_title": "Дауыс берілді",
+  "commission_votes_cast_title": "Берілген дауыстар",
   "commission_votes_none": "Әзірге дауыстар жоқ",
   "contract_act_created_toast": "{kind} рәсімделді",
   "contract_act_kind_handover": "Қабылдау-тапсыру актісі",
