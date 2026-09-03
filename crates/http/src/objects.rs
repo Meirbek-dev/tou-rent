@@ -103,7 +103,7 @@ pub struct ObjectRequest {
 /// 422. Проверка стоит у типа запроса, чтобы отказ назвал поле.
 pub(crate) fn not_blank(value: &str, _ctx: &()) -> garde::Result {
     if value.trim().is_empty() {
-        Err(garde::Error::new("must not be blank"))
+        Err(garde::Error::new("не может состоять из одних пробелов"))
     } else {
         Ok(())
     }

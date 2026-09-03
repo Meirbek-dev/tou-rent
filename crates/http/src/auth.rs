@@ -76,7 +76,7 @@ pub struct RegisterRequest {
     /// Минимум 12 символов (TODO-ENGINEER: утвердить парольную политику)
     #[garde(length(chars, min = 12, max = 128))]
     pub password: String,
-    #[garde(length(chars, min = 1, max = 200))]
+    #[garde(length(chars, min = 1, max = 200), custom(crate::objects::not_blank))]
     pub full_name: String,
     #[garde(skip)]
     pub applicant_kind: crate::dto::ApplicantKindDto,
