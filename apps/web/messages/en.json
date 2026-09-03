@@ -1194,5 +1194,11 @@
   "application_package_not_required": "No mandatory document package is required for this application.",
   "acts_scan_label": "Signed act scan",
   "land_withdraw_confirm_description": "The plot application will be withdrawn before the board decides. It cannot be restored - a new one must be submitted.",
-  "rule_application_package_incomplete": "The application's document package is incomplete: an admission decision is only possible for an application with the full five-document package."
+  "rule_application_package_incomplete": "The application's document package is incomplete: an admission decision is only possible for an application with the full five-document package.",
+  "rule_tender_amendment_not_extended": "The new revision must extend the application deadline: the new date has to be later than the current one (cl. 27).",
+  "rule_tender_amendment_extension_too_short": "The application deadline is extended by at least 10 calendar days from the publication of the new revision (cl. 27).",
+  "rule_tender_amendment_intake_closed": "Application intake is over: the deadline has passed or the envelopes have been opened, so the tender terms no longer change (cl. 27, 50).",
+  "error_email_not_confirmed": "The account is not confirmed: enter the code from the email or request a new one.",
+  "rule_vote_already_cast": "Your vote on this application has been cast and cannot be changed.",
+  "auth_password_current_wrong": "The current password is incorrect."
 }
