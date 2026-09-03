@@ -34,7 +34,10 @@ variables:
   POSTGRES_USER: tou_rent
   POSTGRES_PASSWORD: tou_rent_ci
   DATABASE_URL: postgres://tou_rent:tou_rent_ci@postgres:5432/tou_rent
-  TESTKIT_DATABASE_URL: postgres://tou_rent:tou_rent_ci@postgres:5432/tou_rent
+  # Отдельная база интеграционных тестов (G-021): их фикстуры коммитятся,
+  # и общая с DATABASE_URL база означала бы, что прогон меняет данные под
+  # остальными заданиями. Заводит ее и мигрирует сама обвязка
+  TESTKIT_DATABASE_URL: postgres://tou_rent:tou_rent_ci@postgres:5432/tou_rent_test
   REDIS_URL: redis://redis:6379
   # INV-040 (п. 40): без ключа цены не читаются и не пишутся - в CI ключ свой
   PRICE_ENCRYPTION_KEY: tou_rent_ci_price_key

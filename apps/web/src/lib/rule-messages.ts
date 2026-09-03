@@ -82,6 +82,14 @@ const RULE_MESSAGES: Record<string, () => string> = {
   duplicate_record: m.rule_duplicate_record,
   related_record_missing: m.rule_related_record_missing,
   other_rule: m.rule_other_rule,
+  tender_amendment_not_extended: m.rule_tender_amendment_not_extended,
+  tender_amendment_extension_too_short:
+    m.rule_tender_amendment_extension_too_short,
+  tender_amendment_intake_closed: m.rule_tender_amendment_intake_closed,
+  vote_already_cast: m.rule_vote_already_cast,
+  coefficient_version_exists: m.rule_coefficient_version_exists,
+  deposit_before_return_act: m.rule_deposit_before_return_act,
+  mrp_year_in_use: m.rule_mrp_year_in_use,
 }
 
 /**

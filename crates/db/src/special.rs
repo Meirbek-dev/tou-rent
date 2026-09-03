@@ -79,6 +79,11 @@ pub struct RequestRecord {
     pub applicant_name: Option<String>,
     pub category: String,
     pub category_label: String,
+    /// Та же подпись категории на казахском и английском (NFR-01).
+    /// Nullable: перевод в справочнике необязателен, и подменять его
+    /// русской строкой на стороне сервера нельзя - кабинет решает сам
+    pub category_label_kk: Option<String>,
+    pub category_label_en: Option<String>,
     pub category_rule_ref: String,
     pub status: String,
     pub applicant_kind: String,
@@ -106,6 +111,8 @@ struct RequestRow {
     applicant_name: Option<String>,
     category: String,
     category_label: String,
+    category_label_kk: Option<String>,
+    category_label_en: Option<String>,
     category_rule_ref: String,
     status: String,
     applicant_kind: String,
@@ -128,6 +135,8 @@ impl From<RequestRow> for RequestRecord {
             applicant_name: row.applicant_name,
             category: row.category,
             category_label: row.category_label,
+            category_label_kk: row.category_label_kk,
+            category_label_en: row.category_label_en,
             category_rule_ref: row.category_rule_ref,
             status: row.status,
             applicant_kind: row.applicant_kind,
@@ -156,6 +165,8 @@ macro_rules! request_query {
             RequestRow,
             r#"SELECT r.id, r.applicant_id, u.full_name AS "applicant_name?",
                       r.category, c.label_ru AS category_label,
+                      c.label_kk AS category_label_kk,
+                      c.label_en AS category_label_en,
                       c.rule_ref AS category_rule_ref,
                       r.status::text AS "status!",
                       r.applicant_kind::text AS "applicant_kind!",

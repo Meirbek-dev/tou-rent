@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contracts\n             SET status = 'active',\n                 lease_period = tstzrange(core.now(), core.now() + interval '365 days')\n             WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ba62c3d991271e3cd1ade6977f56fe3f713c54871b690561c0f4dcdd9ce01027"
+}

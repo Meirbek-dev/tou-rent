@@ -20,7 +20,12 @@ x-rust-workspace: &rust-workspace
     # и отчитываются зеленым за 0.00s - то есть инварианты INV-037, INV-040,
     # INV-A01 и RLS на стенде не проверяет никто. В CI такая же переменная
     # задана глобально, и там пропуск считается ошибкой (crates/testkit/src/lib.rs)
-    TESTKIT_DATABASE_URL: postgres://tou_rent:tou_rent_dev@postgres:5432/tou_rent
+    #
+    # База - своя, не рабочая (G-021): фикстуры этих тестов коммитятся, и на
+    # общей базе один прогон делал тестовую комиссию действующей комиссией
+    # стенда, а из 127 учетных записей 103 - тестовыми. Заводить `tou_rent_test`
+    # руками не нужно: обвязка создает ее и накатывает миграции сама
+    TESTKIT_DATABASE_URL: postgres://tou_rent:tou_rent_dev@postgres:5432/tou_rent_test
     REDIS_URL: redis://redis:6379
     RUST_LOG: info
     # Дев-стенд без SMTP и SMS-шлюза: код подтверждения регистрации

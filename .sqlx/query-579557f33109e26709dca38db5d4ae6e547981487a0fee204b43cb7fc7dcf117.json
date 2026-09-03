@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.dossier_items SET retain_until = retain_until + interval '1 year'\n         WHERE special_request_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "579557f33109e26709dca38db5d4ae6e547981487a0fee204b43cb7fc7dcf117"
+}

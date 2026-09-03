@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.public_records\n               (kind, special_request_id, contract_id, acceptance_id,\n                title, title_kk, title_en, file_key, payload, published_by)\n             VALUES ($1::text::core.public_record_kind, $2, $3, $4, $5, $6, $7, $8, $9, $10)\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "af3cab14958d2a4783c0cfe413452a9a88b6af01eca0d5b24186d1b0d344daf5"
+}

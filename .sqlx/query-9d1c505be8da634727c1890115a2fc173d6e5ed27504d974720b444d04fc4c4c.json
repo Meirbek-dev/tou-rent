@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT label_ru, label_kk, label_en\n         FROM refdata.land_designations WHERE code = 'dormitory'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label_ru",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.land_designations",
+            "name": "label_ru"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "label_kk",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.land_designations",
+            "name": "label_kk"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "label_en",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.land_designations",
+            "name": "label_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "9d1c505be8da634727c1890115a2fc173d6e5ed27504d974720b444d04fc4c4c"
+}

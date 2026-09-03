@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contracts\n                 SET signature_status = $2::text::core.signature_status, signed_scan_key = NULL\n                 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bc4910658812c9ea1e3bc1363aff53cb76d53d44599447dd0702b7d7d7478727"
+}

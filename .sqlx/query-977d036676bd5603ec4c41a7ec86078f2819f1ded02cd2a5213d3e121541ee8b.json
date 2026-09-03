@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT payload ->> 'contract_id' AS \"contract_id?\"\n           FROM core.notifications\n           WHERE user_id = $1 AND kind = 'obligation_overdue'\n           ORDER BY created_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "contract_id?",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "977d036676bd5603ec4c41a7ec86078f2819f1ded02cd2a5213d3e121541ee8b"
+}

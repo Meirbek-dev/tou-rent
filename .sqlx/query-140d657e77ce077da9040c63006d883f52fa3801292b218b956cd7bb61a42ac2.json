@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE audit.log SET action = 'INSERT' WHERE id = (SELECT max(id) FROM audit.log)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "140d657e77ce077da9040c63006d883f52fa3801292b218b956cd7bb61a42ac2"
+}

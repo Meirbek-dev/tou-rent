@@ -249,6 +249,61 @@ pub async fn active_verification(
     .await
 }
 
+/// Учетная запись, которая ждет подтверждения канала (FR-1501).
+///
+/// `None` - такого адреса нет, канал уже подтвержден либо запись отключена.
+/// Все три случая для вызывающего одинаковы: повторная отправка кода
+/// ничего не значит, и маршрут обязан ответить одинаково, иначе он
+/// перечисляет учетные записи (NFR-07).
+pub async fn pending_confirmation(
+    db: &Db,
+    email: &str,
+    channel: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT id FROM core.users
+         WHERE email = $1::citext AND is_active
+           AND CASE WHEN $2 = 'email'
+                    THEN email_confirmed_at IS NULL
+                    ELSE phone_confirmed_at IS NULL
+               END",
+        email,
+        channel
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// Новый одноразовый код для неподтвержденной учетной записи (FR-1501).
+///
+/// Действующим становится он: [`active_verification`] берет самый свежий
+/// код канала, поэтому прежний - просроченный или с исчерпанными пятью
+/// попытками - перестает быть препятствием, а гасить его отдельно незачем.
+///
+/// В аудит запись не идет намеренно: `core.account_verifications` хранит
+/// одноразовый секрет, а не факт предметной области, и триггера аудита на
+/// ней нет - как и у кода, выданного при регистрации
+/// ([`insert_participant`]). Доказательная база подтверждения - отметка
+/// `email_confirmed_at` в `core.users`, а она под аудитом.
+pub async fn issue_verification(
+    db: &Db,
+    user_id: Uuid,
+    channel: &str,
+    code_hash: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO core.account_verifications (user_id, channel, code_hash, expires_at)
+         VALUES ($1, $2::text::core.verification_channel, $3,
+                 core.now() + interval '15 minutes')",
+        user_id,
+        channel,
+        code_hash
+    )
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 pub async fn record_verification_failure(db: &Db, id: Uuid) -> Result<(), sqlx::Error> {
     sqlx::query!(
         "UPDATE core.account_verifications SET attempts = attempts + 1

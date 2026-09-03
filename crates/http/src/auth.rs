@@ -285,6 +285,100 @@ pub async fn confirm_registration(
     Ok(StatusCode::NO_CONTENT)
 }
 
+#[derive(Debug, Deserialize, garde::Validate, ToSchema)]
+pub struct ResendConfirmationRequest {
+    #[garde(email, length(max = 254))]
+    pub email: String,
+}
+
+/// Новый код подтверждения на тот же адрес (FR-1501).
+///
+/// Без этого маршрута неподтвержденная регистрация была тупиком: код
+/// действует пятнадцать минут, после пяти неверных попыток гасится совсем,
+/// а взять новый было негде - повторная регистрация упиралась в занятый
+/// email, вход отвечал отказом. Здесь тот же путь доставки, что и у
+/// регистрации ([`crate::verification`]), и та же проверка кода
+/// в [`confirm_registration`] - она не меняется.
+///
+/// Ответ всегда 204, в том числе на неизвестный и на уже подтвержденный
+/// адрес: иначе маршрут, открытый до входа, перечисляет учетные записи
+/// (NFR-07). Частота ограничена как у входа - иначе им рассылают письма
+/// на чужой адрес.
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/resend-confirmation",
+    tag = "auth",
+    request_body = ResendConfirmationRequest,
+    responses(
+        (status = 204, description = "Обращение принято; \
+            учетной записи, ждущей подтверждения, отправлен новый код"),
+        (status = 422, description = "Адрес не похож на email", body = crate::error::Problem),
+        (status = 429, description = "Слишком много попыток", body = crate::error::Problem),
+        (status = 503, description = "Канал доставки недоступен", body = crate::error::Problem),
+    )
+)]
+pub async fn resend_confirmation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(body): Json<ResendConfirmationRequest>,
+) -> Result<StatusCode, ApiError> {
+    let address = client_address(&headers);
+    state
+        .rate_limit
+        .check("resend:account", &body.email, LOGIN_PER_ACCOUNT)
+        .await?;
+    if let Some(address) = address.as_deref() {
+        state
+            .rate_limit
+            .check("resend:address", address, LOGIN_PER_ADDRESS)
+            .await?;
+    }
+    // Считается каждое обращение, а не только неудачное, - в отличие от
+    // входа. Ответ у маршрута один на все случаи, «неудачи» у него нет,
+    // а исчерпаемый ресурс есть: письмо на чужой адрес
+    state
+        .rate_limit
+        .record("resend:account", &body.email, LOGIN_PER_ACCOUNT)
+        .await;
+    if let Some(address) = address.as_deref() {
+        state
+            .rate_limit
+            .record("resend:address", address, LOGIN_PER_ADDRESS)
+            .await;
+    }
+
+    body.validate()
+        .map_err(|report| ApiError::Validation(report.to_string()))?;
+
+    // Канал - тот же email, на который пришло обращение: телефона в теле
+    // запроса нет, а подтвержденного email хватает, чтобы вход открылся
+    let channel = VerificationChannel::Email;
+    let Some(user_id) =
+        users::pending_confirmation(&state.db, &body.email, channel.as_db()).await?
+    else {
+        return Ok(StatusCode::NO_CONTENT);
+    };
+
+    let code = format!("{:08}", rand::random::<u32>() % 100_000_000);
+    let code_for_hash = code.clone();
+    let code_hash = tokio::task::spawn_blocking(move || hash_password(&code_for_hash))
+        .await
+        .map_err(ApiError::internal)??;
+
+    // Порядок тот же, что при регистрации: сперва провайдер принял
+    // сообщение, и только потом код становится действующим
+    state
+        .verification_delivery
+        .send(channel, &body.email, &code)
+        .await
+        .map_err(|error| ApiError::ProviderUnavailable(error.to_string()))?;
+
+    users::issue_verification(&state.db, user_id, channel.as_db(), &code_hash).await?;
+
+    tracing::info!(user_id = %user_id, channel = ?channel, "код подтверждения отправлен заново");
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Вход по email и паролю. Успех: сессионная cookie (httpOnly, SameSite=Lax)
 /// + CSRF-токен double-submit cookie (арх. § 5).
 #[utoipa::path(
@@ -295,6 +389,8 @@ pub async fn confirm_registration(
     responses(
         (status = 200, description = "Вход выполнен", body = UserDto),
         (status = 401, description = "Неверные учетные данные", body = crate::error::Problem),
+        (status = 403, description = "Учетная запись не подтверждена (`email_not_confirmed`)",
+            body = crate::error::Problem),
         (status = 429, description = "Слишком много попыток", body = crate::error::Problem),
     )
 )]
@@ -349,6 +445,11 @@ pub async fn login(
         }
     };
 
+    // Пароль верен - но подтверждена ли учетная запись (FR-1501). Отказ
+    // здесь не считается неудачей и счетчик не трогает: пароль назван
+    // верно, перебора нет, и запирать вход владельцу не за что
+    confirmation_gate(&record)?;
+
     // Верный пароль снимает подозрение: иначе человек, у которого сессия
     // истекла посреди дня, доедал бы остаток счетчика своими же входами
     state.rate_limit.forget("login:account", &body.email).await;
@@ -377,16 +478,35 @@ pub async fn login(
 /// от «неверный пароль» по секундомеру. Хеша нет ни у неизвестного email,
 /// ни у отключенного, ни у учетной записи внешнего провайдера, и все три
 /// случая доходят до [`verify_password`] одинаково.
+///
+/// Неподтвержденная запись, наоборот, до хеша доходит: ее отделяет
+/// [`confirmation_gate`] уже после проверки пароля. Секундомером она не
+/// перечисляется (проход Argon2id тот же), а знать о ней имеет право
+/// только тот, кто пароль от нее уже знает.
 fn admitted_credentials(user: Option<UserRecord>) -> (Option<UserRecord>, Option<String>) {
     match user {
-        Some(record)
-            if record.is_active
-                && (record.email_confirmed_at.is_some() || record.phone_confirmed_at.is_some()) =>
-        {
+        Some(record) if record.is_active => {
             let hash = record.password_hash.clone();
             (Some(record), hash)
         }
         _ => (None, None),
+    }
+}
+
+/// Рубеж подтверждения канала (FR-1501): пароль верен - подтверждена ли
+/// сама учетная запись.
+///
+/// Отдельный код отказа, а не общий `invalid_credentials`. Пока ответ был
+/// общим, неподтвержденная регистрация оказывалась тупиком: код из письма
+/// потерян или просрочен, а вход отвечает «неверный email или пароль» -
+/// человек ищет ошибку в пароле, которой нет. Теперь у состояния есть имя
+/// (`email_not_confirmed`), а у кабинета - что предложить: ввести код либо
+/// запросить новый ([`resend_confirmation`]).
+fn confirmation_gate(record: &UserRecord) -> Result<(), ApiError> {
+    if record.email_confirmed_at.is_some() || record.phone_confirmed_at.is_some() {
+        Ok(())
+    } else {
+        Err(ApiError::EmailNotConfirmed)
     }
 }
 
@@ -584,6 +704,13 @@ fn verify_password(password: &str, stored_hash: Option<&str>) -> bool {
 mod tests {
     use super::*;
 
+    fn unconfirmed(password_hash: Option<&str>) -> UserRecord {
+        UserRecord {
+            email_confirmed_at: None,
+            ..record(true, password_hash)
+        }
+    }
+
     fn record(is_active: bool, password_hash: Option<&str>) -> UserRecord {
         UserRecord {
             id: Uuid::now_v7(),
@@ -654,6 +781,45 @@ mod tests {
             !verify_password(password, hash.as_deref()),
             "верный пароль деактивированной записи вход не открывает"
         );
+    }
+
+    /// Рубеж G-073: верный пароль неподтвержденной учетной записи отвечает
+    /// «не подтверждена», а не «неверный email или пароль».
+    ///
+    /// Проверяются оба звена сразу. Первое - запись доходит до своего хеша:
+    /// пока подтверждение стояло в [`admitted_credentials`], пароль вообще
+    /// не сверялся, и отличить владельца от постороннего было нечем.
+    /// Второе - отказ несет свой код (403 `email_not_confirmed`), из
+    /// которого кабинету видно, что делать дальше.
+    #[test]
+    fn unconfirmed_account_is_told_to_confirm_not_that_the_password_is_wrong() {
+        let password = "рабочий-пароль-1";
+        let stored = hash_password(password).expect("хеш");
+
+        let (found, hash) = admitted_credentials(Some(unconfirmed(Some(&stored))));
+        let found = found.expect("неподтвержденная запись доходит до проверки пароля");
+        assert!(
+            verify_password(password, hash.as_deref()),
+            "пароль неподтвержденной записи обязан сверяться по-настоящему"
+        );
+
+        assert!(
+            matches!(confirmation_gate(&found), Err(ApiError::EmailNotConfirmed)),
+            "неподтвержденная запись отделяется своим отказом"
+        );
+        assert!(
+            confirmation_gate(&record(true, Some(&stored))).is_ok(),
+            "подтвержденная запись рубеж проходит"
+        );
+    }
+
+    /// Подтвержденного канала хватает любого: регистрация по SMS не должна
+    /// упираться в отсутствующий `email_confirmed_at`.
+    #[test]
+    fn a_confirmed_phone_opens_the_login_too() {
+        let mut by_sms = unconfirmed(None);
+        by_sms.phone_confirmed_at = Some(time::OffsetDateTime::UNIX_EPOCH);
+        assert!(confirmation_gate(&by_sms).is_ok());
     }
 
     /// Отсутствие пользователя и отсутствие пароля - одинаково «неверно»,

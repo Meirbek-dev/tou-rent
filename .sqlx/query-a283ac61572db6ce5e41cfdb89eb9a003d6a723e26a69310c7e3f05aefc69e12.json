@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_request_files\n           (special_request_id, file_key, filename, content_type, size_bytes)\n         VALUES ($1, $2, 'смета.pdf', 'application/pdf', 1024)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a283ac61572db6ce5e41cfdb89eb9a003d6a723e26a69310c7e3f05aefc69e12"
+}

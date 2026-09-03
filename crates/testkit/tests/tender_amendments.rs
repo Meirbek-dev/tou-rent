@@ -17,7 +17,10 @@ use uuid::Uuid;
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
     // Пропуск без адреса допустим локально, но не в пайплайне (G2/G15):
     // молча пройденный интеграционный тест ничего не проверяет
-    match tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))? {
+    match tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?
+    {
         Some(url) => tou_db::connect(&url).await.map(Some),
         None => Ok(None),
     }
@@ -579,4 +582,227 @@ async fn only_a_draft_tender_can_be_deleted() {
     .await
     .expect("лоты удаленного черновика");
     assert_eq!(orphans, 0, "лоты черновика уходят каскадом");
+}
+
+/// Причина отказа БД в терминах перечня (`RuleViolation`): у отказа
+/// триггера машинный признак - первое слово сообщения, и разбирать его
+/// нужно по самому сообщению, а не по строке `sqlx::Error`, в которой
+/// перед ним стоит «error returned from database».
+fn db_rule(error: &sqlx::Error) -> Option<tou_domain::rule::RuleViolation> {
+    match error {
+        sqlx::Error::Database(db) => tou_domain::rule::RuleViolation::from_message(db.message()),
+        _ => None,
+    }
+}
+
+macro_rules! refusal {
+    ($tx:expr, $query:expr, $why:expr) => {{
+        let mut sp = $tx.begin().await.expect("savepoint");
+        let error = $query.execute(&mut *sp).await.expect_err($why);
+        sp.rollback().await.expect("rollback savepoint");
+        error
+    }};
+}
+
+/// G-099 (регрессия G-043): редакция документации на тендере с назначенной
+/// датой торгов проходит, а не отбивается CHECK `opening_before_trading`.
+///
+/// До правки триггер `core.apply_amendment_effects` переносил прием и
+/// вскрытие, а торги оставлял на месте: промежуточная строка получала
+/// `opening_at > trading_at`, и вставка редакции падала до того, как
+/// обработчик успевал проставить новую дату торгов. Здесь проверяется
+/// то же, что делает БД сама: все три отметки едут одним обновлением, и
+/// разрыв «вскрытие -> торги» сохраняется (п. 27, 50, 59).
+#[tokio::test]
+async fn amendment_moves_trading_together_with_the_opening() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, 20).await.expect("фикстура");
+
+    sqlx::query!(
+        "UPDATE core.tenders SET trading_at = opening_at + interval '1 day' WHERE id = $1",
+        f.tender_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("дата торгов назначена");
+
+    let before = sqlx::query!(
+        r#"SELECT submission_deadline AS "deadline!", opening_at AS "opening!",
+                  trading_at AS "trading!"
+           FROM core.tenders WHERE id = $1"#,
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("сроки до редакции");
+
+    amendment!(f.tender_id, 30)
+        .execute(&mut *tx)
+        .await
+        .expect("редакция документации на тендере с датой торгов");
+
+    let after = sqlx::query!(
+        r#"SELECT submission_deadline AS "deadline!", opening_at AS "opening!",
+                  trading_at AS "trading!"
+           FROM core.tenders WHERE id = $1"#,
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("сроки после редакции");
+
+    assert!(
+        after.deadline > before.deadline,
+        "срок приема продлен (п. 27)"
+    );
+    assert!(
+        after.opening > before.opening,
+        "вскрытие сдвинуто вслед за приемом"
+    );
+    assert!(
+        after.trading > before.trading,
+        "торги сдвинуты вслед за вскрытием (п. 59)"
+    );
+    assert!(
+        after.opening <= after.trading,
+        "порядок сроков сохранен: вскрытие не позже торгов"
+    );
+    assert_eq!(
+        after.trading - after.opening,
+        before.trading - before.opening,
+        "разрыв между вскрытием и торгами сохраняется"
+    );
+    assert_eq!(
+        after.trading - before.trading,
+        after.opening - before.opening,
+        "торги переносятся на ту же разницу, что и вскрытие"
+    );
+}
+
+/// Тендер без назначенных торгов ведет себя как прежде: редакция переносит
+/// прием и вскрытие и не выдумывает дату торгов.
+#[tokio::test]
+async fn amendment_without_trading_date_leaves_it_unset() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, 20).await.expect("фикстура");
+
+    amendment!(f.tender_id, 30)
+        .execute(&mut *tx)
+        .await
+        .expect("редакция документации");
+
+    let after = sqlx::query!(
+        "SELECT opening_at, trading_at FROM core.tenders WHERE id = $1",
+        f.tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("сроки после редакции");
+
+    assert!(after.opening_at.is_some(), "вскрытие осталось назначенным");
+    assert!(
+        after.trading_at.is_none(),
+        "дата торгов не назначается сама"
+    );
+}
+
+/// G-100: отказ по п. 27 называет свою причину, а не общую «документацию
+/// и сроки изменить нельзя». Проверяются оба рубежа: триггер БД (по тексту
+/// сообщения) и домен (по варианту `AmendmentError`) - клиент обязан
+/// получить одну и ту же причину, каким бы из них отказ ни был вынесен.
+#[tokio::test]
+async fn amendment_refusals_carry_their_own_rule() {
+    use tou_db::amendments::AmendmentError;
+    use tou_domain::amendment::AmendmentError as Domain;
+    use tou_domain::rule::RuleViolation;
+
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+
+    let open = fixture(&mut tx, 20).await.expect("дедлайн через 20 дней");
+    let not_extended = refusal!(
+        tx,
+        amendment!(open.tender_id, 15),
+        "редакция без продления срока приема обязана быть отклонена"
+    );
+    assert_eq!(
+        db_rule(&not_extended),
+        Some(RuleViolation::TenderAmendmentNotExtended),
+        "{not_extended}"
+    );
+
+    let soon = fixture(&mut tx, 5).await.expect("дедлайн через 5 дней");
+    let too_short = refusal!(
+        tx,
+        amendment!(soon.tender_id, 7),
+        "продление меньше 10 дней обязано быть отклонено"
+    );
+    assert_eq!(
+        db_rule(&too_short),
+        Some(RuleViolation::TenderAmendmentExtensionTooShort),
+        "{too_short}"
+    );
+
+    let over = fixture(&mut tx, -1).await.expect("дедлайн вчера");
+    let intake_over = refusal!(
+        tx,
+        amendment!(over.tender_id, 30),
+        "редакция после окончания приема заявок обязана быть отклонена"
+    );
+    assert_eq!(
+        db_rule(&intake_over),
+        Some(RuleViolation::TenderAmendmentIntakeClosed),
+        "{intake_over}"
+    );
+
+    // Окно двух дней и неопубликованный тендер остаются общей причиной
+    let frozen = fixture(&mut tx, 1).await.expect("дедлайн завтра");
+    let too_late = refusal!(
+        tx,
+        amendment!(frozen.tender_id, 30),
+        "изменение в последние два дня приема обязано быть отклонено"
+    );
+    assert_eq!(
+        db_rule(&too_late),
+        Some(RuleViolation::TenderDocumentationChange),
+        "{too_late}"
+    );
+
+    // Тот же перечень причин у отказа домена: до триггера дело обычно не
+    // доходит - `AmendmentFacts::check` отвечает раньше вставки
+    for (domain, expected) in [
+        (
+            Domain::NotExtended,
+            RuleViolation::TenderAmendmentNotExtended,
+        ),
+        (
+            Domain::ExtensionTooShort,
+            RuleViolation::TenderAmendmentExtensionTooShort,
+        ),
+        (
+            Domain::DeadlinePassed,
+            RuleViolation::TenderAmendmentIntakeClosed,
+        ),
+        (
+            Domain::AlreadyOpened,
+            RuleViolation::TenderAmendmentIntakeClosed,
+        ),
+        (
+            Domain::FrozenBeforeDeadline,
+            RuleViolation::TenderDocumentationChange,
+        ),
+        (
+            Domain::NotPublished,
+            RuleViolation::TenderDocumentationChange,
+        ),
+        (Domain::NoDeadline, RuleViolation::TenderDocumentationChange),
+    ] {
+        let rule = match AmendmentError::from(domain) {
+            AmendmentError::Rejected(reason) => Some(reason.rule()),
+            _ => None,
+        };
+        assert_eq!(rule, Some(expected), "{domain:?}");
+    }
 }

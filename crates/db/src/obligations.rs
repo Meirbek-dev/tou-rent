@@ -55,6 +55,9 @@ pub struct ObligationRecord {
     pub assignee_role: Role,
     pub tender_id: Option<Uuid>,
     pub tender_title: Option<String>,
+    /// Договор, к которому привязан срок (возврат взноса, регистрация,
+    /// акт приема-передачи): без него дашборд не мог сослаться на предмет
+    pub contract_id: Option<Uuid>,
     pub due_at: OffsetDateTime,
     pub status: String,
     pub completed_at: Option<OffsetDateTime>,
@@ -68,6 +71,7 @@ struct ObligationRow {
     assignee_role: String,
     tender_id: Option<Uuid>,
     tender_title: Option<String>,
+    contract_id: Option<Uuid>,
     due_at: OffsetDateTime,
     status: String,
     completed_at: Option<OffsetDateTime>,
@@ -87,6 +91,7 @@ impl TryFrom<ObligationRow> for ObligationRecord {
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
             tender_id: row.tender_id,
             tender_title: row.tender_title,
+            contract_id: row.contract_id,
             due_at: row.due_at,
             status: row.status,
             completed_at: row.completed_at,
@@ -104,8 +109,8 @@ macro_rules! obligation_query {
             ObligationRow,
             r#"SELECT o.id, o.action, o.rule_ref,
                       o.assignee_role::text AS "assignee_role!",
-                      o.tender_id, t.title AS "tender_title?", o.due_at,
-                      o.status::text AS "status!", o.completed_at
+                      o.tender_id, t.title AS "tender_title?", o.contract_id,
+                      o.due_at, o.status::text AS "status!", o.completed_at
                FROM core.obligations o
                LEFT JOIN core.tenders t ON t.id = o.tender_id"# + $tail
             $(, $arg)*
@@ -173,6 +178,51 @@ pub async fn schedule_with_term(
         days
     )
     .fetch_optional(tx)
+    .await
+}
+
+/// Обязанность провести вскрытие по тендерам, у которых назначенный час
+/// наступил (FR-501, FR-1702, п. 41–43).
+///
+/// Круг 1 гаунтлета (G-147). Наступление `submission_deadline` и
+/// `opening_at` не порождало ничего: тендер оставался в `accepting`,
+/// заявки больше не принимались (INV-037), а секретарь узнавал о том, что
+/// пора вскрывать конверты, только заглянув в список тендеров. Двигатель
+/// сроков видел процесс лишь с того момента, как человек сделал первый шаг.
+///
+/// Тендер при этом не переводится: вскрытие - действие людей на заседании
+/// комиссии (п. 50), и подменять его отметкой в БД нельзя. Ставится ровно
+/// обязанность, и срок ее - сам назначенный час: он уже прошел, поэтому
+/// первый же проход эскалации известит секретаря (FR-1302).
+///
+/// Идемпотентно: `obligations_unique_per_subject` держит один срок на
+/// тендер, повторный проход дублей не делает. Актор - система, как у
+/// эскалации: обязанность возникла из срока, а не из чьего-то действия.
+pub async fn schedule_due_openings<'e, E>(db: E, limit: i64) -> Result<Vec<Uuid>, sqlx::Error>
+where
+    E: sqlx::PgExecutor<'e>,
+{
+    let rule = ObligationAction::HoldOpening.rule();
+    sqlx::query_scalar!(
+        r#"INSERT INTO core.obligations
+             (rule_ref, action, assignee_role, tender_id, due_at, started_at)
+           SELECT $1, $2, $3::text::core.role, t.id, t.opening_at, t.opening_at
+           FROM core.tenders t
+           WHERE t.status = 'accepting'
+             AND t.opening_at IS NOT NULL
+             AND t.opening_at <= core.now()
+             AND t.opened_at IS NULL
+             AND t.cancelled_at IS NULL
+           ORDER BY t.opening_at
+           LIMIT $4
+           ON CONFLICT ON CONSTRAINT obligations_unique_per_subject DO NOTHING
+           RETURNING tender_id AS "tender_id!""#,
+        rule.rule_ref,
+        ObligationAction::HoldOpening.as_str(),
+        rule.assignee.as_str(),
+        limit
+    )
+    .fetch_all(db)
     .await
 }
 
@@ -283,6 +333,9 @@ pub struct Escalation {
     pub rule_ref: String,
     pub tender_id: Option<Uuid>,
     pub tender_title: Option<String>,
+    /// Договор просроченного срока: у сроков договора тендера нет, и без
+    /// него уведомление не давало ссылки ни на какой предмет
+    pub contract_id: Option<Uuid>,
     pub due_at: OffsetDateTime,
     pub recipient_id: Uuid,
 }
@@ -329,7 +382,8 @@ pub async fn take_overdue(db: &Db) -> Result<Vec<Escalation>, sqlx::Error> {
     let rows = sqlx::query_as!(
         Escalation,
         r#"SELECT o.id AS obligation_id, o.action, o.rule_ref, o.tender_id,
-                  t.title AS "tender_title?", o.due_at, rg.user_id AS recipient_id
+                  t.title AS "tender_title?", o.contract_id, o.due_at,
+                  rg.user_id AS recipient_id
            FROM core.obligations o
            JOIN core.role_grants rg ON rg.role = o.assignee_role
            JOIN core.users u ON u.id = rg.user_id AND u.is_active
@@ -392,6 +446,11 @@ pub async fn take_overdue(db: &Db) -> Result<Vec<Escalation>, sqlx::Error> {
 
 /// Тело уведомления о просрочке (FR-1302): все, чем срок опознается
 /// в кабинете исполнителя, - действие, пункт Правил и предмет.
+///
+/// Предмет - это и тендер, и договор. Половина сроков процесса висит на
+/// договоре (возврат взноса, регистрация, акт приема-передачи), тендера
+/// у них нет, и без `contract_id` такое уведомление вело в никуда:
+/// кабинету было нечем построить ссылку на предмет просрочки.
 fn overdue_payload(item: &Escalation) -> serde_json::Value {
     serde_json::json!({
         "obligation_id": item.obligation_id,
@@ -399,6 +458,7 @@ fn overdue_payload(item: &Escalation) -> serde_json::Value {
         "rule_ref": item.rule_ref,
         "tender_id": item.tender_id,
         "tender_title": item.tender_title,
+        "contract_id": item.contract_id,
         "due_at": item.due_at.unix_timestamp(),
     })
 }

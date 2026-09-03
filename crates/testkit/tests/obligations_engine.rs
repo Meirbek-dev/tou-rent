@@ -12,7 +12,10 @@ use uuid::Uuid;
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
     // Пропуск без адреса допустим локально, но не в пайплайне (G2/G15):
     // молча пройденный интеграционный тест ничего не проверяет
-    match tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))? {
+    match tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?
+    {
         Some(url) => tou_db::connect(&url).await.map(Some),
         None => Ok(None),
     }
@@ -127,7 +130,23 @@ async fn fr1702_overdue_is_escalated_once() {
     )
     .await
     .expect("срок");
+    // Получатель эскалации: у роли-исполнителя должен быть хоть один
+    // носитель, иначе воронка уведомления пуста и просрочка не приходит
+    // никому. Заводится тестом, а не берется из данных стенда - тесты
+    // идут против своей БД, а seed на ней не выполнялся (G-021)
+    let recipient = sqlx::query_scalar!(
+        "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
+         VALUES ($1::citext, 'x', 'Т20 секретарь', core.now()) RETURNING id",
+        format!("t20s-{}@tou.test", Uuid::now_v7().simple())
+    )
+    .fetch_one(&mut *setup)
+    .await
+    .expect("секретарь");
     setup.commit().await.expect("commit");
+
+    tou_db::users::grant_role(&db, recipient, recipient, Role::Secretary)
+        .await
+        .expect("роль secretary");
 
     sqlx::query!(
         "UPDATE core.obligations SET due_at = now() - interval '1 day' WHERE tender_id = $1",
@@ -168,4 +187,130 @@ async fn fr1702_overdue_is_escalated_once() {
         .execute(&db)
         .await
         .ok();
+}
+
+/// Договор-пустышка: половина сроков процесса висит на договоре, а не
+/// на тендере (возврат взноса, регистрация, акт приема-передачи).
+async fn contract(tx: &mut sqlx::PgConnection) -> Result<Uuid, sqlx::Error> {
+    let tenant = sqlx::query_scalar!(
+        "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
+         VALUES ($1::citext, 'x', 'Т20 наниматель', now()) RETURNING id",
+        format!("t20c-{}@tou.test", Uuid::now_v7().simple())
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let object = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', 'Т20 помещение', 'г. Павлодар, ул. Ломова, 64', 20.00)
+         RETURNING id"
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query_scalar!(
+        "INSERT INTO core.contracts (object_id, tenant_id, monthly_rate)
+         VALUES ($1, $2, 36000.00) RETURNING id",
+        object,
+        tenant
+    )
+    .fetch_one(tx)
+    .await
+}
+
+/// Рубеж G-084/G-085: срок, привязанный к договору, называет свой договор -
+/// и в дашборде «мои сроки», и в уведомлении о просрочке (FR-1302, FR-1702).
+///
+/// Пока `contract_id` не выходил наружу, половина сроков процесса вела
+/// в никуда: у срока по договору тендера нет, а больше предмета в ответе
+/// не было - ни ссылки построить, ни понять, о чем речь.
+#[tokio::test]
+async fn fr1702_a_contract_bound_deadline_names_its_contract() {
+    let db = require_db!();
+
+    let mut setup = db.begin().await.expect("begin");
+    let contract_id = contract(&mut setup).await.expect("договор");
+    obligations::schedule(
+        &mut setup,
+        ObligationAction::DepositPayment,
+        Subject::contract(contract_id),
+    )
+    .await
+    .expect("срок депозита (п. 132)");
+    // Получатель эскалации: у роли-исполнителя должен быть хоть один
+    // носитель, иначе воркеру некому адресовать уведомление
+    let recipient = sqlx::query_scalar!(
+        "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
+         VALUES ($1::citext, 'x', 'Т20 финансист', now()) RETURNING id",
+        format!("t20f-{}@tou.test", Uuid::now_v7().simple())
+    )
+    .fetch_one(&mut *setup)
+    .await
+    .expect("финансист");
+    setup.commit().await.expect("commit");
+
+    tou_db::users::grant_role(&db, recipient, recipient, Role::Finance)
+        .await
+        .expect("роль finance");
+
+    // Дашборд «мои сроки» (FR-1702)
+    let page = obligations::for_roles(&db, &[Role::Finance], None, 200)
+        .await
+        .expect("мои сроки");
+    let listed = page
+        .iter()
+        .find(|item| item.contract_id == Some(contract_id))
+        .expect("срок по договору виден в дашборде со своим договором");
+    assert!(
+        listed.tender_id.is_none(),
+        "у срока по договору тендера нет - предмет опознается только договором"
+    );
+
+    sqlx::query!(
+        "UPDATE core.obligations SET due_at = now() - interval '1 day' WHERE contract_id = $1",
+        contract_id
+    )
+    .execute(&db)
+    .await
+    .expect("срок в прошлом");
+
+    let escalated = obligations::take_overdue(&db).await.expect("эскалация");
+    assert!(
+        escalated
+            .iter()
+            .any(|item| item.contract_id == Some(contract_id)),
+        "просроченный срок договора приходит воркеру вместе с договором"
+    );
+
+    let payload = sqlx::query_scalar!(
+        r#"SELECT payload ->> 'contract_id' AS "contract_id?"
+           FROM core.notifications
+           WHERE user_id = $1 AND kind = 'obligation_overdue'
+           ORDER BY created_at DESC LIMIT 1"#,
+        recipient
+    )
+    .fetch_one(&db)
+    .await
+    .expect("уведомление о просрочке");
+    assert_eq!(
+        payload.as_deref(),
+        Some(contract_id.to_string().as_str()),
+        "в теле уведомления обязан быть договор - иначе ссылку строить не из чего"
+    );
+
+    let _ = sqlx::query!(
+        "DELETE FROM core.notifications WHERE user_id = $1",
+        recipient
+    )
+    .execute(&db)
+    .await;
+    let _ = sqlx::query!(
+        "DELETE FROM core.obligations WHERE contract_id = $1",
+        contract_id
+    )
+    .execute(&db)
+    .await;
+    let _ = sqlx::query!("DELETE FROM core.contracts WHERE id = $1", contract_id)
+        .execute(&db)
+        .await;
 }

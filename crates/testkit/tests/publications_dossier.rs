@@ -14,7 +14,10 @@ use uuid::Uuid;
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
     // Пропуск без адреса допустим локально, но не в пайплайне (G2/G15):
     // молча пройденный интеграционный тест ничего не проверяет
-    match tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))? {
+    match tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?
+    {
         Some(url) => tou_db::connect(&url).await.map(Some),
         None => Ok(None),
     }
@@ -313,4 +316,285 @@ async fn dossier_items_cannot_be_removed() {
         error.contains("FR-1602") || error.contains("permission denied"),
         "{error}"
     );
+}
+
+/// G-103: досье получает объявление и тендерную документацию (FR-1602, п. 16).
+///
+/// До правки вид `announcement` попадал в досье только со строкой
+/// `core.tender_amendments`, то есть с РЕДАКЦИЕЙ документации: у тендера
+/// без редакций `GET /dossier` отвечал пустым перечнем, а `dossier.zip`
+/// собирался из одного манифеста. Здесь проверяется то, что делает БД
+/// сама: публикация объявления и загрузка документации ложатся в досье
+/// в момент события и повторных дублей не порождают.
+#[tokio::test]
+async fn dossier_receives_the_announcement_and_the_documentation() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let tag = Uuid::now_v7().simple().to_string();
+
+    let organizer = sqlx::query_scalar!(
+        "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
+         VALUES ($1, 'x', 'Т28 организатор досье', now()) RETURNING id",
+        format!("t28-dossier-{tag}@tou.test")
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("организатор");
+
+    let object_id = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', 'Т28 объект досье', 'адрес', 12.00) RETURNING id"
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("объект");
+
+    let tender_id = sqlx::query_scalar!(
+        "INSERT INTO core.tenders (title, status, organizer_id,
+                                   submission_deadline, opening_at)
+         VALUES ('Т28 черновик досье', 'draft', $1,
+                 core.now() + interval '11 days', core.now() + interval '12 days')
+         RETURNING id",
+        organizer
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("черновик");
+
+    sqlx::query!(
+        "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                                base_rate_monthly, rate_calculation, guarantee_fee)
+         VALUES ($1, 1, $2, 'офис', 12, 60000.00, '{}'::jsonb, 60000.00)",
+        tender_id,
+        object_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("лот");
+
+    // Документация прикладывается к черновику (FR-304), объявление выходит
+    // публикацией: в досье обязаны попасть оба события
+    sqlx::query!(
+        "INSERT INTO core.tender_docs (tender_id, version, title, file_key)
+         VALUES ($1, 1, 'Тендерная документация', $2)",
+        tender_id,
+        format!("tenders/{tender_id}/documentation.pdf")
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("тендерная документация");
+
+    let draft_announcements = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM core.dossier_items
+           WHERE tender_id = $1 AND source_table = 'core.tenders'"#,
+        tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("досье черновика");
+    assert_eq!(
+        draft_announcements, 0,
+        "черновик не опубликован - объявления в досье нет (п. 5–6)"
+    );
+
+    sqlx::query!(
+        "UPDATE core.tenders SET status = 'announced' WHERE id = $1",
+        tender_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("публикация объявления");
+
+    let items = sqlx::query!(
+        "SELECT kind, title, file_key, source_table FROM core.dossier_items
+         WHERE tender_id = $1 ORDER BY source_table",
+        tender_id
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .expect("материалы досье");
+
+    assert_eq!(items.len(), 2, "объявление и документация - два материала");
+    assert!(
+        items.iter().all(|item| item.kind == "announcement"),
+        "оба материала - раздел «объявление и редакции документации»"
+    );
+
+    let documentation = items
+        .iter()
+        .find(|item| item.source_table.as_deref() == Some("core.tender_docs"))
+        .expect("тендерная документация в досье");
+    assert!(
+        documentation.file_key.is_some(),
+        "у документации в досье есть файл - иначе архив собирается пустым"
+    );
+
+    let announcement = items
+        .iter()
+        .find(|item| item.source_table.as_deref() == Some("core.tenders"))
+        .expect("объявление в досье");
+    assert!(
+        announcement
+            .title
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Т28 черновик досье"),
+        "объявление подписано названием тендера"
+    );
+
+    // Ход процедуры дальше объявления не переиздает
+    sqlx::query!(
+        "UPDATE core.tenders SET status = 'accepting' WHERE id = $1",
+        tender_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("прием заявок открыт");
+
+    let total = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM core.dossier_items
+           WHERE tender_id = $1 AND kind = 'announcement'"#,
+        tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("материалы досье");
+    assert_eq!(total, 2, "досье собирается идемпотентно");
+}
+
+/// FR-1602, п. 16, 42: у объявления в досье появляется файл - иначе
+/// `dossier.zip` начинается со строки без документа.
+///
+/// Круг 7 гаунтлета (G-156). Материал заводит триггер публикации, а ключ
+/// файла записывает http-слой снимком печатной формы Прил. 1. Проверяется
+/// последний рубеж: ключ ложится ровно на материал объявления, повторная
+/// публикация записанный ключ не переписывает, и след остается в аудите.
+#[tokio::test]
+async fn the_announcement_in_the_dossier_gets_its_file() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let tag = Uuid::now_v7().simple().to_string();
+
+    let organizer = sqlx::query_scalar!(
+        "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
+         VALUES ($1::citext, 'x', 'G156 организатор', core.now()) RETURNING id",
+        format!("g156-organizer-{tag}@tou.test")
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("организатор");
+
+    // Актор транзакции: событие аудита по материалу досье пишется под ним
+    tou_db::set_actor(&mut tx, organizer)
+        .await
+        .expect("актор транзакции");
+
+    let object_id = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', 'G156 объект', 'адрес', 14.00) RETURNING id"
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("объект");
+
+    let tender_id = sqlx::query_scalar!(
+        "INSERT INTO core.tenders (title, status, organizer_id,
+                                   submission_deadline, opening_at)
+         VALUES ('G156 тендер', 'draft', $1,
+                 core.now() + interval '11 days', core.now() + interval '12 days')
+         RETURNING id",
+        organizer
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("черновик");
+
+    sqlx::query!(
+        "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                                base_rate_monthly, rate_calculation, guarantee_fee)
+         VALUES ($1, 1, $2, 'офис', 12, 60000.00, '{}'::jsonb, 60000.00)",
+        tender_id,
+        object_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("лот");
+
+    sqlx::query!(
+        "UPDATE core.tenders SET status = 'announced' WHERE id = $1",
+        tender_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("публикация объявления");
+
+    let before = sqlx::query_scalar!(
+        "SELECT file_key FROM core.dossier_items
+         WHERE tender_id = $1 AND source_table = 'core.tenders'",
+        tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("материал объявления");
+    assert!(
+        before.is_none(),
+        "триггер заводит материал без файла - файл кладет http-слой"
+    );
+
+    let key = format!("tenders/{tender_id}/announcement.pdf");
+    let attached = tou_db::publications::attach_announcement_file_on(&mut tx, tender_id, &key)
+        .await
+        .expect("ключ объявления");
+    assert!(attached, "ключ записан на материал объявления");
+
+    let stored = sqlx::query_scalar!(
+        "SELECT file_key FROM core.dossier_items
+         WHERE tender_id = $1 AND source_table = 'core.tenders'",
+        tender_id
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("материал объявления");
+    assert_eq!(
+        stored.as_deref(),
+        Some(key.as_str()),
+        "в досье лежит ключ опубликованного объявления (FR-1602)"
+    );
+
+    // Тендерная документация - отдельный материал того же раздела: ключ
+    // объявления на нее не попадает
+    let others = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM core.dossier_items
+           WHERE tender_id = $1 AND source_table <> 'core.tenders' AND file_key = $2"#,
+        tender_id,
+        key
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("прочие материалы");
+    assert_eq!(others, 0, "ключ лег ровно на объявление");
+
+    // Повторная публикация опубликованное объявление не подменяет
+    let again = tou_db::publications::attach_announcement_file_on(
+        &mut tx,
+        tender_id,
+        "tenders/подмена/announcement.pdf",
+    )
+    .await
+    .expect("повторная запись ключа");
+    assert!(!again, "записанный ключ объявления не переписывается");
+
+    let audited = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM audit.log
+           WHERE table_name = 'core.dossier_items' AND action = 'UPDATE'
+             AND actor_id = $1 AND payload -> 'new' ->> 'file_key' = $2"#,
+        organizer,
+        key
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("события аудита");
+    assert_eq!(audited, 1, "запись ключа оставила след в аудите (А.5)");
+
+    tx.rollback().await.expect("rollback");
 }

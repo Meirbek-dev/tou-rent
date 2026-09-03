@@ -25,7 +25,10 @@ use uuid::Uuid;
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
     // Пропуск без адреса допустим локально, но не в пайплайне (G2/G15):
     // молча пройденный интеграционный тест ничего не проверяет
-    match tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))? {
+    match tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?
+    {
         Some(url) => tou_db::connect(&url).await.map(Some),
         None => Ok(None),
     }
@@ -149,7 +152,7 @@ async fn future_version_does_not_change_today() {
 
     // Заведомо иная величина и дата в будущем: если бы «сегодня» считалось
     // по последней записи, а не по вступившей в силу, тест это увидел бы
-    let id = refdata::upsert_coefficient_version_on(
+    let id = refdata::add_coefficient_version_on(
         &mut tx,
         NewCoefficientVersion {
             coefficient: &coefficient,
@@ -162,7 +165,8 @@ async fn future_version_does_not_change_today() {
         },
     )
     .await
-    .expect("версия на будущее");
+    .expect("версия на будущее")
+    .expect("версии с этой датой еще не было");
 
     let after = sqlx::query_scalar!(
         "SELECT value FROM refdata.rate_coefficients
@@ -219,10 +223,16 @@ async fn future_version_does_not_change_today() {
     assert!(audited >= 1, "версия коэффициента не попала в audit.log");
 }
 
-/// Повторная запись с той же датой вступления - правка той же версии, а не
-/// вторая величина на одну дату (UNIQUE в БД этого и не допустит).
+/// G-137, FR-202: повторная запись с той же датой вступления отказывает и
+/// прежнюю величину не трогает.
+///
+/// Версия справочника - история расчетов, а не поле формы: пока совпадение
+/// по дате разворачивалось в `DO UPDATE`, вторая отправка формы молча
+/// переписывала основание уже посчитанных ставок, и прежнего значения не
+/// оставалось нигде, кроме аудита. Отказ дает админу единственный
+/// осмысленный выход - другую дату начала действия.
 #[tokio::test]
-async fn same_effective_date_updates_the_version() {
+async fn same_effective_date_is_refused() {
     let db = require_db!();
     let (mut tx, _actor) = admin_tx(&db).await.expect("админ");
     let (coefficient, option_code) = existing_option(&mut tx).await.expect("опция Прил. 4");
@@ -238,18 +248,19 @@ async fn same_effective_date_updates_the_version() {
         effective_from: day + Duration::days(730),
     };
 
-    let first = refdata::upsert_coefficient_version_on(&mut tx, version)
+    let first = refdata::add_coefficient_version_on(&mut tx, version)
         .await
-        .expect("версия заведена");
+        .expect("версия заведена")
+        .expect("дата свободна");
 
     version.value = Decimal::new(17, 1);
-    let second = refdata::upsert_coefficient_version_on(&mut tx, version)
+    let second = refdata::add_coefficient_version_on(&mut tx, version)
         .await
-        .expect("версия поправлена");
+        .expect("повтор разобран");
 
-    assert_eq!(
-        first, second,
-        "та же дата - та же версия, а не новая строка"
+    assert!(
+        second.is_none(),
+        "версия на занятую дату не заводится - обработчик отвечает 409"
     );
 
     let value = sqlx::query_scalar!(
@@ -259,7 +270,155 @@ async fn same_effective_date_updates_the_version() {
     .fetch_one(&mut *tx)
     .await
     .expect("версия найдена");
-    assert_eq!(value, Decimal::new(17, 1));
+    assert_eq!(
+        value,
+        Decimal::new(15, 1),
+        "прежняя величина версии осталась нетронутой"
+    );
+
+    let rows = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM refdata.rate_coefficients
+           WHERE coefficient = $1 AND option_code = $2 AND effective_from = $3"#,
+        coefficient,
+        option_code,
+        version.effective_from
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("перечень версий");
+    assert_eq!(rows, 1, "второй строки на ту же дату не появилось");
+}
+
+/// Лот, в снимке расчета которого стоит заданная величина МРП.
+///
+/// Лот заводится тестом, а не берется из данных стенда (G-021): тесты идут
+/// против своей БД, и на пустой `SELECT id FROM core.lots LIMIT 1` не
+/// находил ничего - сторож удаления оказывался «проверенным» на снимке,
+/// которого не существует.
+async fn lot_with_mrp_snapshot(
+    tx: &mut sqlx::PgConnection,
+    organizer: Uuid,
+    mrp: Decimal,
+) -> Result<Uuid, sqlx::Error> {
+    let tag = Uuid::now_v7().simple().to_string();
+
+    let object = sqlx::query_scalar!(
+        "INSERT INTO core.objects (kind, name, address, area_m2)
+         VALUES ('premises', $1, 'адрес', 12.00) RETURNING id",
+        format!("Т53 объект {tag}")
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let tender = sqlx::query_scalar!(
+        "INSERT INTO core.tenders (title, status, organizer_id) VALUES ($1, 'draft', $2)
+         RETURNING id",
+        format!("Т53 тендер {tag}"),
+        organizer
+    )
+    .fetch_one(&mut *tx)
+    .await?;
+
+    sqlx::query_scalar!(
+        "INSERT INTO core.lots (tender_id, seq, object_id, purpose, lease_months,
+                                base_rate_monthly, guarantee_fee, rate_calculation)
+         VALUES ($1, 1, $2, 'офис', 12, 50000.00, 50000.00,
+                 jsonb_build_object('inputs', jsonb_build_object('mrp', $3::text)))
+         RETURNING id",
+        tender,
+        object,
+        mrp.to_string()
+    )
+    .fetch_one(&mut *tx)
+    .await
+}
+
+/// G-141, FR-201: год МРП удаляется, пока на нем ничего не стоит, и не
+/// удаляется, когда его величина попала в замороженный снимок расчета
+/// (FR-202).
+///
+/// Сторож стоит триггером таблицы: право удалять есть у роли приложения
+/// целиком, и проверка в обработчике закрывала бы один путь из нескольких.
+#[tokio::test]
+async fn mrp_year_is_deleted_only_while_nothing_stands_on_it() {
+    let db = require_db!();
+    let (mut tx, actor) = admin_tx(&db).await.expect("админ");
+
+    // Синтетический год и заведомо своя величина: снимков с ней нет
+    let amount = Decimal::new(1_234_567, 2);
+    refdata::upsert_mrp_on(&mut tx, YEAR, amount)
+        .await
+        .expect("МРП заведен");
+
+    let free = sqlx::query!("DELETE FROM refdata.mrp WHERE year = $1", YEAR)
+        .execute(&mut *tx)
+        .await
+        .expect("свободный год удаляется");
+    assert_eq!(free.rows_affected(), 1);
+
+    // Тот же год под снимком расчета лота уже не удаляется
+    refdata::upsert_mrp_on(&mut tx, YEAR, amount)
+        .await
+        .expect("МРП заведен снова");
+    let used = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM core.lots
+           WHERE core.rate_snapshot_mrp(rate_calculation) = $1"#,
+        amount
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("снимки лотов");
+    assert_eq!(used, 0, "величина выбрана свободной от снимков");
+
+    lot_with_mrp_snapshot(&mut tx, actor, amount)
+        .await
+        .expect("лот со снимком расчета");
+
+    let refused = sqlx::query!("DELETE FROM refdata.mrp WHERE year = $1", YEAR)
+        .execute(&mut *tx)
+        .await;
+    match refused {
+        Ok(_) => panic!("год под снимком расчета удалять нельзя (FR-201, FR-202)"),
+        Err(sqlx::Error::Database(err)) => assert_eq!(
+            tou_domain::rule::RuleViolation::from_message(err.message()),
+            Some(tou_domain::rule::RuleViolation::MrpYearInUse),
+            "отказ обязан приезжать причиной перечня, а не безымянным P0001: {}",
+            err.message()
+        ),
+        Err(other) => panic!("ожидался отказ правила, получено: {other}"),
+    }
+}
+
+/// G-141: текущий год не удаляется и без единого снимка - по нему считаются
+/// новые ставки (`refdata.current_mrp`, A-010).
+#[tokio::test]
+async fn the_current_mrp_year_is_never_deleted() {
+    let db = require_db!();
+    let (mut tx, _actor) = admin_tx(&db).await.expect("админ");
+
+    let current_year = sqlx::query_scalar!(
+        r#"SELECT extract(year FROM (core.now() AT TIME ZONE 'Asia/Almaty'))::int
+             AS "year!""#
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .expect("год по часам сервера");
+
+    refdata::upsert_mrp_on(&mut tx, current_year, Decimal::new(7_654_321, 2))
+        .await
+        .expect("МРП текущего года заведен");
+
+    let refused = sqlx::query!("DELETE FROM refdata.mrp WHERE year = $1", current_year)
+        .execute(&mut *tx)
+        .await;
+    match refused {
+        Ok(_) => panic!("текущий год удалять нельзя (FR-201)"),
+        Err(sqlx::Error::Database(err)) => assert_eq!(
+            tou_domain::rule::RuleViolation::from_message(err.message()),
+            Some(tou_domain::rule::RuleViolation::MrpYearInUse),
+        ),
+        Err(other) => panic!("ожидался отказ правила, получено: {other}"),
+    }
 }
 
 /// Перечень множителей и опций задан Прил. 4: выдуманная опция отклоняется

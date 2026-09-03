@@ -54,6 +54,7 @@ const CSRF_EXEMPT: &[&str] = &[
     "/api/v1/auth/login",
     "/api/v1/auth/register",
     "/api/v1/auth/confirm-registration",
+    "/api/v1/auth/resend-confirmation",
 ];
 
 /// Выдать токен: одно и то же значение уходит и в сессию, и в cookie.

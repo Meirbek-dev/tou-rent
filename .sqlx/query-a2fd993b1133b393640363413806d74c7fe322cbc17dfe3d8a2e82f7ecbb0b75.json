@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.id AS obligation_id, o.action, o.rule_ref, o.tender_id,\n                  t.title AS \"tender_title?\", o.contract_id, o.due_at,\n                  rg.user_id AS recipient_id\n           FROM core.obligations o\n           JOIN core.role_grants rg ON rg.role = o.assignee_role\n           JOIN core.users u ON u.id = rg.user_id AND u.is_active\n           LEFT JOIN core.tenders t ON t.id = o.tender_id\n           WHERE o.id = ANY($1)\n           ORDER BY o.due_at, rg.user_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "obligation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "rule_ref",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "rule_ref"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "tender_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "tender_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tender_title?",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "contract_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "contract_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "due_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "due_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "recipient_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.role_grants",
+            "name": "user_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "a2fd993b1133b393640363413806d74c7fe322cbc17dfe3d8a2e82f7ecbb0b75"
+}

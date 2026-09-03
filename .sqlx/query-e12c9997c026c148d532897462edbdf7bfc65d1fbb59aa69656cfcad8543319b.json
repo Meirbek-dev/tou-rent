@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_reviews\n           (special_request_id, reviewer_id, conclusion, recommendation)\n         VALUES ($1, $2, 'G-066: имущество занято учебным процессом', 'refuse')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e12c9997c026c148d532897462edbdf7bfc65d1fbb59aa69656cfcad8543319b"
+}

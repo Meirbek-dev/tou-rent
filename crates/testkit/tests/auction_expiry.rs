@@ -21,8 +21,9 @@ static CLOCK: Mutex<()> = Mutex::const_new(());
 /// истекшие торги не пропустит триггер - «время вышло» приходится
 /// изображать часами, а не датой в будущем.
 async fn try_pool() -> Result<Option<sqlx::PgPool>, sqlx::Error> {
-    let required =
-        tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))?;
+    let required = tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?;
     let Some(url) = required else {
         return Ok(None);
     };

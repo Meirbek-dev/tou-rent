@@ -290,6 +290,49 @@ pub async fn dossier(db: &Db, tender_id: Uuid) -> Result<Vec<DossierItem>, sqlx:
     .collect()
 }
 
+/// Файл объявления у материала досье (FR-1602, п. 16, 42).
+///
+/// Круг 7 гаунтлета (G-156). Материал «объявление» триггер заводит без
+/// файла: печатная форма Прил. 1 собиралась на лету и в хранилище не
+/// ложилась. Первый документ процедуры был в описи, но не в `dossier.zip` -
+/// доказательная база начиналась с пустой строки. Файл кладет http-слой
+/// в момент публикации, а ключ записывается сюда.
+///
+/// `file_key IS NULL` в условии - не оптимизация: переписать уже
+/// записанный ключ значило бы подменить опубликованное объявление задним
+/// числом. Повторная публикация тем же ключом - ноль строк и молчание.
+pub async fn attach_announcement_file(
+    db: &Db,
+    actor: Uuid,
+    tender_id: Uuid,
+    file_key: &str,
+) -> Result<bool, sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        attach_announcement_file_on(tx, tender_id, file_key).await
+    })
+    .await
+}
+
+/// То же в транзакции вызывающего - вариант `*_on` (арх. v3 § 6).
+pub async fn attach_announcement_file_on(
+    conn: &mut sqlx::PgConnection,
+    tender_id: Uuid,
+    file_key: &str,
+) -> Result<bool, sqlx::Error> {
+    let attached = sqlx::query_scalar!(
+        "UPDATE core.dossier_items SET file_key = $2
+         WHERE tender_id = $1 AND kind = 'announcement'
+           AND source_table = 'core.tenders' AND source_id = $1
+           AND file_key IS NULL
+         RETURNING id",
+        tender_id,
+        file_key
+    )
+    .fetch_optional(conn)
+    .await?;
+    Ok(attached.is_some())
+}
+
 /// Состав досье решения особого порядка (FR-1206, п. 97): заявка, ее
 /// документы, заключение подразделения и решение Правления - тем же
 /// механизмом и в том же порядке, что и досье тендера.

@@ -471,7 +471,14 @@ pub async fn recusals(db: &Db, tender_id: Uuid) -> Result<Vec<RecusalRow>, sqlx:
 
 /// Личный голос члена комиссии (FR-1103). Право голоса стерегут триггеры:
 /// открытое заседание, присутствие, отсутствие отвода, состав комиссии.
-/// Переголосовать можно, пока решение по заявке не принято.
+///
+/// Голос подается один раз (круг 4 гаунтлета, G-111). Раньше запись шла
+/// `ON CONFLICT ... DO UPDATE`: второй вызов молча затирал первый голос и
+/// особое мнение, хотя окно подтверждения обещает обратное. Голос -
+/// процедурный акт заседания, он оглашается и входит в протокол (п. 13–14,
+/// 55), поэтому конфликт теперь не upsert, а отказ по правилу
+/// [`RuleViolation::VoteAlreadyCast`] (409). Нижний рубеж - триггер
+/// `core.check_vote_is_cast_once`: он отобьет и правку мимо этой функции.
 pub async fn cast_vote(
     db: &Db,
     actor: Uuid,
@@ -499,22 +506,33 @@ pub async fn cast_vote(
         }
 
         // `$4::text::core.vote_value`: голос приходит строкой доменного типа,
-        // а приведение к перечислению делает БД
-        sqlx::query!(
+        // а приведение к перечислению делает БД. `DO NOTHING` вместо
+        // прежнего `DO UPDATE`: уже поданный голос не переписывается (G-111)
+        let cast = sqlx::query_scalar!(
             "INSERT INTO core.votes (meeting_id, application_id, member_id, value, dissent)
              VALUES ($1, $2, $3, $4::text::core.vote_value, $5)
-             ON CONFLICT (meeting_id, application_id, member_id)
-             DO UPDATE SET value = EXCLUDED.value, dissent = EXCLUDED.dissent, cast_at = core.now()",
+             ON CONFLICT (meeting_id, application_id, member_id) DO NOTHING
+             RETURNING id",
             meeting_id,
             application_id,
             member_id,
             value.as_str(),
             dissent
         )
-        .execute(&mut *tx)
+        .fetch_optional(&mut *tx)
         .await
-        .map(|_| ())
-        .map_err(map_rule)
+        .map_err(map_rule)?;
+
+        // Ноль строк - голос этого члена по этой заявке уже есть. Отказ
+        // формулируется здесь, а не текстом триггера: до триггера дело
+        // не доходит вовсе, а причина у отказа та же (INV-1103)
+        if cast.is_none() {
+            return Err(CommissionError::Rejected(RuleRejection::new(
+                RuleViolation::VoteAlreadyCast,
+                "INV-1103: голос по заявке уже подан и изменению не подлежит (п. 13–14)",
+            )));
+        }
+        Ok(())
     })
     .await
 }

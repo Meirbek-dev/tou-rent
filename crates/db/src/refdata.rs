@@ -178,34 +178,36 @@ pub struct NewCoefficientVersion<'a> {
     pub effective_from: time::Date,
 }
 
-/// Новая версия коэффициента (FR-202). Совпадение по дате вступления - правка
-/// той же версии: две разные величины с одной датой не имеют смысла, а UNIQUE
-/// в БД их и не допустит.
-pub async fn upsert_coefficient_version(
+/// Новая версия коэффициента (FR-202). Версия только добавляется: `None` -
+/// версия с этой датой вступления уже заведена.
+///
+/// Круг 1 гаунтлета (G-137). Раньше совпадение по дате разворачивалось в
+/// `DO UPDATE` и молча переписывало величину прежней версии. Справочник -
+/// история расчетов: версия, исправленная задним числом, меняет основание
+/// уже посчитанных ставок, а прежнего значения не остается нигде, кроме
+/// аудита. `DO NOTHING` держит тот же рубеж без гонки: вторую величину на
+/// ту же дату не пропустит и параллельный запрос.
+pub async fn add_coefficient_version(
     db: &Db,
     actor: Uuid,
     new: NewCoefficientVersion<'_>,
-) -> Result<Uuid, sqlx::Error> {
+) -> Result<Option<Uuid>, sqlx::Error> {
     crate::with_actor(db, actor, async |tx| {
-        upsert_coefficient_version_on(tx, new).await
+        add_coefficient_version_on(tx, new).await
     })
     .await
 }
 
 /// Та же версия в транзакции вызывающего (см. [`upsert_mrp_on`]).
-pub async fn upsert_coefficient_version_on(
+pub async fn add_coefficient_version_on(
     conn: &mut sqlx::PgConnection,
     new: NewCoefficientVersion<'_>,
-) -> Result<Uuid, sqlx::Error> {
+) -> Result<Option<Uuid>, sqlx::Error> {
     sqlx::query_scalar!(
         "INSERT INTO refdata.rate_coefficients
                (coefficient, option_code, label_ru, label_kk, label_en, value, effective_from)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
-             ON CONFLICT (coefficient, option_code, effective_from) DO UPDATE
-               SET label_ru = EXCLUDED.label_ru,
-                   label_kk = EXCLUDED.label_kk,
-                   label_en = EXCLUDED.label_en,
-                   value    = EXCLUDED.value
+             ON CONFLICT (coefficient, option_code, effective_from) DO NOTHING
              RETURNING id",
         new.coefficient,
         new.option_code,
@@ -215,7 +217,22 @@ pub async fn upsert_coefficient_version_on(
         new.value,
         new.effective_from
     )
-    .fetch_one(conn)
+    .fetch_optional(conn)
+    .await
+}
+
+/// Удаление заведенного по ошибке года МРП (FR-1901).
+///
+/// `false` - года в справочнике не было. Отказ сторожа
+/// `core.check_mrp_year_in_use` (год текущий либо под снимком расчета)
+/// приезжает ошибкой БД и разбирается вызывающим: это правило, а не поломка.
+pub async fn delete_mrp(db: &Db, actor: Uuid, year: i32) -> Result<bool, sqlx::Error> {
+    crate::with_actor(db, actor, async |tx| {
+        sqlx::query!("DELETE FROM refdata.mrp WHERE year = $1", year)
+            .execute(&mut *tx)
+            .await
+            .map(|done| done.rows_affected() > 0)
+    })
     .await
 }
 

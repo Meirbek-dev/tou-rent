@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT n.nspname || '.' || c.relname AS \"table!\"\n           FROM pg_class c\n           JOIN pg_namespace n ON n.oid = c.relnamespace\n           WHERE n.nspname IN ('core', 'refdata') AND c.relkind = 'r'\n             AND (has_table_privilege('tou_rent_app', c.oid, 'INSERT')\n               OR has_table_privilege('tou_rent_app', c.oid, 'UPDATE')\n               OR has_table_privilege('tou_rent_app', c.oid, 'DELETE'))\n             AND NOT EXISTS (\n               SELECT 1 FROM pg_trigger t\n               JOIN pg_proc p       ON p.oid = t.tgfoid\n               JOIN pg_namespace pn ON pn.oid = p.pronamespace\n               WHERE t.tgrelid = c.oid AND NOT t.tgisinternal\n                 AND pn.nspname = 'audit' AND p.proname LIKE 'record%'\n             )\n           ORDER BY 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "table!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "194a4b9ef31d14141cbd1543c6fdb68761d3500969e06a3c0964faa0e23f9a91"
+}

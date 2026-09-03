@@ -212,7 +212,15 @@ macro_rules! records {
 }
 
 /// Записи одного вида для точечного удаления; у полной очистки перечня нет.
-pub async fn list_records(db: &Db, kind: PurgeScope) -> Result<Page<AdminRecord>, sqlx::Error> {
+///
+/// Исполнитель - любой (пул или соединение вызывающего): перечень читается
+/// обработчиком из пула, а тестом - из откатываемой транзакции, где лежит
+/// его собственная запись (заголовки строк проверяются на живых данных,
+/// а не на слепке).
+pub async fn list_records<'e, E>(db: E, kind: PurgeScope) -> Result<Page<AdminRecord>, sqlx::Error>
+where
+    E: sqlx::PgExecutor<'e>,
+{
     let rows = match kind {
         PurgeScope::Everything => Vec::new(),
         PurgeScope::Objects => records!(
@@ -234,14 +242,23 @@ pub async fn list_records(db: &Db, kind: PurgeScope) -> Result<Page<AdminRecord>
                FROM core.lots l JOIN core.tenders t ON t.id = l.tender_id
                ORDER BY l.id DESC LIMIT $1"#
         )?,
+        // Имя заявителя - из формы Прил. 2, а не из учетной записи (G-140):
+        // заявку подают от лица организации, и в перечне на удаление админ
+        // ищет ее по тому имени, которое видит везде в процедуре
         PurgeScope::Applications => records!(
             db,
-            r#"SELECT a.id, u.full_name AS "title!", NULL::text AS "title_kk?",
-                      t.title || ' · ' || a.status::text AS "details?",
+            r#"SELECT a.id,
+                      COALESCE(NULLIF(btrim(a.applicant_details ->> 'name'), ''), u.full_name)
+                        AS "title!",
+                      NULL::text AS "title_kk?",
+                      t.title || ' · лот №' || l.seq || ' · ' || o.name
+                        || ' · ' || a.status::text AS "details?",
                       a.submitted_at AS "created_at?"
                FROM core.applications a
                JOIN core.users u ON u.id = a.participant_id
                JOIN core.tenders t ON t.id = a.tender_id
+               JOIN core.lots l ON l.id = a.lot_id
+               JOIN core.objects o ON o.id = l.object_id
                ORDER BY a.id DESC LIMIT $1"#
         )?,
         PurgeScope::Protocols => records!(
@@ -280,21 +297,40 @@ pub async fn list_records(db: &Db, kind: PurgeScope) -> Result<Page<AdminRecord>
                FROM core.acts a JOIN core.contracts c ON c.id = a.contract_id
                ORDER BY a.id DESC LIMIT $1"#
         )?,
+        // Проводка без владельца счета неотличима от такой же проводки
+        // соседнего счета (G-140)
         PurgeScope::LedgerEntries => records!(
             db,
             r#"SELECT e.id, e.op::text || ' ' || coalesce(e.debit, e.credit)::text AS "title!",
                       NULL::text AS "title_kk?",
-                      acc.kind::text || ' · ' || coalesce(e.rule_ref, '') AS "details?",
+                      acc.kind::text || ' · ' || u.full_name
+                        || coalesce(' · ' || e.rule_ref, '') AS "details?",
                       e.occurred_at AS "created_at?"
-               FROM core.ledger_entries e JOIN core.ledger_accounts acc ON acc.id = e.account_id
+               FROM core.ledger_entries e
+               JOIN core.ledger_accounts acc ON acc.id = e.account_id
+               JOIN core.users u ON u.id = acc.owner_user_id
                ORDER BY e.id DESC LIMIT $1"#
         )?,
+        // Заявка особого порядка опознается заявителем, объектом и
+        // категорией (G-140). Раньше в заголовке стояло имя владельца
+        // учетной записи, а в подписи - код категории и статус: заявки
+        // одного заявителя различались только временем подачи
         PurgeScope::SpecialRequests => records!(
             db,
-            r#"SELECT s.id, u.full_name AS "title!", NULL::text AS "title_kk?",
-                      s.category || ' · ' || s.status::text AS "details?",
-                      s.created_at AS "created_at?"
-               FROM core.special_requests s JOIN core.users u ON u.id = s.applicant_id
+            r#"SELECT s.id,
+                      COALESCE(NULLIF(btrim(s.applicant_details ->> 'name'), ''), u.full_name)
+                        AS "title!",
+                      NULL::text AS "title_kk?",
+                      COALESCE(o.name || ' · ', '') || c.label_ru
+                        || ' · ' || s.status::text
+                        || ' · подана '
+                        || to_char(s.submitted_at AT TIME ZONE 'Asia/Almaty', 'DD.MM.YYYY HH24:MI')
+                        AS "details?",
+                      s.submitted_at AS "created_at?"
+               FROM core.special_requests s
+               JOIN core.users u ON u.id = s.applicant_id
+               JOIN refdata.special_categories c ON c.code = s.category
+               LEFT JOIN core.objects o ON o.id = s.object_id
                ORDER BY s.id DESC LIMIT $1"#
         )?,
         PurgeScope::LandPlots => records!(
@@ -330,12 +366,24 @@ pub async fn list_records(db: &Db, kind: PurgeScope) -> Result<Page<AdminRecord>
                       kind::text AS "details?", published_at AS "created_at?"
                FROM core.public_records ORDER BY id DESC LIMIT $1"#
         )?,
+        // Срок без предмета неотличим от такого же срока другой процедуры
+        // (G-140): у обязательства всегда есть тендер, договор, заявка или
+        // заявка особого порядка - предмет и стоит в подписи
         PurgeScope::Obligations => records!(
             db,
-            r#"SELECT id, action AS "title!", NULL::text AS "title_kk?",
-                      rule_ref || ' · ' || status::text || ' · ' || assignee_role::text AS "details?",
-                      due_at AS "created_at?"
-               FROM core.obligations ORDER BY id DESC LIMIT $1"#
+            r#"SELECT ob.id, ob.action AS "title!", NULL::text AS "title_kk?",
+                      ob.rule_ref || ' · ' || ob.status::text
+                        || ' · ' || ob.assignee_role::text
+                        || COALESCE(' · ' || t.title, '')
+                        || COALESCE(' · договор ' || COALESCE(c.reg_number, c.id::text), '')
+                        || COALESCE(' · заявка ' || sr.id::text, '')
+                        AS "details?",
+                      ob.due_at AS "created_at?"
+               FROM core.obligations ob
+               LEFT JOIN core.tenders t ON t.id = ob.tender_id
+               LEFT JOIN core.contracts c ON c.id = ob.contract_id
+               LEFT JOIN core.special_requests sr ON sr.id = ob.special_request_id
+               ORDER BY ob.id DESC LIMIT $1"#
         )?,
         PurgeScope::Notifications => records!(
             db,

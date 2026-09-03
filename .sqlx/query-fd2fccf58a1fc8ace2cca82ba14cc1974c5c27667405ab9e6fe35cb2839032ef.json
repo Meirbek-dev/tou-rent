@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.investment_contracts SET term_months = $2 WHERE contract_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fd2fccf58a1fc8ace2cca82ba14cc1974c5c27667405ab9e6fe35cb2839032ef"
+}

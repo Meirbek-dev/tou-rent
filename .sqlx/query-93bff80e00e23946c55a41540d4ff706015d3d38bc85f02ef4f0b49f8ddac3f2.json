@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"count!\" FROM audit.log\n           WHERE table_name = 'core.dossier_items' AND action = 'UPDATE'\n             AND actor_id = $1 AND payload -> 'new' ->> 'file_key' = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "93bff80e00e23946c55a41540d4ff706015d3d38bc85f02ef4f0b49f8ddac3f2"
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT extract(year FROM (core.now() AT TIME ZONE 'Asia/Almaty'))::int\n             AS \"year!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "year!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "64d48357dac3c104213bc5dcf017ba0a2157a4b75fa08c05ca90bbde78ae2308"
+}

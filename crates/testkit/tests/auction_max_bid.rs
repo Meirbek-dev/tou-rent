@@ -19,8 +19,9 @@ const STARTING_BID: i64 = 55_000;
 const BID_STEP: i64 = 2_750;
 
 async fn try_pool() -> Result<Option<sqlx::PgPool>, sqlx::Error> {
-    let required =
-        tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))?;
+    let required = tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?;
     let Some(url) = required else {
         return Ok(None);
     };

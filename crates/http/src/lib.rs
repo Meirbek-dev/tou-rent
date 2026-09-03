@@ -113,6 +113,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(healthz))
         .routes(routes!(auth::register))
         .routes(routes!(auth::confirm_registration))
+        .routes(routes!(auth::resend_confirmation))
         .routes(routes!(auth::login))
         .routes(routes!(auth::logout))
         .routes(routes!(auth::me))
@@ -203,8 +204,10 @@ fn api_router() -> OpenApiRouter<AppState> {
         // GET и POST по одному пути - один `routes!` (FR-1003, п. 132)
         .routes(routes!(ledger::contract_deposit, ledger::pay_deposit))
         .routes(routes!(ledger::refund_deposit))
+        .routes(routes!(ledger::finance_pending_fees))
         .routes(routes!(refdata::list_mrp))
-        .routes(routes!(refdata::set_mrp))
+        // PUT и DELETE по одному пути - один `routes!` (FR-1901)
+        .routes(routes!(refdata::set_mrp, refdata::delete_mrp))
         .routes(routes!(
             refdata::list_coefficients,
             refdata::add_coefficient
@@ -374,6 +377,7 @@ const PUBLIC_OPERATIONS: &[&str] = &[
     "public_record_pdf",
     "published",
     "register",
+    "resend_confirmation",
     "tender_amendments",
     "tender_protocols",
 ];
@@ -381,7 +385,12 @@ const PUBLIC_OPERATIONS: &[&str] = &[
 /// Дологинные мутации: сессии, а значит и токена в ней, еще нет, и слой CSRF
 /// их пропускает (`csrf::CSRF_EXEMPT`). Выход в перечень не входит намеренно -
 /// он идет уже с токеном.
-const CSRF_FREE_OPERATIONS: &[&str] = &["confirm_registration", "login", "register"];
+const CSRF_FREE_OPERATIONS: &[&str] = &[
+    "confirm_registration",
+    "login",
+    "register",
+    "resend_confirmation",
+];
 
 /// Общие отказы problem+json (NFR-08): имя компонента, статус, описание.
 ///

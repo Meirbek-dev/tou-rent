@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contract_checklists SET checked_at = core.now() WHERE contract_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0f362f3bcde812b50fe86bbca9d8d3d04f13d6eb0affd6676585d1a63b321fba"
+}

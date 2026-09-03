@@ -5,6 +5,9 @@
 use axum::extract::State;
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
+use object_store::ObjectStoreExt as _;
+use object_store::PutPayload;
+use object_store::path::Path as ObjectPath;
 use rust_decimal::Decimal;
 use serde_json::json;
 use time::macros::format_description;
@@ -23,6 +26,40 @@ use crate::request::Path;
 use crate::state::AppState;
 
 const TEMPLATE: &str = include_str!("templates/announcement.typ");
+
+/// Ключ опубликованного объявления в хранилище (бакет `dossiers`).
+///
+/// Ключ выводится из тендера, а не хранится: у объявления он один -
+/// редакции документации кладутся рядом со своим номером версии
+/// (`announcement-v{n}.pdf`, FR-304).
+pub(crate) fn announcement_key(tender_id: Uuid) -> String {
+    format!("tenders/{tender_id}/announcement.pdf")
+}
+
+/// Кладет печатную форму объявления в хранилище и записывает ключ на
+/// материал досье (FR-1602, п. 16, 42).
+///
+/// Круг 7 гаунтлета (G-156). Материал «объявление» в досье был, а файла
+/// у него не было: форма Прил. 1 собиралась на лету и никуда не
+/// сохранялась, поэтому `dossier.zip` начинался с манифеста и первой же
+/// строки без документа. Снимок делается один раз - в момент публикации
+/// (п. 5–6): досье хранит опубликованное объявление, а не пересобранное
+/// задним числом (так же поступает редакция документации, FR-304).
+pub(crate) async fn store_announcement(
+    state: &AppState,
+    actor: Uuid,
+    tender_id: Uuid,
+) -> Result<(), ApiError> {
+    let pdf_bytes = render_announcement(state, tender_id).await?;
+    let key = announcement_key(tender_id);
+    state
+        .storage
+        .put(&ObjectPath::from(key.as_str()), PutPayload::from(pdf_bytes))
+        .await
+        .map_err(ApiError::internal)?;
+    tou_db::publications::attach_announcement_file(&state.db, actor, tender_id, &key).await?;
+    Ok(())
+}
 
 /// PDF объявления (Прил. 1). Для черновика (только organizer) - с пометкой
 /// «черновик»; после публикации - публичный документ карточки (FR-1401).
@@ -46,7 +83,8 @@ pub async fn announcement_pdf(
         .await?
         .ok_or(ApiError::NotFound)?;
 
-    if record.status == TenderStatus::Draft.as_str() {
+    let draft = record.status == TenderStatus::Draft.as_str();
+    if draft {
         let manages = user
             .as_ref()
             .map(|u| u.require(Action::TenderManage).is_ok())
@@ -56,26 +94,49 @@ pub async fn announcement_pdf(
         }
     }
 
-    let lots = tenders::lots_of(&state.db, record.id).await?;
-    let mut pairs = Vec::with_capacity(lots.len());
-    for lot in lots {
-        let object = tou_db::objects::get(&state.db, lot.object_id)
-            .await?
-            .ok_or_else(|| {
-                // FK лота гарантирует объект; отсутствие - рассинхрон данных
-                ApiError::internal(std::io::Error::other(format!(
-                    "объект {} лота {} не найден",
-                    lot.object_id, lot.id
-                )))
-            })?;
-        pairs.push((lot, object));
-    }
+    // Опубликованное объявление отдается из хранилища: там лежит снимок
+    // на момент публикации, тот же файл, что и в досье (G-156). Черновик
+    // снимка не имеет по определению (предпросмотр с водяным знаком), а
+    // объявления, вышедшие до появления снимка, собираются на лету
+    let stored = if draft {
+        None
+    } else {
+        match state
+            .storage
+            .get(&ObjectPath::from(announcement_key(record.id).as_str()))
+            .await
+        {
+            Ok(object) => Some(object.bytes().await.map_err(ApiError::internal)?),
+            Err(object_store::Error::NotFound { .. }) => None,
+            Err(err) => return Err(ApiError::internal(err)),
+        }
+    };
 
-    let data = announcement_data(&record, &pairs);
-    let pdf_bytes = tokio::task::spawn_blocking(move || pdf::render(TEMPLATE, &data))
-        .await
-        .map_err(ApiError::internal)?
-        .map_err(ApiError::internal)?;
+    let pdf_bytes = match stored {
+        Some(bytes) => bytes.to_vec(),
+        None => {
+            let lots = tenders::lots_of(&state.db, record.id).await?;
+            let mut pairs = Vec::with_capacity(lots.len());
+            for lot in lots {
+                let object = tou_db::objects::get(&state.db, lot.object_id)
+                    .await?
+                    .ok_or_else(|| {
+                        // FK лота гарантирует объект; отсутствие - рассинхрон данных
+                        ApiError::internal(std::io::Error::other(format!(
+                            "объект {} лота {} не найден",
+                            lot.object_id, lot.id
+                        )))
+                    })?;
+                pairs.push((lot, object));
+            }
+
+            let data = announcement_data(&record, &pairs);
+            tokio::task::spawn_blocking(move || pdf::render(TEMPLATE, &data))
+                .await
+                .map_err(ApiError::internal)?
+                .map_err(ApiError::internal)?
+        }
+    };
 
     let filename = format!("tender-{}-announcement.pdf", record.id);
     Ok((
@@ -224,6 +285,8 @@ mod tests {
             zoom_url: None,
             zoom_recording_url: None,
             repeat_of: None,
+            cancelled_at: None,
+            cancel_reason: None,
             created_at: datetime!(2026-08-06 08:00 UTC),
             updated_at: datetime!(2026-08-06 08:00 UTC),
         };
@@ -283,6 +346,22 @@ mod tests {
         // 08:52 UTC → 13:52 Asia/Almaty (NFR-03)
         assert_eq!(data["submission_deadline"], "17.08.2026 13:52");
         assert_eq!(data["trading_at"], "не назначено");
+    }
+
+    /// G-156: ключ снимка объявления - тот же, что уходит в досье и в
+    /// `dossier.zip`; редакции документации живут рядом со своим номером
+    /// версии и объявление не перетирают (FR-304, FR-1602).
+    #[test]
+    fn the_announcement_key_is_derived_from_the_tender() {
+        let id = Uuid::now_v7();
+        assert_eq!(
+            announcement_key(id),
+            format!("tenders/{id}/announcement.pdf")
+        );
+        assert_ne!(
+            announcement_key(id),
+            format!("tenders/{id}/announcement-v1.pdf")
+        );
     }
 
     #[test]

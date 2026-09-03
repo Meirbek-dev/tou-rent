@@ -158,6 +158,57 @@ pub enum RuleViolation {
     /// Прочее правило: отказ опознан как правило домена, но своего варианта
     /// в перечне у него пока нет. Не «неизвестная ошибка» - именно правило.
     OtherRule,
+    /// FR-304: новая редакция обязана продлить срок приема заявок (п. 27).
+    ///
+    /// Круг 3 гаунтлета (G-100). Семь исходов `amendment::AmendmentError`
+    /// приезжали наверх одной причиной [`RuleViolation::TenderDocumentationChange`],
+    /// и организатор читал «изменить документацию или сроки приема заявок
+    /// сейчас нельзя» там, где ему нужно было прочесть «новый срок обязан
+    /// быть позже нынешнего». Устраняются эти отказы по-разному, поэтому и
+    /// причины у них разные.
+    TenderAmendmentNotExtended,
+    /// FR-304: продление короче десяти календарных дней от публикации
+    /// новой редакции (п. 27)
+    TenderAmendmentExtensionTooShort,
+    /// FR-304: прием заявок уже закончился - срок истек либо конверты
+    /// вскрыты, и условия тендера больше не меняются (п. 27, 50)
+    TenderAmendmentIntakeClosed,
+    /// INV-1103: голос члена комиссии уже подан и изменению не подлежит
+    /// (FR-1103, п. 13–14).
+    ///
+    /// Круг 4 гаунтлета (G-111). Голос - процедурный акт заседания: он
+    /// оглашается, входит в подсчет и в протокол допуска (п. 55), а особое
+    /// мнение прикладывается к протоколу. Переписать его задним числом
+    /// нельзя, и отказ у этого случая свой: голосовать вообще нельзя
+    /// ([`RuleViolation::CommissionVote`]) и «свой голос уже подан» -
+    /// разные подсказки члену комиссии.
+    VoteAlreadyCast,
+    /// FR-202: версия коэффициента на эту дату вступления в силу уже
+    /// заведена (Прил. 4).
+    ///
+    /// Круг 1 гаунтлета (G-137). Повторная запись с той же датой молча
+    /// переписывала прежнюю величину: справочник - история расчетов, и
+    /// исправленная задним числом версия меняла бы основание уже
+    /// посчитанных ставок. Отдельная причина, а не
+    /// [`RuleViolation::DuplicateRecord`]: устраняется она выбором другой
+    /// даты начала действия, и админ обязан прочесть именно это.
+    CoefficientVersionExists,
+    /// FR-1003, п. 136: депозит возвращается после возврата объекта по акту
+    /// приема-передачи.
+    ///
+    /// Круг 1 гаунтлета (G-128). Случай «акта возврата еще нет» приезжал
+    /// общей причиной [`RuleViolation::ContractDeposit`] вместе со сроком
+    /// внесения и размером депозита, и финблок читал про депозит вообще
+    /// там, где ему нужно было прочесть, чего именно недостает.
+    DepositBeforeReturnAct,
+    /// FR-201: год МРП участвует в расчетах и не удаляется (Прил. 4).
+    ///
+    /// Круг 1 гаунтлета (G-141). Величина года попадает в замороженный
+    /// снимок расчета лота и инвестиционного договора (FR-202): удалить
+    /// год, на котором стоит хотя бы один снимок, значит лишить ставку
+    /// основания. Текущий год не удаляется и без снимков - по нему
+    /// считаются новые ставки.
+    MrpYearInUse,
 }
 
 impl RuleViolation {
@@ -225,6 +276,13 @@ impl RuleViolation {
         RuleViolation::DuplicateRecord,
         RuleViolation::RelatedRecordMissing,
         RuleViolation::OtherRule,
+        RuleViolation::TenderAmendmentNotExtended,
+        RuleViolation::TenderAmendmentExtensionTooShort,
+        RuleViolation::TenderAmendmentIntakeClosed,
+        RuleViolation::VoteAlreadyCast,
+        RuleViolation::CoefficientVersionExists,
+        RuleViolation::DepositBeforeReturnAct,
+        RuleViolation::MrpYearInUse,
     ];
 
     /// Имя на проводе (паритет с serde закреплен тестом).
@@ -291,6 +349,36 @@ impl RuleViolation {
             RuleViolation::DuplicateRecord => "duplicate_record",
             RuleViolation::RelatedRecordMissing => "related_record_missing",
             RuleViolation::OtherRule => "other_rule",
+            RuleViolation::TenderAmendmentNotExtended => "tender_amendment_not_extended",
+            RuleViolation::TenderAmendmentExtensionTooShort => {
+                "tender_amendment_extension_too_short"
+            }
+            RuleViolation::TenderAmendmentIntakeClosed => "tender_amendment_intake_closed",
+            RuleViolation::VoteAlreadyCast => "vote_already_cast",
+            RuleViolation::CoefficientVersionExists => "coefficient_version_exists",
+            RuleViolation::DepositBeforeReturnAct => "deposit_before_return_act",
+            RuleViolation::MrpYearInUse => "mrp_year_in_use",
+        }
+    }
+
+    /// Отказ по п. 27 подробнее общего FR-304 (G-100).
+    ///
+    /// Триггер `core.check_tender_amendment` и домен `amendment::AmendmentFacts`
+    /// пишут об одних и тех же исходах одними и теми же словами - разбор
+    /// идет по ним, а не по новому идентификатору: переписать примененные
+    /// миграции ради машинного признака нельзя (контрольная сумма sqlx).
+    /// Не опознанное здесь остается общей причиной «документация и сроки
+    /// приема изменяются не всегда».
+    fn amendment_reason(message: &str) -> RuleViolation {
+        if message.contains("обязана продлить") {
+            RuleViolation::TenderAmendmentNotExtended
+        } else if message.contains("продлевается не менее чем") {
+            RuleViolation::TenderAmendmentExtensionTooShort
+        } else if message.contains("срок приема заявок истек") || message.contains("заявки вскрыты")
+        {
+            RuleViolation::TenderAmendmentIntakeClosed
+        } else {
+            RuleViolation::TenderDocumentationChange
         }
     }
 
@@ -321,7 +409,8 @@ impl RuleViolation {
         let rule = match token {
             "INV-021" => RuleViolation::TenderStatusTransition,
             "FR-303" => RuleViolation::TenderPublicationTerms,
-            "FR-304" => RuleViolation::TenderDocumentationChange,
+            // Один идентификатор - несколько исходов п. 27 (G-100)
+            "FR-304" => RuleViolation::amendment_reason(message),
             "FR-305" => RuleViolation::TenderCancellation,
             "FR-801" | "FR-802" => RuleViolation::TenderFailureGround,
             "INV-037" => RuleViolation::ApplicationDeadlinePassed,
@@ -329,6 +418,8 @@ impl RuleViolation {
             "FR-1101" => RuleViolation::CommissionComposition,
             "FR-1102" => RuleViolation::CommissionMeeting,
             "FR-1103" | "FR-1104" => RuleViolation::CommissionVote,
+            // Поданный голос не переписывается - отдельный исход FR-1103 (G-111)
+            "INV-1103" => RuleViolation::VoteAlreadyCast,
             "FR-504" => RuleViolation::AdmissionNotice,
             "INV-062" => RuleViolation::AuctionStartPriceMissing,
             "INV-063" => RuleViolation::BidBelowMinimum,
@@ -365,6 +456,9 @@ impl RuleViolation {
             "FR-1801" => RuleViolation::LandApplication,
             "INV-105" => RuleViolation::LandContractTermsMissing,
             "FR-101" => RuleViolation::ObjectInUse,
+            // Год МРП под снимком расчета не удаляется (G-141): сторож
+            // `core.check_mrp_year_in_use` пишет идентификатор первым словом
+            "FR-201" => RuleViolation::MrpYearInUse,
             // Триггер ставок писался до того, как у сообщений появился
             // машинный признак, и идентификатора у него нет. Опознается по
             // началу текста: строка литеральная и поднимается в одном месте.
@@ -541,6 +635,11 @@ mod tests {
             (
                 "append-only: таблица log append-only (изменение и удаление запрещены)",
                 RuleViolation::AppendOnlyTable,
+            ),
+            // Сторож года МРП (G-141): удаление года под снимком расчета
+            (
+                "FR-201: год МРП 2026 участвует в расчетах: снимков лотов - 3                  (Прил. 4, FR-202)",
+                RuleViolation::MrpYearInUse,
             ),
         ];
 

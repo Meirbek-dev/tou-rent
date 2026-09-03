@@ -1,0 +1,61 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id,\n                      COALESCE(NULLIF(btrim(s.applicant_details ->> 'name'), ''), u.full_name)\n                        AS \"title!\",\n                      NULL::text AS \"title_kk?\",\n                      COALESCE(o.name || ' · ', '') || c.label_ru\n                        || ' · ' || s.status::text\n                        || ' · подана '\n                        || to_char(s.submitted_at AT TIME ZONE 'Asia/Almaty', 'DD.MM.YYYY HH24:MI')\n                        AS \"details?\",\n                      s.submitted_at AS \"created_at?\"\n               FROM core.special_requests s\n               JOIN core.users u ON u.id = s.applicant_id\n               JOIN refdata.special_categories c ON c.code = s.category\n               LEFT JOIN core.objects o ON o.id = s.object_id\n               ORDER BY s.id DESC LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.special_requests",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "title!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "title_kk?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "details?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at?",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.special_requests",
+            "name": "submitted_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "363c5ad97bf8d35c4c8fcc4825e10d8ab772a12ad2d5b2f109836e36c6f5f4f7"
+}

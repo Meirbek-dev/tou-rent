@@ -12,7 +12,10 @@ use tou_domain::role::Role;
 use uuid::Uuid;
 
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
-    match tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))? {
+    match tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?
+    {
         Some(url) => tou_db::connect(&url).await.map(Some),
         None => Ok(None),
     }

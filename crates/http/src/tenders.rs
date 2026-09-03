@@ -109,6 +109,13 @@ pub struct TenderDto {
     pub zoom_url: Option<String>,
     pub zoom_recording_url: Option<String>,
     pub repeat_of: Option<Uuid>,
+    /// Момент отмены тендера (п. 82); `null` - тендер не отменен
+    #[serde(with = "time::serde::rfc3339::option")]
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub cancelled_at: Option<OffsetDateTime>,
+    /// Причина отмены - ее пишет тот, кто отменяет. Пока ее не отдавали,
+    /// отмененный тендер на портале объяснялся одним словом «отменен»
+    pub cancel_reason: Option<String>,
     pub lots: Vec<LotDto>,
 }
 
@@ -128,6 +135,8 @@ impl TenderDto {
             zoom_url: r.zoom_url,
             zoom_recording_url: r.zoom_recording_url,
             repeat_of: r.repeat_of,
+            cancelled_at: r.cancelled_at,
+            cancel_reason: r.cancel_reason,
             lots: lots.into_iter().map(LotDto::from).collect(),
         })
     }
@@ -791,7 +800,11 @@ pub async fn publish_tender(
     Path(id): Path<Uuid>,
 ) -> Result<Json<TenderDto>, ApiError> {
     user.require(Action::TenderPublish)?;
-    transition(&state, user.id(), id, TenderStatus::Announced).await
+    let published = transition(&state, user.id(), id, TenderStatus::Announced).await?;
+    // Снимок объявления в хранилище и его ключ на материале досье (G-156):
+    // до этого первый документ процедуры был в описи досье, но не в архиве
+    crate::announcement::store_announcement(&state, user.id(), id).await?;
+    Ok(published)
 }
 
 /// Открытие приема заявок (п. 36): announced → accepting.

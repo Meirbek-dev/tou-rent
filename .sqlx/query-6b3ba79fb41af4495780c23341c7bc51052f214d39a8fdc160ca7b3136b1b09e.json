@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_board_decisions\n           (special_request_id, decision, rationale, decided_by)\n         VALUES ($1, 'grant', 'проект принят', $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6b3ba79fb41af4495780c23341c7bc51052f214d39a8fdc160ca7b3136b1b09e"
+}

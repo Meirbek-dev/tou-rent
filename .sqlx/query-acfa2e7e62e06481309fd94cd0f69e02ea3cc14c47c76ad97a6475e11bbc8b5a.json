@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.investment_contracts\n                 SET extended_at = now(), extension_months = $2 WHERE contract_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "acfa2e7e62e06481309fd94cd0f69e02ea3cc14c47c76ad97a6475e11bbc8b5a"
+}

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT label_ru, label_kk, label_en FROM refdata.special_categories WHERE code = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label_ru",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "label_ru"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "label_kk",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "label_kk"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "label_en",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "label_en"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "04827e670adaf8042ed6d660443f4b1e348ed19479a6a209b04954cfa4d2b7f4"
+}

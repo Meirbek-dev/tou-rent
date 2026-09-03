@@ -145,7 +145,7 @@ pub async fn open_tender(
                RETURNING id, status::text AS "status!", title, title_kk, organizer_id,
                          announced_at, submission_deadline, opening_at, opened_at,
                          trading_at, zoom_url, zoom_recording_url, repeat_of,
-                         created_at, updated_at"#,
+                         cancelled_at, cancel_reason, created_at, updated_at"#,
             tender_id
         )
         .fetch_optional(&mut *tx)
@@ -176,6 +176,15 @@ pub async fn open_tender(
             }
             Err(other) => return Err(OpenError::Db(other)),
         };
+
+        // Обязанность «провести вскрытие» (G-147) закрывается тем же
+        // фактом, что ее и исполняет: вскрытие состоялось - срок закрыт
+        crate::obligations::complete(
+            &mut *tx,
+            ObligationAction::HoldOpening,
+            crate::obligations::Subject::tender(tender_id),
+        )
+        .await?;
 
         let meeting = meeting_query!(
             " WHERE m.tender_id = $1 AND m.kind = 'qualification'",
@@ -410,6 +419,12 @@ pub struct NewProtocol<'a> {
 }
 
 /// Протокол одного вида на тендер (UNIQUE): повтор - None (уже сформирован).
+///
+/// Протокол итогов подводит и сам тендер: `trading → summed_up` (INV-021,
+/// FR-701, п. 73, - см. [`crate::tenders::sum_up_on`]). Переход идет той же
+/// транзакцией, что и запись протокола: итоги, подведенные документом, но
+/// не статусом, - расхождение, из-за которого ссылка на запись торгов
+/// (FR-306, п. 72) оставалась недостижимой (круг 4 гаунтлета, G-110).
 pub async fn insert_protocol(
     db: &Db,
     actor: Uuid,
@@ -448,6 +463,13 @@ pub async fn insert_protocol(
             crate::obligations::complete(&mut *tx, done, subject).await?;
             if let Some(next) = next {
                 crate::obligations::schedule(&mut *tx, next, subject).await?;
+            }
+
+            // Итоги подведены протоколом итогов и только им: у протокола
+            // о несостоявшемся тендере (FR-802) свой путь, а тендер
+            // отмененный или не дошедший до торгов остается как есть
+            if new.kind == "results" {
+                crate::tenders::sum_up_on(&mut *tx, new.tender_id).await?;
             }
         }
         Ok(inserted)

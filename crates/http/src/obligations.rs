@@ -30,6 +30,10 @@ pub struct ObligationDto {
     pub assignee_role: String,
     pub tender_id: Option<Uuid>,
     pub tender_title: Option<String>,
+    /// Договор, к которому привязан срок (возврат взноса, регистрация,
+    /// акт приема-передачи). У сроков договора тендера нет, и без этого
+    /// поля дашборд не мог сослаться на предмет просрочки
+    pub contract_id: Option<Uuid>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub due_at: OffsetDateTime,
@@ -79,6 +83,7 @@ pub async fn my_obligations(
                 assignee_role: record.assignee_role.as_str().to_owned(),
                 tender_id: record.tender_id,
                 tender_title: record.tender_title,
+                contract_id: record.contract_id,
                 due_at: record.due_at,
                 status: record.status,
             })

@@ -46,6 +46,11 @@ pub struct PublicRecord {
     pub contract_id: Option<Uuid>,
     pub acceptance_id: Option<Uuid>,
     pub title: String,
+    /// Тот же заголовок на казахском и английском (NFR-01). `None` -
+    /// материал опубликован до появления столбцов либо перевода подписи
+    /// категории в справочнике нет
+    pub title_kk: Option<String>,
+    pub title_en: Option<String>,
     pub file_key: Option<String>,
     /// Обоснование ставки - снимок расчета Прил. 4 (FR-201)
     pub payload: Value,
@@ -67,6 +72,8 @@ struct PublicRecordRow {
     contract_id: Option<Uuid>,
     acceptance_id: Option<Uuid>,
     title: String,
+    title_kk: Option<String>,
+    title_en: Option<String>,
     file_key: Option<String>,
     payload: Value,
     published_at: OffsetDateTime,
@@ -88,6 +95,8 @@ impl TryFrom<PublicRecordRow> for PublicRecord {
             contract_id: row.contract_id,
             acceptance_id: row.acceptance_id,
             title: row.title,
+            title_kk: row.title_kk,
+            title_en: row.title_en,
             file_key: row.file_key,
             payload: row.payload,
             published_at: row.published_at,
@@ -118,8 +127,8 @@ macro_rules! record_query {
         sqlx::query_as!(
             PublicRecordRow,
             r#"SELECT id, kind::text AS "kind!", special_request_id, contract_id,
-                      acceptance_id, title, file_key, payload, published_at,
-                      unpublish_at, unpublished_at
+                      acceptance_id, title, title_kk, title_en, file_key, payload,
+                      published_at, unpublish_at, unpublished_at
                FROM core.public_records"# + $tail
             $(, $arg)*
         )
@@ -132,6 +141,10 @@ pub struct NewPublicRecord<'a> {
     pub contract_id: Option<Uuid>,
     pub acceptance_id: Option<Uuid>,
     pub title: &'a str,
+    /// Заголовок на казахском и английском, если он собирается из
+    /// справочника (NFR-01); `None` - перевода нет
+    pub title_kk: Option<&'a str>,
+    pub title_en: Option<&'a str>,
     pub file_key: Option<&'a str>,
     pub payload: Value,
 }
@@ -150,14 +163,16 @@ pub async fn publish(
         let id = sqlx::query_scalar!(
             "INSERT INTO core.public_records
                (kind, special_request_id, contract_id, acceptance_id,
-                title, file_key, payload, published_by)
-             VALUES ($1::text::core.public_record_kind, $2, $3, $4, $5, $6, $7, $8)
+                title, title_kk, title_en, file_key, payload, published_by)
+             VALUES ($1::text::core.public_record_kind, $2, $3, $4, $5, $6, $7, $8, $9, $10)
              RETURNING id",
             new.kind.as_str(),
             new.special_request_id,
             new.contract_id,
             new.acceptance_id,
             new.title,
+            new.title_kk,
+            new.title_en,
             new.file_key,
             new.payload,
             actor
@@ -246,6 +261,20 @@ pub struct PendingPublication {
     /// Заявка, договор или акт - предмет будущей публикации
     pub source_id: Uuid,
     pub title: String,
+    /// Наименование объекта, о котором идет материал
+    ///
+    /// Круг 1 гаунтлета (G-134): заголовок вида «Обоснование ставки договора
+    /// особого порядка» одинаков у всех таких материалов, и очередь из
+    /// нескольких строк не давала различить, какой договор публикуется.
+    /// Предмет теперь стоит рядом с заголовком отдельными полями, а не
+    /// вплавляется в него: строка заголовка идет в публикацию как есть
+    /// (п. 97) и переводится справочником, а предмет нужен работающему
+    /// с очередью, а не порталу.
+    pub object_name: Option<String>,
+    /// Заявитель (решение) либо наниматель (договор, акт приемки)
+    pub party_name: Option<String>,
+    /// Регистрационный номер договора, если он присвоен (п. 126)
+    pub reference: Option<String>,
     /// Событие, породившее обязанность публикации (решение, договор, акт)
     pub occurred_at: OffsetDateTime,
     /// Материал готов к публикации: печатная форма или расчет есть
@@ -257,6 +286,9 @@ struct PendingRow {
     kind: String,
     source_id: Uuid,
     title: String,
+    object_name: Option<String>,
+    party_name: Option<String>,
+    reference: Option<String>,
     occurred_at: OffsetDateTime,
     ready: bool,
 }
@@ -272,6 +304,9 @@ impl TryFrom<PendingRow> for PendingPublication {
                 .map_err(|e| sqlx::Error::Decode(Box::new(e)))?,
             source_id: row.source_id,
             title: row.title,
+            object_name: row.object_name,
+            party_name: row.party_name,
+            reference: row.reference,
             occurred_at: row.occurred_at,
             ready: row.ready,
         })
@@ -286,40 +321,59 @@ impl TryFrom<PendingRow> for PendingPublication {
 /// материала (`source_id`); ключ сортировки (`occurred_at`, `source_id`)
 /// БД находит по нему в той же выборке, поэтому состав ключа остается
 /// внутри запроса, а объединение трех источников не мешает листать.
-pub async fn pending(
-    db: &Db,
+pub async fn pending<'e, E>(
+    db: E,
     after: Option<Uuid>,
     limit: i64,
-) -> Result<crate::Page<PendingPublication>, sqlx::Error> {
+) -> Result<crate::Page<PendingPublication>, sqlx::Error>
+where
+    E: sqlx::PgExecutor<'e>,
+{
     // Столбцы под UNION планировщик считает потенциально NULL
     let rows = sqlx::query_as!(
         PendingRow,
         r#"WITH pending AS (
            SELECT 'decision'::text AS kind, r.id AS source_id,
                 'Результат по заявке: ' || c.label_ru || ' (' || c.rule_ref || ')' AS title,
+                o.name AS object_name,
+                COALESCE(NULLIF(btrim(r.applicant_details ->> 'name'), ''), u.full_name)
+                  AS party_name,
+                NULL::text AS reference,
                 d.decided_at AS occurred_at, d.pdf_key IS NOT NULL AS ready
          FROM core.special_board_decisions d
          JOIN core.special_requests r ON r.id = d.special_request_id
          JOIN refdata.special_categories c ON c.code = r.category
+         JOIN core.users u ON u.id = r.applicant_id
+         LEFT JOIN core.objects o ON o.id = r.object_id
          WHERE c.publishable
            AND NOT EXISTS (SELECT 1 FROM core.public_records p
                            WHERE p.special_request_id = r.id)
          UNION ALL
          SELECT 'rate', i.contract_id,
-                'Обоснование ставки договора особого порядка', i.created_at,
+                'Обоснование ставки договора особого порядка',
+                o.name, u.full_name, ct.reg_number, i.created_at,
                 i.rate_calculation IS NOT NULL
          FROM core.investment_contracts i
+         JOIN core.contracts ct ON ct.id = i.contract_id
+         JOIN core.users u ON u.id = ct.tenant_id
+         JOIN core.objects o ON o.id = ct.object_id
          WHERE NOT EXISTS (SELECT 1 FROM core.public_records p
                            WHERE p.contract_id = i.contract_id)
          UNION ALL
          SELECT 'investment_act', a.id,
                 'Акт приемки инвестиций от ' || to_char(a.act_date, 'DD.MM.YYYY'),
+                o.name, u.full_name, ct.reg_number,
                 a.created_at, a.pdf_key IS NOT NULL
          FROM core.investment_acceptances a
+         JOIN core.contracts ct ON ct.id = a.contract_id
+         JOIN core.users u ON u.id = ct.tenant_id
+         JOIN core.objects o ON o.id = ct.object_id
          WHERE NOT EXISTS (SELECT 1 FROM core.public_records p
                            WHERE p.acceptance_id = a.id)
          )
          SELECT kind AS "kind!", source_id AS "source_id!", title AS "title!",
+                object_name AS "object_name?", party_name AS "party_name?",
+                reference AS "reference?",
                 occurred_at AS "occurred_at!", ready AS "ready!"
          FROM pending
          WHERE $1::uuid IS NULL

@@ -49,6 +49,12 @@ pub struct PublicRecordDto {
     /// Пункт Правил, по которому материал публикуется
     pub rule_ref: String,
     pub title: String,
+    /// Тот же заголовок на казахском и английском (NFR-01); `null` -
+    /// перевода нет, и портал показывает `title`. У материалов
+    /// «результат рассмотрения» он собирается из подписи категории
+    /// справочника в момент публикации, у остальных видов пока пуст
+    pub title_kk: Option<String>,
+    pub title_en: Option<String>,
     pub has_file: bool,
     /// Обоснование ставки - расчет Прил. 4 (FR-201); у прочих видов пусто
     #[schema(value_type = Object)]
@@ -74,6 +80,8 @@ fn record_dto(record: PublicRecord) -> PublicRecordDto {
         kind_title_ru: record.kind.title_ru().to_owned(),
         rule_ref: record.kind.rule_ref().to_owned(),
         title: record.title,
+        title_kk: record.title_kk,
+        title_en: record.title_en,
         has_file: record.file_key.is_some(),
         payload: record.payload,
         published_at: record.published_at,
@@ -188,6 +196,16 @@ pub struct PendingPublicationDto {
     /// Заявка, договор или акт - предмет будущей публикации
     pub source_id: Uuid,
     pub title: String,
+    /// Наименование объекта материала; `null` - объекта у заявки нет
+    ///
+    /// Круг 1 гаунтлета (G-134): у обоснований ставки заголовок один на
+    /// всех - «Обоснование ставки договора особого порядка», и очередь из
+    /// нескольких строк не давала различить, какой договор публикуется
+    pub object_name: Option<String>,
+    /// Заявитель (результат рассмотрения) либо наниматель (ставка, акт)
+    pub party_name: Option<String>,
+    /// Регистрационный номер договора, если он присвоен (п. 126)
+    pub reference: Option<String>,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub occurred_at: OffsetDateTime,
@@ -241,6 +259,9 @@ pub async fn pending_publications(
                 rule_ref: item.kind.rule_ref().to_owned(),
                 source_id: item.source_id,
                 title: item.title,
+                object_name: item.object_name,
+                party_name: item.party_name,
+                reference: item.reference,
                 occurred_at: item.occurred_at,
                 ready: item.ready,
             })
@@ -300,6 +321,8 @@ pub async fn publish_record(
             contract_id: new.contract_id,
             acceptance_id: new.acceptance_id,
             title: &new.title,
+            title_kk: new.title_kk.as_deref(),
+            title_en: new.title_en.as_deref(),
             file_key: new.file_key.as_deref(),
             payload: new.payload,
         },
@@ -316,6 +339,10 @@ struct Material {
     contract_id: Option<Uuid>,
     acceptance_id: Option<Uuid>,
     title: String,
+    /// Заголовок на казахском и английском - там, где он собирается
+    /// из справочника (NFR-01)
+    title_kk: Option<String>,
+    title_en: Option<String>,
     file_key: Option<String>,
     payload: serde_json::Value,
 }
@@ -334,10 +361,29 @@ async fn decision_material(state: &AppState, request_id: Uuid) -> Result<Materia
         special_request_id: Some(request_id),
         contract_id: None,
         acceptance_id: None,
-        title: format!(
-            "Результат рассмотрения заявки особого порядка: {} ({})",
-            request.category_label, request.category_rule_ref
+        title: decision_title(
+            "Результат рассмотрения заявки особого порядка",
+            &request.category_label,
+            &request.category_rule_ref,
         ),
+        // Заголовок собирается из подписи категории справочника, поэтому
+        // переводится ровно настолько, насколько переведен справочник:
+        // нет `label_kk` - нет и заголовка, а подставлять русский вместо
+        // него - дело кабинета, а не сервера (NFR-01)
+        title_kk: request.category_label_kk.as_deref().map(|label| {
+            decision_title(
+                "Ерекше тәртіп бойынша өтінімді қарау нәтижесі",
+                label,
+                &request.category_rule_ref,
+            )
+        }),
+        title_en: request.category_label_en.as_deref().map(|label| {
+            decision_title(
+                "Special-order request decision",
+                label,
+                &request.category_rule_ref,
+            )
+        }),
         file_key: decision.pdf_key,
         // Обоснование публикуется вместе с результатом (п. 97)
         payload: serde_json::json!({
@@ -348,6 +394,17 @@ async fn decision_material(state: &AppState, request_id: Uuid) -> Result<Materia
             "purpose": request.purpose,
         }),
     })
+}
+
+/// Заголовок результата рассмотрения: вид материала, подпись категории
+/// и пункт Правил - одинаково во всех трех локалях.
+///
+/// Отдельная функция, а не три `format!` подряд: строится он один раз при
+/// публикации и с этого мгновения хранится (досье решения показывает то,
+/// что было опубликовано, а не то, что сейчас в справочнике), поэтому
+/// расхождение в порядке частей заметить было бы уже негде.
+fn decision_title(kind: &str, category_label: &str, rule_ref: &str) -> String {
+    format!("{kind}: {category_label} ({rule_ref})")
 }
 
 /// Обоснование ставки договора особого порядка (п. 97): публикуется снимок
@@ -374,6 +431,10 @@ async fn rate_material(state: &AppState, contract_id: Uuid) -> Result<Material, 
             "Обоснование ставки договора особого порядка: {}",
             contract.object_name.as_deref().unwrap_or("объект")
         ),
+        // Наименование объекта на казахском сюда не доезжает (выборка
+        // договоров его не отдает), а выдумывать перевод сервер не будет
+        title_kk: None,
+        title_en: None,
         file_key: None,
         payload: serde_json::json!({
             "monthly_rate": contract.monthly_rate,
@@ -394,10 +455,40 @@ async fn act_material(state: &AppState, acceptance_id: Uuid) -> Result<Material,
         contract_id: None,
         acceptance_id: Some(acceptance_id),
         title: format!("Акт приемки инвестиций от {}", acceptance.act_date),
+        title_kk: None,
+        title_en: None,
         file_key: acceptance.pdf_key,
         payload: serde_json::json!({
             "accepted_amount": acceptance.accepted_amount,
             "act_date": acceptance.act_date.to_string(),
         }),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Рубеж G-066: заголовок результата собирается по одному правилу на
+    /// всех трех языках, а переводится ровно тем, что есть в справочнике.
+    ///
+    /// Перевода нет - заголовка на этом языке нет: подставить сюда русскую
+    /// строку значит навсегда записать ее в материал (публикация
+    /// неизменяема, п. 97) и лишить портал возможности отличить «перевода
+    /// нет» от «перевод совпадает с русским».
+    #[test]
+    fn a_decision_title_is_built_the_same_way_in_every_language() {
+        assert_eq!(
+            decision_title(
+                "Результат рассмотрения заявки особого порядка",
+                "Кат. 1",
+                "п. 87.1"
+            ),
+            "Результат рассмотрения заявки особого порядка: Кат. 1 (п. 87.1)"
+        );
+        assert_eq!(
+            decision_title("Special-order request decision", "Cat. 1", "п. 87.1"),
+            "Special-order request decision: Cat. 1 (п. 87.1)"
+        );
+    }
 }

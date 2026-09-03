@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT label_ru FROM refdata.evasion_grounds WHERE code = 'documents_deadline_missed'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label_ru",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.evasion_grounds",
+            "name": "label_ru"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d972c9c1f13c8dafbdf7fc75eaaf35a8867856e416afefaeaa51497b5f85d2e5"
+}

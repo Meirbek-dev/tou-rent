@@ -26,6 +26,10 @@ pub struct TenderRecord {
     pub zoom_url: Option<String>,
     pub zoom_recording_url: Option<String>,
     pub repeat_of: Option<Uuid>,
+    /// Отмена тендера (п. 82): момент и причина. Хранятся на самом тендере,
+    /// а не выводятся из отмененных лотов, - причину пишет тот, кто отменяет
+    pub cancelled_at: Option<OffsetDateTime>,
+    pub cancel_reason: Option<String>,
     pub created_at: OffsetDateTime,
     pub updated_at: OffsetDateTime,
 }
@@ -63,7 +67,7 @@ macro_rules! tender_query {
             r#"SELECT id, status::text AS "status!", title, title_kk, organizer_id,
                       announced_at, submission_deadline, opening_at, opened_at,
                       trading_at, zoom_url, zoom_recording_url, repeat_of,
-                      created_at, updated_at
+                      cancelled_at, cancel_reason, created_at, updated_at
                FROM core.tenders"# + $tail
             $(, $arg)*
         )
@@ -78,7 +82,7 @@ macro_rules! tender_query_returning {
             $head + r#" RETURNING id, status::text AS "status!", title, title_kk, organizer_id,
                                   announced_at, submission_deadline, opening_at, opened_at,
                                   trading_at, zoom_url, zoom_recording_url, repeat_of,
-                                  created_at, updated_at"#
+                                  cancelled_at, cancel_reason, created_at, updated_at"#
             $(, $arg)*
         )
     };
@@ -608,6 +612,100 @@ pub async fn transition(
         }
     })
     .await
+}
+
+/// Начало торгов (FR-302, INV-021, п. 60): `qualification → trading`.
+///
+/// Круг 4 гаунтлета (G-110). Два последних перехода статусной модели -
+/// `qualification → trading` и `trading → summed_up` - стояли в
+/// `refdata.tender_status_transitions`, но выполнял их один только seed
+/// демо-стенда. Живая процедура доходила до допуска и там останавливалась:
+/// торги шли, победитель определялся, протокол итогов формировался, а
+/// тендер оставался «на допуске» - с бейджем «Вскрытие и допуск» на
+/// портале и недостижимой ссылкой на запись торгов (FR-306, п. 72).
+///
+/// Момент перехода - старт первой комнаты лота: с него тендер и находится
+/// «на торгах». Второй и последующие лоты этого тендера уже ничего не
+/// меняют, поэтому переход идет условием запроса, а не проверкой в коде:
+/// не в том статусе - ноль строк и молчание, а не отказ. Тендер
+/// отмененный, несостоявшийся или уже на торгах остается как есть.
+///
+/// Транзакция - вызывающего ([`crate::auctions::start`]): статус тендера
+/// и старт комнаты либо происходят вместе, либо не происходят вовсе.
+/// След оставляет audit-триггер `core.tenders` под актором транзакции.
+pub(crate) async fn start_trading_on(
+    tx: &mut sqlx::PgConnection,
+    tender_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let moved = sqlx::query_scalar!(
+        "UPDATE core.tenders SET status = 'trading'
+         WHERE id = $1 AND status = 'qualification'
+         RETURNING id",
+        tender_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    Ok(moved.is_some())
+}
+
+/// Итоги подведены (FR-302, FR-701, INV-021, п. 73): `trading → summed_up`.
+///
+/// Пара к [`start_trading_on`] (G-110). Итог тендера подводит протокол
+/// итогов - до него победитель лота известен из ленты ставок, но
+/// процедура не закончена (п. 73). Поэтому переход стоит там же, где
+/// протокол записывается, - в одной с ним транзакции.
+///
+/// Условие запроса то же: из `trading` и только из него. Тендер, торги
+/// которого не начинались, отмененный и несостоявшийся не трогаются -
+/// у протокола о несостоявшемся тендере (`failed`) свой путь.
+pub(crate) async fn sum_up_on(
+    tx: &mut sqlx::PgConnection,
+    tender_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let moved = sqlx::query_scalar!(
+        "UPDATE core.tenders SET status = 'summed_up'
+         WHERE id = $1 AND status = 'trading'
+         RETURNING id",
+        tender_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    Ok(moved.is_some())
+}
+
+/// Договор заключен (FR-302, FR-905, INV-021, п. 108, 126):
+/// `summed_up → contracted`.
+///
+/// Третий из переходов, которые статусная модель знала, а процедура не
+/// выполняла (G-155; см. [`start_trading_on`] и [`sum_up_on`]). Переход
+/// стоял в `refdata.tender_status_transitions`, но `contracted` писал один
+/// только seed демо-стенда: у живого тендера договор доходил до записи
+/// в журнале регистрации, а сам тендер навсегда оставался «итоги
+/// подведены» - и бейдж карточки портала говорил неправду.
+///
+/// Момент - регистрация договора в журнале (п. 126): именно она дает дату
+/// заключения, а не составление проекта и не подписи сторон. Транзакция -
+/// вызывающего ([`crate::contracts::register_on`]): либо номер в журнале
+/// и статус тендера, либо ничего. След оставляет audit-триггер
+/// `core.tenders` под актором транзакции.
+///
+/// Условие запроса то же, что у пары выше: из `summed_up` и только из него.
+/// У тендера с несколькими лотами договоров столько же, и заключение
+/// второго уже ничего не меняет - ноль строк и молчание, а не отказ.
+/// Отмененный и несостоявшийся тендер не трогаются.
+pub(crate) async fn mark_contracted_on(
+    tx: &mut sqlx::PgConnection,
+    tender_id: Uuid,
+) -> Result<bool, sqlx::Error> {
+    let moved = sqlx::query_scalar!(
+        "UPDATE core.tenders SET status = 'contracted'
+         WHERE id = $1 AND status = 'summed_up'
+         RETURNING id",
+        tender_id
+    )
+    .fetch_optional(&mut *tx)
+    .await?;
+    Ok(moved.is_some())
 }
 
 /// Количество тендеров по статусам - бизнес-метрика дашборда (T17).

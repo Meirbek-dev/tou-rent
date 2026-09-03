@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.special_board_decisions\n           (special_request_id, decision, rationale, decided_by, pdf_key)\n         VALUES ($1, 'refuse', 'G-066: имущество занято учебным процессом', $2,\n                 'protocols/g066.pdf')\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.special_board_decisions",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "d3782482400f6e55ff8f865a51315281a6e66bb76101a7d16047e56531e3dc9c"
+}

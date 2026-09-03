@@ -24,6 +24,10 @@ pub enum ErrorCode {
     Unauthorized,
     Forbidden,
     InvalidCredentials,
+    /// Пароль верен, но канал регистрации не подтвержден (FR-1501): вход
+    /// закрыт до ввода кода. Свой код, а не `invalid_credentials`: у этого
+    /// состояния есть выход, и кабинет обязан его назвать
+    EmailNotConfirmed,
     EmailTaken,
     IdNumberTaken,
     VerificationFailed,
@@ -110,6 +114,12 @@ pub enum ApiError {
     Forbidden,
     #[error("неверный email или пароль")]
     InvalidCredentials,
+    /// Учетная запись заведена, но код из письма (или SMS) не введен
+    /// (FR-1501). Отдельно от [`ApiError::InvalidCredentials`]: пока
+    /// неподтвержденный вход отвечал «неверный email или пароль»,
+    /// регистрация была тупиком - человек считал, что ошибся паролем.
+    #[error("учетная запись не подтверждена")]
+    EmailNotConfirmed,
     #[error("email уже зарегистрирован")]
     EmailTaken,
     #[error("ИИН/БИН уже зарегистрирован")]
@@ -175,6 +185,7 @@ impl ApiError {
             ApiError::Unauthorized => ErrorCode::Unauthorized,
             ApiError::Forbidden => ErrorCode::Forbidden,
             ApiError::InvalidCredentials => ErrorCode::InvalidCredentials,
+            ApiError::EmailNotConfirmed => ErrorCode::EmailNotConfirmed,
             ApiError::EmailTaken => ErrorCode::EmailTaken,
             ApiError::IdNumberTaken => ErrorCode::IdNumberTaken,
             ApiError::VerificationFailed => ErrorCode::VerificationFailed,
@@ -198,7 +209,9 @@ impl ApiError {
             ApiError::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
             ApiError::UnsupportedMediaType(_) => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             ApiError::Unauthorized | ApiError::InvalidCredentials => StatusCode::UNAUTHORIZED,
-            ApiError::Forbidden | ApiError::CsrfRejected => StatusCode::FORBIDDEN,
+            ApiError::Forbidden | ApiError::CsrfRejected | ApiError::EmailNotConfirmed => {
+                StatusCode::FORBIDDEN
+            }
             ApiError::EmailTaken | ApiError::IdNumberTaken | ApiError::IdempotencyInFlight => {
                 StatusCode::CONFLICT
             }
@@ -471,6 +484,19 @@ mod tests {
             ApiError::IdempotencyKeyReuse.code(),
             ErrorCode::IdempotencyKeyReuse
         );
+    }
+
+    /// Рубеж G-073: неподтвержденная учетная запись отвечает своим кодом.
+    /// Пока он совпадал с `invalid_credentials`, кабинету было нечем
+    /// отличить «не тот пароль» от «не введен код из письма», и человек
+    /// после регистрации оставался в тупике.
+    #[tokio::test]
+    async fn unconfirmed_account_has_its_own_code() {
+        let problem = problem_of(ApiError::EmailNotConfirmed).await;
+
+        assert_eq!(problem["status"], 403);
+        assert_eq!(problem["code"], "email_not_confirmed");
+        assert_ne!(problem["code"], "invalid_credentials");
     }
 
     #[test]

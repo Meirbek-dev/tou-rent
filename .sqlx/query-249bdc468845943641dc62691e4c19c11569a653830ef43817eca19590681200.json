@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT submission_deadline AS \"deadline!\", opening_at AS \"opening!\",\n                  trading_at AS \"trading!\"\n           FROM core.tenders WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deadline!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "submission_deadline"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "opening!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "opening_at"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "trading!",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "trading_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "249bdc468845943641dc62691e4c19c11569a653830ef43817eca19590681200"
+}

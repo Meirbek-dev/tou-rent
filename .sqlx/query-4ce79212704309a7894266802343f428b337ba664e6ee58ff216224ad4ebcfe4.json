@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.ledger_entries\n           (account_id, op, credit, rule_ref, recorded_by, paid_at)\n         VALUES ($1, 'receipt_confirmed', 79750, 'п. 132', $2, current_date)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4ce79212704309a7894266802343f428b337ba664e6ee58ff216224ad4ebcfe4"
+}

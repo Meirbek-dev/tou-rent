@@ -27,8 +27,9 @@
 const REAL_CLOCK_ALLOWED: [(&str, &str, &str); 1] = [("refdata", "clock_offset", "set_at")];
 
 async fn pool() -> Result<Option<sqlx::PgPool>, sqlx::Error> {
-    let required =
-        tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))?;
+    let required = tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?;
     let Some(url) = required else {
         return Ok(None);
     };

@@ -110,31 +110,41 @@ pub struct MeetingDto {
 }
 
 /// Заседание допуска: состав комиссии, явка, кворум, декларации и отводы.
+///
+/// Заседания может еще не быть - это состояние процедуры, а не ошибка
+/// адреса (круг 4 гаунтлета, G-067). Раньше «еще не назначено» отвечало
+/// 404, и каждая загрузка карточки тендера писала ошибку в консоль
+/// кабинета. Теперь ненайденным остается только сам тендер, а
+/// ненаступившее заседание - `null` в теле ответа.
 #[utoipa::path(
     get,
     path = "/api/v1/tenders/{id}/meeting",
     tag = "admission",
     params(("id" = Uuid, Path, description = "Тендер")),
     responses(
-        (status = 200, description = "Заседание допуска", body = MeetingDto),
-        (status = 404, description = "Заседание не назначено", body = crate::error::Problem),
+        (status = 200, description = "Заседание допуска; `null` - еще не назначено",
+         body = Option<MeetingDto>),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
     )
 )]
 pub async fn qualification_meeting(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<MeetingDto>, ApiError> {
+) -> Result<Json<Option<MeetingDto>>, ApiError> {
     user.require(Action::ApplicationReadAll)?;
 
-    let meeting = admission::qualification_meeting(&state.db, id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+    if tenders::get(&state.db, id).await?.is_none() {
+        return Err(ApiError::NotFound);
+    }
+    let Some(meeting) = admission::qualification_meeting(&state.db, id).await? else {
+        return Ok(Json(None));
+    };
     let members = admission::members_of(&state.db, meeting.commission_id).await?;
     let attendance = tou_db::commission::attendance(&state.db, meeting.id).await?;
     let (declarations, recusals) = crate::commission::declarations_and_recusals(&state, id).await?;
 
-    Ok(Json(MeetingDto {
+    Ok(Json(Some(MeetingDto {
         commission_name: meeting.commission_name,
         scheduled_at: meeting.scheduled_at,
         held_at: meeting.held_at,
@@ -155,7 +165,7 @@ pub async fn qualification_meeting(
             .collect(),
         declarations,
         recusals,
-    }))
+    })))
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -441,30 +451,36 @@ pub async fn generate_admission_protocol(
 }
 
 /// Реквизиты протокола допуска (без содержимого) - состояние для UI.
+///
+/// Несформированный протокол - состояние процедуры, а не ошибка адреса
+/// (G-067): вкладка спрашивает его на каждой загрузке и до заседания
+/// комиссии получала 404. Ненайденным остается сам тендер.
 #[utoipa::path(
     get,
     path = "/api/v1/tenders/{id}/admission-protocol",
     tag = "admission",
     params(("id" = Uuid, Path, description = "Тендер")),
     responses(
-        (status = 200, description = "Протокол сформирован", body = GeneratedProtocolDto),
-        (status = 404, description = "Протокол не сформирован", body = crate::error::Problem),
+        (status = 200, description = "Реквизиты протокола; `null` - еще не сформирован",
+         body = Option<GeneratedProtocolDto>),
+        (status = 404, description = "Тендер не найден", body = crate::error::Problem),
     )
 )]
 pub async fn admission_protocol_meta(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<GeneratedProtocolDto>, ApiError> {
+) -> Result<Json<Option<GeneratedProtocolDto>>, ApiError> {
     user.require(Action::ApplicationReadAll)?;
-    let protocol = admission::get_protocol(&state.db, id, "admission")
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    Ok(Json(GeneratedProtocolDto {
+    if tenders::get(&state.db, id).await?.is_none() {
+        return Err(ApiError::NotFound);
+    }
+    let protocol = admission::get_protocol(&state.db, id, "admission").await?;
+    Ok(Json(protocol.map(|protocol| GeneratedProtocolDto {
         id: protocol.id,
         number: protocol.number,
         generated_at: protocol.generated_at,
-    }))
+    })))
 }
 
 /// PDF протокола допуска из RustFS (secretary/commission).

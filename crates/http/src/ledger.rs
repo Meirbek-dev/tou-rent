@@ -48,9 +48,28 @@ pub struct LedgerAccountDto {
     /// (FR-1003, п. 132); у счета взноса размер задает лот (FR-206)
     #[schema(value_type = Option<String>, example = "60500.00")]
     pub required_amount: Option<Decimal>,
+    /// Дата акта возврата объекта по договору счета (Прил. 8): до него
+    /// депозит не возвращается (п. 136). `null` - объект не возвращен либо
+    /// счет не депозитный
+    #[serde(with = "crate::dto::iso_date::option")]
+    #[schema(value_type = Option<String>, format = Date)]
+    pub return_act_at: Option<time::Date>,
+    /// Депозит можно вернуть прямо сейчас: объект возвращен по акту и на
+    /// счете есть остаток (FR-1003, п. 136).
+    ///
+    /// Круг 1 гаунтлета (G-128): кабинет предлагал возврат кнопкой всегда,
+    /// а условие п. 136 узнавалось только из отказа после нажатия. Признак
+    /// считает сервер - правило одно, и второй его копии в кабинете быть
+    /// не должно
+    pub refundable: bool,
 }
 
 fn account_dto(row: ledger::AccountRow) -> LedgerAccountDto {
+    // Возврат депозита возможен по акту возврата и при непустом остатке -
+    // те же два условия, что проверяет `ledger::refund_deposit_on`
+    let refundable = row.kind == AccountKind::ContractDeposit.as_str()
+        && row.return_act_at.is_some()
+        && row.balance > Decimal::ZERO;
     LedgerAccountDto {
         id: row.id,
         kind: row.kind,
@@ -62,6 +81,8 @@ fn account_dto(row: ledger::AccountRow) -> LedgerAccountDto {
         tender_title: row.tender_title,
         lot_seq: row.lot_seq,
         balance: row.balance,
+        return_act_at: row.return_act_at,
+        refundable,
     }
 }
 
@@ -193,6 +214,87 @@ pub async fn account_entries(
                 note: row.note,
                 recorded_by_name: row.recorded_by_name,
                 occurred_at: row.occurred_at,
+            })
+            .collect(),
+        next_after,
+        truncated,
+    }))
+}
+
+/// Заявка, ждущая подтверждения гарантийного взноса (FR-405, п. 23).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FinancePendingFeeDto {
+    /// Заявка - по ней и подтверждается поступление
+    pub application_id: Uuid,
+    pub tender_id: Uuid,
+    pub tender_title: String,
+    pub lot_id: Uuid,
+    pub lot_seq: i32,
+    /// Имя заявителя из формы Прил. 2 - оно же стоит в выписке банка
+    pub applicant_name: String,
+    /// Размер взноса, заданный лотом (FR-206): с ним сверяется поступление
+    #[schema(value_type = String, example = "36000.00")]
+    pub guarantee_fee: Decimal,
+    #[serde(with = "time::serde::rfc3339")]
+    #[schema(value_type = String, format = DateTime)]
+    pub submitted_at: OffsetDateTime,
+}
+
+/// Страница очереди на подтверждение взносов (ТЗ § 7): старое сверху.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct FinancePendingFeePage {
+    pub items: Vec<FinancePendingFeeDto>,
+    /// Курсор продолжения для `after` - `application_id` последней строки;
+    /// `null` - очередь показана до конца
+    pub next_after: Option<Uuid>,
+    /// Показана не вся выборка
+    pub truncated: bool,
+}
+
+/// Очередь заявок, ждущих подтверждения взноса (FR-405, п. 23).
+///
+/// Рабочий список департамента финансов: пришла выписка банка - здесь
+/// видно, по какой заявке ждут денег, сколько положено взносом лота
+/// (FR-206) и когда заявка подана. Право то же, что у самого подтверждения
+/// ([`Action::FeeConfirm`]): очередь показывает ровно те заявки, по которым
+/// это право дает нажать кнопку.
+#[utoipa::path(
+    get,
+    path = "/api/v1/finance/pending-fees",
+    tag = "ledger",
+    params(crate::dto::PageCursorParams),
+    responses(
+        (status = 200, description = "Заявки, ждущие подтверждения взноса",
+         body = FinancePendingFeePage),
+        (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
+    )
+)]
+pub async fn finance_pending_fees(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Query(params): Query<crate::dto::PageCursorParams>,
+) -> Result<Json<FinancePendingFeePage>, ApiError> {
+    user.require(Action::FeeConfirm)?;
+
+    let limit = crate::page_limit(params.limit);
+    let page = ledger::pending_fees(&state.db, params.after, limit).await?;
+    let truncated = page.truncated;
+    let next_after = truncated
+        .then(|| page.last().map(|row| row.application_id))
+        .flatten();
+
+    Ok(Json(FinancePendingFeePage {
+        items: page
+            .into_iter()
+            .map(|row| FinancePendingFeeDto {
+                application_id: row.application_id,
+                tender_id: row.tender_id,
+                tender_title: row.tender_title,
+                lot_id: row.lot_id,
+                lot_seq: row.lot_seq,
+                applicant_name: row.applicant_name,
+                guarantee_fee: row.guarantee_fee,
+                submitted_at: row.submitted_at,
             })
             .collect(),
         next_after,
@@ -418,31 +520,42 @@ pub struct RefundNote {
 
 /// Депозитный счет договора (FR-1003): наниматель видит свой, финблок -
 /// любой, ведущие процесс - в карточке договора.
+///
+/// Депозит вносится не сразу после заключения договора, и до взноса счета
+/// нет вовсе (круг 4 гаунтлета, G-067): «еще не внесен» отвечало 404, и
+/// список договоров нанимателя писал по ошибке на каждый договор. Теперь
+/// ненайденным остается сам договор, а невнесенный депозит - `null`.
+///
+/// Право читать проверяется по договору, а не по счету: у отсутствующего
+/// счета владельца нет, и проверять по нему было бы нечего. Наниматель
+/// договора - тот же, кто владеет его депозитным счетом.
 #[utoipa::path(
     get,
     path = "/api/v1/contracts/{id}/deposit",
     tag = "ledger",
     params(("id" = Uuid, Path, description = "Договор")),
     responses(
-        (status = 200, description = "Депозитный счет", body = LedgerAccountDto),
-        (status = 404, description = "Счет не открыт", body = crate::error::Problem),
+        (status = 200, description = "Депозитный счет; `null` - депозит не вносился",
+         body = Option<LedgerAccountDto>),
+        (status = 404, description = "Договор не найден", body = crate::error::Problem),
     )
 )]
 pub async fn contract_deposit(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<LedgerAccountDto>, ApiError> {
-    let account = ledger::account_of_contract(&state.db, id)
+) -> Result<Json<Option<LedgerAccountDto>>, ApiError> {
+    let contract = tou_db::contracts::get(&state.db, id)
         .await?
         .ok_or(ApiError::NotFound)?;
 
     // Свой депозит видит наниматель; чужой - финблок и ведущие процесс
-    if account.owner_user_id != user.id() && user.require(Action::LedgerRead).is_err() {
+    if contract.tenant_id != user.id() && user.require(Action::LedgerRead).is_err() {
         user.require(Action::ContractRead)?;
     }
 
-    Ok(Json(account_dto(account)))
+    let account = ledger::account_of_contract(&state.db, id).await?;
+    Ok(Json(account.map(account_dto)))
 }
 
 /// Счет взноса по заявке: участник видит свой, финблок - любой.

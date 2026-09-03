@@ -54,6 +54,14 @@ pub struct AccountRow {
     /// (FR-1003, п. 132). У счета взноса участника поля нет: там размер
     /// задает лот (FR-206)
     pub required_amount: Option<Decimal>,
+    /// Дата акта возврата объекта по договору счета (Прил. 8, п. 136):
+    /// до него депозит не возвращается. `None` - объект не возвращен либо
+    /// счет не депозитный.
+    ///
+    /// Круг 1 гаунтлета (G-128): кабинет предлагал возврат депозита кнопкой,
+    /// а отказ приходил уже после нажатия - условие возврата в ответе не
+    /// стояло, и показать его было нечем.
+    pub return_act_at: Option<time::Date>,
 }
 
 /// Выборка счета: общий список столбцов + хвост запроса (см. `acts.rs`).
@@ -73,13 +81,16 @@ macro_rules! account_query {
                       l.seq AS "lot_seq?",
                       COALESCE((SELECT sum(e.credit - e.debit) FROM core.ledger_entries e
                                 WHERE e.account_id = acc.id), 0)::numeric(14,2) AS "balance!",
-                      c.monthly_rate AS "required_amount?"
+                      c.monthly_rate AS "required_amount?",
+                      ret.act_date AS "return_act_at?"
                FROM core.ledger_accounts acc
                JOIN core.users u ON u.id = acc.owner_user_id
                LEFT JOIN core.applications a ON a.id = acc.application_id
                LEFT JOIN core.tenders t ON t.id = a.tender_id
                LEFT JOIN core.lots l ON l.id = a.lot_id
-               LEFT JOIN core.contracts c ON c.id = acc.contract_id"# + $tail
+               LEFT JOIN core.contracts c ON c.id = acc.contract_id
+               LEFT JOIN core.acts ret
+                 ON ret.contract_id = acc.contract_id AND ret.kind = 'return'"# + $tail
             $(, $arg)*
         )
     };
@@ -142,6 +153,68 @@ pub async fn entries(
     let page = crate::Page::probe(rows, limit);
     crate::warn_if_truncated(page.truncated, "ledger::entries");
     Ok(page)
+}
+
+/// Заявка, ждущая подтверждения взноса (FR-405, п. 23).
+pub struct PendingFeeRow {
+    pub application_id: Uuid,
+    pub tender_id: Uuid,
+    pub tender_title: String,
+    pub lot_id: Uuid,
+    pub lot_seq: i32,
+    /// Имя заявителя из формы Прил. 2, а не из учетной записи: взнос платит
+    /// тот, кто подал заявку, и в выписке банка стоит именно это имя
+    pub applicant_name: String,
+    /// Размер взноса, заданный лотом (FR-206)
+    pub guarantee_fee: Decimal,
+    pub submitted_at: OffsetDateTime,
+}
+
+/// Очередь заявок, ждущих подтверждения взноса (FR-405, п. 23): поданные,
+/// по которым поступление еще не подтверждено. Старые сверху.
+///
+/// Круг 1 гаунтлета (G-125). Кабинет финблока показывал книгу и счета, то
+/// есть уже подтвержденные поступления, а работа отдела начинается раньше:
+/// пришла выписка банка - надо найти заявку, сверить сумму со взносом лота
+/// и подтвердить. Найти заявку было негде: перечня поданных заявок у
+/// финблока нет, а по счету ее не найти - счет открывается подтверждением.
+///
+/// Курсор - id заявки; ключ сортировки (`submitted_at`, `id`) БД находит по
+/// нему в том же запросе (см. `public_records::pending`).
+pub async fn pending_fees<'e, E>(
+    db: E,
+    after: Option<Uuid>,
+    limit: i64,
+) -> Result<crate::Page<PendingFeeRow>, sqlx::Error>
+where
+    E: sqlx::PgExecutor<'e>,
+{
+    // `applicant_name` считается COALESCE и потому потенциально NULL для
+    // планировщика: имени нет ни в форме, ни в учетной записи - случай
+    // невозможный (обе строки NOT NULL), но выводится он по выражению
+    let rows = sqlx::query_as!(
+        PendingFeeRow,
+        r#"SELECT a.id AS application_id, a.tender_id, t.title AS tender_title,
+                  a.lot_id, l.seq AS lot_seq,
+                  COALESCE(NULLIF(btrim(a.applicant_details ->> 'name'), ''), u.full_name)
+                    AS "applicant_name!",
+                  l.guarantee_fee, a.submitted_at
+           FROM core.applications a
+           JOIN core.tenders t ON t.id = a.tender_id
+           JOIN core.lots l ON l.id = a.lot_id
+           JOIN core.users u ON u.id = a.participant_id
+           WHERE a.status = 'submitted' AND a.fee_confirmed_at IS NULL
+             AND ($1::uuid IS NULL
+                  OR (a.submitted_at, a.id)
+                     > (SELECT submitted_at, id FROM core.applications WHERE id = $1))
+           ORDER BY a.submitted_at, a.id
+           LIMIT $2"#,
+        after,
+        crate::probe_limit(limit)
+    )
+    .fetch_all(db)
+    .await?;
+    Ok(crate::Page::probe(rows, limit))
 }
 
 /// Есть ли такой счет: выписка несуществующего счета - 404, а не пустая
@@ -643,8 +716,11 @@ pub async fn refund_deposit_on(
         .map_err(map_rule)?;
 
         if !returned {
+            // Своя причина, а не общий `contract_deposit` (G-128): под общей
+            // стоят и срок внесения, и размер депозита, и она не говорит
+            // финблоку, чего именно недостает. Здесь недостает акта возврата
             return Err(LedgerError::Rejected(RuleRejection::new(
-                RuleViolation::ContractDeposit,
+                RuleViolation::DepositBeforeReturnAct,
                 "депозит возвращается после возврата объекта по акту (п. 136)",
             )));
         }

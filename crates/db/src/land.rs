@@ -44,6 +44,11 @@ pub struct PlotRecord {
     pub cadastral_number: String,
     pub designation: String,
     pub designation_label: String,
+    /// Подпись назначения на казахском и английском (NFR-01). Nullable:
+    /// перевод в справочнике необязателен, и пустой столбец не должен
+    /// подменяться русской строкой на стороне сервера
+    pub designation_label_kk: Option<String>,
+    pub designation_label_en: Option<String>,
     pub permitted_use: String,
     pub min_investment: Option<Decimal>,
     pub published_at: Option<OffsetDateTime>,
@@ -56,6 +61,8 @@ macro_rules! plot_query {
             PlotRecord,
             "SELECT p.object_id, o.name, o.address, o.area_m2,
                     p.cadastral_number, p.designation, d.label_ru AS designation_label,
+                    d.label_kk AS designation_label_kk,
+                    d.label_en AS designation_label_en,
                     p.permitted_use, p.min_investment, p.published_at
              FROM core.land_plots p
              JOIN core.objects o ON o.id = p.object_id

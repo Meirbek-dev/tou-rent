@@ -1,0 +1,169 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, kind::text AS \"kind!\", special_request_id, contract_id,\n                      acceptance_id, title, title_kk, title_en, file_key, payload,\n                      published_at, unpublish_at, unpublished_at\n               FROM core.public_records WHERE unpublished_at IS NULL\n            AND ($1::timestamptz IS NULL OR (published_at, id) < ($1, $2::uuid))\n          ORDER BY published_at DESC, id DESC LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "special_request_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "special_request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "contract_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "contract_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "acceptance_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "acceptance_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "title_kk",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "title_kk"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "title_en",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "title_en"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "file_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "file_key"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "payload",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "unpublish_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "unpublish_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "unpublished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "unpublished_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ffd3c068c0346655d0b86ae95ead68704139f94debde88ca56418217f8c8d0c2"
+}

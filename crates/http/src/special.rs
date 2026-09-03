@@ -174,6 +174,12 @@ pub struct SpecialRequestDto {
     pub applicant_id: Uuid,
     pub category: String,
     pub category_label: String,
+    /// Та же подпись категории на казахском и английском из
+    /// `refdata.special_categories` (NFR-01); `null` - перевода нет,
+    /// и кабинет откатывается на `category_label`. Пока их не отдавали,
+    /// категория особого порядка уезжала на портал готовой русской строкой
+    pub category_label_kk: Option<String>,
+    pub category_label_en: Option<String>,
     pub category_rule_ref: String,
     pub status: String,
     pub applicant_kind: ApplicantKindDto,
@@ -206,6 +212,8 @@ impl SpecialRequestDto {
             applicant_id: r.applicant_id,
             category: r.category,
             category_label: r.category_label,
+            category_label_kk: r.category_label_kk,
+            category_label_en: r.category_label_en,
             category_rule_ref: r.category_rule_ref,
             status: r.status,
             applicant_kind: ApplicantKindDto::from_db(&r.applicant_kind)?,
@@ -777,7 +785,12 @@ pub struct SpecialDecideRequest {
     #[garde(skip)]
     pub decision: String,
     /// Обоснование решения - публикуется (п. 97)
-    #[garde(length(chars, min = 1, max = 8000))]
+    ///
+    /// Круг 1 гаунтлета (G-131): текст из одних пробелов проходил
+    /// `length(min = 1)`, а после `trim()` упирался в CHECK
+    /// `special_decision_rationale_not_empty` - Правление получало отказ
+    /// `other_rule` вместо названного поля
+    #[garde(length(chars, min = 1, max = 8000), custom(crate::objects::not_blank))]
     pub rationale: String,
 }
 
@@ -1150,6 +1163,35 @@ fn term_ru(term: Term) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// G-131: обоснование решения Правления из одних пробелов отказывается
+    /// проверкой типа (422 с именем поля), а не CHECK таблицы (409
+    /// `other_rule`). Обоснование публикуется (п. 97) - пустым оно быть
+    /// не может, и сказать об этом обязан тот рубеж, что знает имя поля.
+    #[test]
+    fn a_blank_board_rationale_is_rejected_by_validation() {
+        use garde::Validate as _;
+
+        for raw in [
+            "", " ", "	
+  ",
+        ] {
+            let request = SpecialDecideRequest {
+                decision: "grant".to_owned(),
+                rationale: raw.to_owned(),
+            };
+            assert!(
+                request.validate().is_err(),
+                "обоснование «{raw}» должно отказываться проверкой"
+            );
+        }
+
+        let ok = SpecialDecideRequest {
+            decision: "grant".to_owned(),
+            rationale: "проект соответствует требованиям п. 90".to_owned(),
+        };
+        assert!(ok.validate().is_ok());
+    }
 
     /// Печатная форма Прил. 3 (FR-1201) компилируется на снимке заявки;
     /// спецсимволы Typst приходят данными и разметку не ломают.

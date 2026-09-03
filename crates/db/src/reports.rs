@@ -39,6 +39,11 @@ pub struct DecisionRow {
     /// `special` - особый порядок (п. 90), `land` - земельный участок (п. 106)
     pub order_kind: String,
     pub subject: String,
+    /// Тот же предмет на казахском и английском (NFR-01). Подпись
+    /// категории и наименование объекта живут в БД тремя столбцами,
+    /// и реестр обязан отдавать все три, а не один русский
+    pub subject_kk: Option<String>,
+    pub subject_en: Option<String>,
     pub applicant: Option<String>,
     pub decision: String,
     pub rationale: String,
@@ -76,6 +81,8 @@ pub async fn decisions_page(
         r#"SELECT d.decided_at AS "decided_at!", d.id AS "id!",
                 'special' AS "order_kind!",
                 c.label_ru || ' (' || c.rule_ref || ')' AS "subject!",
+                c.label_kk || ' (' || c.rule_ref || ')' AS "subject_kk?",
+                c.label_en || ' (' || c.rule_ref || ')' AS "subject_en?",
                 u.full_name AS "applicant?", d.decision::text AS "decision!",
                 d.rationale AS "rationale!"
          FROM core.special_board_decisions d
@@ -86,7 +93,7 @@ pub async fn decisions_page(
            AND ($2::date IS NULL OR d.decided_at < $2::date + 1)
            AND ($3::timestamptz IS NULL OR (d.decided_at, d.id) < ($3, $4::uuid))
          UNION ALL
-         SELECT l.decided_at, l.id, 'land', o.name,
+         SELECT l.decided_at, l.id, 'land', o.name, o.name_kk, NULL::text,
                 u.full_name, l.decision::text, l.rationale
          FROM core.land_decisions l
          JOIN core.land_applications a ON a.id = l.land_application_id

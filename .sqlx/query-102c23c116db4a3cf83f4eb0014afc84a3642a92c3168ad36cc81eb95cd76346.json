@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.land_plots\n           (object_id, cadastral_number, designation, permitted_use)\n         VALUES ($1, '14-215-075-000', 'dormitory', 'строительство общежития')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "102c23c116db4a3cf83f4eb0014afc84a3642a92c3168ad36cc81eb95cd76346"
+}

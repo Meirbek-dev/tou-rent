@@ -117,7 +117,15 @@ pub struct UploadApplicationFileQuery {
 pub struct ApplicationDto {
     pub id: Uuid,
     pub tender_id: Uuid,
+    /// Заголовок тендера (ru) - чтобы список заявок называл предмет,
+    /// а не идентификатор
+    pub tender_title: String,
+    pub tender_title_kk: String,
     pub lot_id: Uuid,
+    /// Порядковый номер лота в тендере (Прил. 12)
+    pub lot_seq: i32,
+    /// Наименование объекта лота (ru)
+    pub object_name: String,
     pub participant_id: Uuid,
     pub status: ApplicationStatusDto,
     pub applicant_kind: ApplicantKindDto,
@@ -151,7 +159,11 @@ impl ApplicationDto {
         Ok(Self {
             id: r.id,
             tender_id: r.tender_id,
+            tender_title: r.tender_title,
+            tender_title_kk: r.tender_title_kk,
             lot_id: r.lot_id,
+            lot_seq: r.lot_seq,
+            object_name: r.object_name,
             participant_id: r.participant_id,
             status: ApplicationStatusDto::from_db(&r.status)?,
             applicant_kind: ApplicantKindDto::from_db(&r.applicant_kind)?,

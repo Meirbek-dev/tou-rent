@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT o.action, o.assignee_role::text AS \"assignee_role!\", o.rule_ref,\n                  o.status::text AS \"status!\",\n                  o.due_at <= core.now() AS \"overdue_now!\"\n           FROM core.obligations o\n           WHERE o.tender_id = $1 AND o.action = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "assignee_role!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "rule_ref",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "rule_ref"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "overdue_now!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "0a1f1f496e462f7197d2b2126f1c8b0974968ba15edbe094b153c90765a99f42"
+}

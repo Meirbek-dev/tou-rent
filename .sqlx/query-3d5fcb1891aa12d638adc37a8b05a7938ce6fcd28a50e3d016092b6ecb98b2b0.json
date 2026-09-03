@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.special_reviews SET conclusion = 'иное' WHERE special_request_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3d5fcb1891aa12d638adc37a8b05a7938ce6fcd28a50e3d016092b6ecb98b2b0"
+}

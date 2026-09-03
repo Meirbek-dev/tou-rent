@@ -13,7 +13,10 @@ use tou_domain::calendar::BusinessCalendar;
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
     // Пропуск без адреса допустим локально, но не в пайплайне (G2/G15):
     // молча пройденный интеграционный тест ничего не проверяет
-    match tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))? {
+    match tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?
+    {
         Some(url) => tou_db::connect(&url).await.map(Some),
         None => Ok(None),
     }

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT file_key FROM core.dossier_items\n         WHERE tender_id = $1 AND source_table = 'core.tenders'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "file_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.dossier_items",
+            "name": "file_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "50d84509ea446fcc742584cceb6bbd572394506350d41b8adf0232357a6a4574"
+}

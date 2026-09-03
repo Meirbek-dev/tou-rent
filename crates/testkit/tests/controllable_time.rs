@@ -26,8 +26,9 @@ use uuid::Uuid;
 static CLOCK: Mutex<()> = Mutex::const_new(());
 
 async fn try_pools() -> Result<Option<(tou_db::Db, sqlx::PgPool)>, sqlx::Error> {
-    let required =
-        tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))?;
+    let required = tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?;
     let Some(url) = required else {
         return Ok(None);
     };

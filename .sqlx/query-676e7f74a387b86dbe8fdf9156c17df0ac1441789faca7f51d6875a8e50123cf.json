@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"count!\" FROM audit.log\n           WHERE table_name = 'core.tenders' AND row_id = $1 AND action = 'UPDATE'\n             AND actor_id = $2 AND payload -> 'new' ->> 'status' = 'trading'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "676e7f74a387b86dbe8fdf9156c17df0ac1441789faca7f51d6875a8e50123cf"
+}

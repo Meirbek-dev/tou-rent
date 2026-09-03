@@ -161,28 +161,43 @@ fn grant_dto(record: GrantRecord, months: i32) -> Result<BenefitGrantDto, ApiErr
 }
 
 /// Льгота договора с расписанием платы (FR-1205, п. 95–96).
+///
+/// Льготы у договора может не быть вовсе - большинство договоров общего
+/// порядка идет без нее (круг 4 гаунтлета, G-067). «Не применялась»
+/// отвечало 404, и колонка «Льготная схема» в кабинете организатора
+/// оставалась молча пустой с ошибкой в консоли на каждый договор. Теперь
+/// ненайденным остается сам договор.
+///
+/// Право читать льготу закрыто перечнем `Compound::BENEFIT_READ`
+/// (`ContractManage` | `BoardDecide`) - это организатор и Правление;
+/// секретарь, видящий договор, льготу не читает, и 403 у него остается.
 #[utoipa::path(
     get,
     path = "/api/v1/contracts/{id}/benefit",
     tag = "benefit",
     params(("id" = Uuid, Path, description = "Договор")),
     responses(
-        (status = 200, description = "Льгота договора", body = BenefitGrantDto),
-        (status = 404, description = "Льгота не применялась", body = crate::error::Problem),
+        (status = 200, description = "Льгота договора; `null` - льгота не применялась",
+         body = Option<BenefitGrantDto>),
+        (status = 403, description = "Льгота договора этой роли не видна", body = crate::error::Problem),
+        (status = 404, description = "Договор не найден", body = crate::error::Problem),
     )
 )]
 pub async fn contract_benefit(
     user: CurrentUser,
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<BenefitGrantDto>, ApiError> {
+) -> Result<Json<Option<BenefitGrantDto>>, ApiError> {
     require_benefit_access(&user)?;
 
-    let record = benefit::of_contract(&state.db, id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+    if tou_db::contracts::get(&state.db, id).await?.is_none() {
+        return Err(ApiError::NotFound);
+    }
+    let Some(record) = benefit::of_contract(&state.db, id).await? else {
+        return Ok(Json(None));
+    };
     let months = contract_term_months(&state, id).await?;
-    Ok(Json(grant_dto(record, months)?))
+    Ok(Json(Some(grant_dto(record, months)?)))
 }
 
 #[derive(Debug, Deserialize, garde::Validate, ToSchema)]

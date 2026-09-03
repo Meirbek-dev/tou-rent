@@ -650,13 +650,24 @@ pub async fn register_on(
         // (FR-1003, п. 132). Счет открывается здесь, а не по факту первого
         // платежа: до внесения он показывает нулевой баланс и открытый срок,
         // а не отсутствие обязанности
-        let tenant_id = sqlx::query_scalar!(
-            "SELECT tenant_id FROM core.contracts WHERE id = $1",
+        //
+        // Тендер берется тем же запросом: регистрация в журнале - это и есть
+        // заключение договора (п. 126), а значит и конец процедуры тендера
+        // (`summed_up → contracted`, G-155). У договора особого порядка
+        // тендера нет, и переводить нечего
+        let parties = sqlx::query!(
+            "SELECT tenant_id, tender_id FROM core.contracts WHERE id = $1",
             contract_id
         )
         .fetch_one(&mut *tx)
         .await
         .map_err(map_rule)?;
+        let tenant_id = parties.tenant_id;
+        if let Some(tender_id) = parties.tender_id {
+            crate::tenders::mark_contracted_on(&mut *tx, tender_id)
+                .await
+                .map_err(map_rule)?;
+        }
         crate::ledger::open_deposit_account_on(&mut *tx, contract_id, tenant_id)
             .await
             .map_err(|err| match err {

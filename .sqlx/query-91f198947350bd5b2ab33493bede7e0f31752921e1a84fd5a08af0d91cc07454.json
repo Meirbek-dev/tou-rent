@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT label_ru FROM refdata.special_categories WHERE code = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "label_ru",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "label_ru"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "91f198947350bd5b2ab33493bede7e0f31752921e1a84fd5a08af0d91cc07454"
+}

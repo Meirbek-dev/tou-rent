@@ -1,0 +1,201 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.tender_id, t.title AS tender_title,\n                      t.title_kk AS tender_title_kk,\n                      a.lot_id, l.seq AS lot_seq, o.name AS object_name,\n                      a.participant_id,\n                      a.status::text AS \"status!\",\n                      a.applicant_kind::text AS \"applicant_kind!\",\n                      a.applicant_details, a.qualification, a.submitted_at,\n                      a.withdrawn_at, a.rejection_reason,\n                      core.application_package_complete(a.id) AS \"package_complete!\",\n                      core.price_amount(p) AS price_amount\n               FROM core.applications a\n               JOIN core.tenders t ON t.id = a.tender_id\n               JOIN core.lots l ON l.id = a.lot_id\n               JOIN core.objects o ON o.id = l.object_id\n               LEFT JOIN core.price_proposals p ON p.application_id = a.id WHERE a.participant_id = $1 ORDER BY a.submitted_at DESC LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "tender_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tender_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "tender_title_kk",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "title_kk"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "lot_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "lot_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "lot_seq",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "seq"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "object_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.objects",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "participant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "participant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "applicant_kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "applicant_details",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "applicant_details"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "qualification",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "qualification"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "submitted_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "submitted_at"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "withdrawn_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "withdrawn_at"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "rejection_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.applications",
+            "name": "rejection_reason"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "package_complete!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 16,
+        "name": "price_amount",
+        "type_info": "Numeric",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      false,
+      true,
+      false,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "b82a92d34a126d445b7f9dd10097438a6ff0aa0dcc123796ee65344fbc636b57"
+}

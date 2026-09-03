@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.votes (meeting_id, application_id, member_id, value, dissent)\n             VALUES ($1, $2, $3, $4::text::core.vote_value, $5)\n             ON CONFLICT (meeting_id, application_id, member_id) DO NOTHING\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.votes",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "26b5f5284aed08b984e164c54f03a1c24bbba92bc7c9e306e4f7ad035876b964"
+}

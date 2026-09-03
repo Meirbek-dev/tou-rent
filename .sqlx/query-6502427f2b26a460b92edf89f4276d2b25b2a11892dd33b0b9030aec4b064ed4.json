@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.contracts\n         SET registered_at = now(), reg_number = $2, status = 'signing',\n             lease_period = tstzrange(now(), now() + interval '12 months', '[)')\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6502427f2b26a460b92edf89f4276d2b25b2a11892dd33b0b9030aec4b064ed4"
+}

@@ -17,7 +17,10 @@ use uuid::Uuid;
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
     // Пропуск без адреса допустим локально, но не в пайплайне (G2/G15):
     // молча пройденный интеграционный тест ничего не проверяет
-    match tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))? {
+    match tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?
+    {
         Some(url) => tou_db::connect(&url).await.map(Some),
         None => Ok(None),
     }
@@ -261,10 +264,15 @@ async fn inv042_retention_follows_the_dossier_subject() {
     .await
     .expect("тендер");
 
+    // Объявление ложится в досье само: его пишет триггер публикации
+    // (`core.dossier_on_tender_announcement`, G-103), поэтому срок читается
+    // у уже созданного материала - вставлять его второй раз незачем и
+    // нельзя (досье собирается идемпотентно, `dossier_items_source_idx`)
     let tender_term = sqlx::query_scalar!(
-        r#"INSERT INTO core.dossier_items (tender_id, kind, title, source_table, source_id)
-           VALUES ($1, 'announcement', 'Объявление о тендере', 'core.tenders', $1)
-           RETURNING extract(year FROM age(retain_until, occurred_at))::int AS "years!""#,
+        r#"SELECT extract(year FROM age(retain_until, occurred_at))::int AS "years!"
+           FROM core.dossier_items
+           WHERE tender_id = $1 AND kind = 'announcement'
+             AND source_table = 'core.tenders' AND source_id = $1"#,
         tender_id
     )
     .fetch_one(&mut *tx)

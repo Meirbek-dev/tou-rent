@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.obligations\n             (rule_ref, action, assignee_role, tender_id, due_at, started_at)\n           SELECT $1, $2, $3::text::core.role, t.id, t.opening_at, t.opening_at\n           FROM core.tenders t\n           WHERE t.status = 'accepting'\n             AND t.opening_at IS NOT NULL\n             AND t.opening_at <= core.now()\n             AND t.opened_at IS NULL\n             AND t.cancelled_at IS NULL\n           ORDER BY t.opening_at\n           LIMIT $4\n           ON CONFLICT ON CONSTRAINT obligations_unique_per_subject DO NOTHING\n           RETURNING tender_id AS \"tender_id!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tender_id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.obligations",
+            "name": "tender_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "b1bbcdcd80d48f64ad9b7a1ccfa9cf7363ea036c359a48d93c5acbbb1c63ccc8"
+}

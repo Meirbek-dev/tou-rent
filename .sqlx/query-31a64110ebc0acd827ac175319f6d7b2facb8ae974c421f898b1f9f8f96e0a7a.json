@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM refdata.mrp WHERE year = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "31a64110ebc0acd827ac175319f6d7b2facb8ae974c421f898b1f9f8f96e0a7a"
+}

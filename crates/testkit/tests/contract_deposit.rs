@@ -13,10 +13,14 @@ use rust_decimal::Decimal;
 use sqlx::Acquire as _;
 use tou_db::ledger;
 use tou_domain::ledger::LedgerOp;
+use tou_domain::rule::RuleViolation;
 use uuid::Uuid;
 
 async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
-    match tou_testkit::database_url().map_err(|e| sqlx::Error::Configuration(Box::new(e)))? {
+    match tou_testkit::database_ready()
+        .await
+        .map_err(|e| sqlx::Error::Configuration(Box::new(e)))?
+    {
         Some(url) => tou_db::connect(&url).await.map(Some),
         None => Ok(None),
     }
@@ -357,6 +361,18 @@ async fn deposit_returns_only_after_the_object_is_back() {
         early.to_string().contains("п. 136"),
         "отказ ссылается на правило: {early}"
     );
+    // G-128: у случая «акта возврата еще нет» своя причина перечня. Под общей
+    // `contract_deposit` стоят и срок внесения, и размер депозита, и финблок
+    // читал про депозит вообще там, где ему нужно было прочесть, чего именно
+    // недостает - а недостает акта приема-передачи (Прил. 8)
+    match early {
+        ledger::LedgerError::Rejected(rejection) => assert_eq!(
+            rejection.rule(),
+            RuleViolation::DepositBeforeReturnAct,
+            "отказ обязан называть недостающий акт, а не депозит вообще"
+        ),
+        other => panic!("ожидался отказ правила, получено: {other}"),
+    }
     sp.rollback().await.expect("rollback");
 
     // Объект передан и возвращен - акты идут в своем порядке (FR-904)
@@ -381,5 +397,12 @@ async fn deposit_returns_only_after_the_object_is_back() {
         account.balance,
         Decimal::ZERO,
         "возвращается весь остаток (п. 136)"
+    );
+    // G-128: условие возврата видно в самом счете - кабинету есть чем
+    // погасить кнопку и объяснить, чего ждут, до нажатия
+    assert_eq!(
+        account.return_act_at,
+        Some(today),
+        "дата акта возврата обязана приезжать со счетом депозита"
     );
 }

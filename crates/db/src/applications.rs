@@ -16,7 +16,14 @@ use crate::Db;
 pub struct ApplicationRecord {
     pub id: Uuid,
     pub tender_id: Uuid,
+    /// Предмет заявки на языке списка (FR-402): без него кабинет показывал
+    /// только идентификаторы тендера и лота
+    pub tender_title: String,
+    pub tender_title_kk: String,
     pub lot_id: Uuid,
+    /// Порядковый номер лота в тендере (Прил. 12)
+    pub lot_seq: i32,
+    pub object_name: String,
     pub participant_id: Uuid,
     pub status: String,
     pub applicant_kind: String,
@@ -41,7 +48,11 @@ pub struct ApplicationRecord {
 pub(crate) struct ApplicationRow {
     pub(crate) id: Uuid,
     pub(crate) tender_id: Uuid,
+    pub(crate) tender_title: String,
+    pub(crate) tender_title_kk: String,
     pub(crate) lot_id: Uuid,
+    pub(crate) lot_seq: i32,
+    pub(crate) object_name: String,
     pub(crate) participant_id: Uuid,
     pub(crate) status: String,
     pub(crate) applicant_kind: String,
@@ -59,7 +70,11 @@ impl From<ApplicationRow> for ApplicationRecord {
         Self {
             id: row.id,
             tender_id: row.tender_id,
+            tender_title: row.tender_title,
+            tender_title_kk: row.tender_title_kk,
             lot_id: row.lot_id,
+            lot_seq: row.lot_seq,
+            object_name: row.object_name,
             participant_id: row.participant_id,
             status: row.status,
             applicant_kind: row.applicant_kind,
@@ -80,11 +95,18 @@ impl From<ApplicationRow> for ApplicationRecord {
 /// поэтому `price_amount` остается nullable без аннотации. `!` у `status`
 /// и `applicant_kind` - это `::text`, который планировщик считает
 /// потенциально NULL, хотя столбцы NOT NULL.
+///
+/// Тендер, лот и объект присоединяются внутренним соединением: у заявки они
+/// есть всегда (FK NOT NULL). Без них список заявок называл предмет только
+/// идентификаторами, и участник не понимал, к чему относится его заявка.
 macro_rules! application_query {
     ($tail:literal $(, $arg:expr)*) => {
         sqlx::query_as!(
             crate::applications::ApplicationRow,
-            r#"SELECT a.id, a.tender_id, a.lot_id, a.participant_id,
+            r#"SELECT a.id, a.tender_id, t.title AS tender_title,
+                      t.title_kk AS tender_title_kk,
+                      a.lot_id, l.seq AS lot_seq, o.name AS object_name,
+                      a.participant_id,
                       a.status::text AS "status!",
                       a.applicant_kind::text AS "applicant_kind!",
                       a.applicant_details, a.qualification, a.submitted_at,
@@ -92,6 +114,9 @@ macro_rules! application_query {
                       core.application_package_complete(a.id) AS "package_complete!",
                       core.price_amount(p) AS price_amount
                FROM core.applications a
+               JOIN core.tenders t ON t.id = a.tender_id
+               JOIN core.lots l ON l.id = a.lot_id
+               JOIN core.objects o ON o.id = l.object_id
                LEFT JOIN core.price_proposals p ON p.application_id = a.id"# + $tail
             $(, $arg)*
         )

@@ -9,14 +9,16 @@ workspace = true
 
 [dependencies]
 thiserror.workspace = true
-
-[dev-dependencies]
+# Обвязка сама заводит тестовую БД и накатывает на нее миграции (G-021),
+# поэтому sqlx и рантайм нужны не только тестовым целям, но и самой библиотеке
 sqlx.workspace = true
 tokio.workspace = true
-tou-db.workspace = true
+
+[dev-dependencies]
 jiff.workspace = true
 rust_decimal.workspace = true
 time.workspace = true
+tou-db.workspace = true
 tou-domain.workspace = true
 # Разбор отказа БД в ответ API проверяется той же воронкой, что и в обработчике (AC-1)
 tou-http.workspace = true

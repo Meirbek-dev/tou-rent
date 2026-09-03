@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.decided_at AS \"decided_at!\", d.id AS \"id!\",\n                'special' AS \"order_kind!\",\n                c.label_ru || ' (' || c.rule_ref || ')' AS \"subject!\",\n                c.label_kk || ' (' || c.rule_ref || ')' AS \"subject_kk?\",\n                c.label_en || ' (' || c.rule_ref || ')' AS \"subject_en?\",\n                u.full_name AS \"applicant?\", d.decision::text AS \"decision!\",\n                d.rationale AS \"rationale!\"\n         FROM core.special_board_decisions d\n         JOIN core.special_requests r ON r.id = d.special_request_id\n         JOIN refdata.special_categories c ON c.code = r.category\n         LEFT JOIN core.users u ON u.id = r.applicant_id\n         WHERE ($1::date IS NULL OR d.decided_at >= $1::date)\n           AND ($2::date IS NULL OR d.decided_at < $2::date + 1)\n           AND ($3::timestamptz IS NULL OR (d.decided_at, d.id) < ($3, $4::uuid))\n         UNION ALL\n         SELECT l.decided_at, l.id, 'land', o.name, o.name_kk, NULL::text,\n                u.full_name, l.decision::text, l.rationale\n         FROM core.land_decisions l\n         JOIN core.land_applications a ON a.id = l.land_application_id\n         JOIN core.objects o ON o.id = a.plot_id\n         LEFT JOIN core.users u ON u.id = a.investor_id\n         WHERE ($1::date IS NULL OR l.decided_at >= $1::date)\n           AND ($2::date IS NULL OR l.decided_at < $2::date + 1)\n           AND ($3::timestamptz IS NULL OR (l.decided_at, l.id) < ($3, $4::uuid))\n         -- по порядковым номерам: выходные колонки называются `decided_at!`, `id!`\n         ORDER BY 1 DESC, 2 DESC LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "decided_at!",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "order_kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "subject!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "subject_kk?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "subject_en?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "applicant?",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "decision!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "rationale!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Date",
+        "Date",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "eaf2ef4377af5b323e18711c78774083381798209f9af95d9b54021508e88cc8"
+}

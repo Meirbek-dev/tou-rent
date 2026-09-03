@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.special_board_decisions SET decision = 'refuse'\n             WHERE special_request_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1a184cd2f67a000369a3184e962b539bcff03c14d8201f70126da27bcc9f4bf4"
+}

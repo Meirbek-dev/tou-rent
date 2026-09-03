@@ -427,24 +427,31 @@ pub async fn seed_objects(db: &Db) -> Result<u32, SeedError> {
 }
 
 /// Реквизиты демо-участников-юрлиц (Прил. Б): `(email, наименование, БИН, цена)`.
-/// БИН фиктивный - TODO-ENGINEER: заменить реальными данными перед приемкой.
+///
+/// БИН фиктивный, но с сошедшимся контрольным разрядом
+/// ([`tou_domain::identity::validate_id_number`]): прежние `00000000000N`
+/// его не проходили, и стенд оказывался наполнен заявками с реквизитом,
+/// который форма подачи отвергает, - демонстрировать на нем повторную
+/// подачу было нельзя. Структура - как у БИН юрлица: 2401 - месяц
+/// регистрации, 4 - резидент, 0 - головная организация, дальше номер.
+/// TODO-ENGINEER: заменить реальными данными перед приемкой.
 const DEMO_APPLICANTS: [(&str, &str, &str, &str); 3] = [
     (
         "participant@tou.demo",
         "ТОО «Демо-Участник»",
-        "000000000001",
+        "240140000100",
         "55000.00",
     ),
     (
         "participant2@tou.demo",
         "ТОО «Демо-Участник 2»",
-        "000000000002",
+        "240140000203",
         "52000.00",
     ),
     (
         "participant3@tou.demo",
         "ТОО «Демо-Участник 3»",
-        "000000000003",
+        "240140000309",
         "48000.00",
     ),
 ];
@@ -551,7 +558,7 @@ macro_rules! insert_tender {
         sqlx::query_scalar!(
             "INSERT INTO core.tenders
                (title, organizer_id, status, announced_at, submission_deadline,
-                opening_at, opened_at)
+                opening_at, opened_at, trading_at)
              VALUES ($1, $2, $3::text::core.tender_status, "
                 + $dates
                 + ")
@@ -595,14 +602,30 @@ async fn seed_tender(
     crate::with_actor(db, organizer, async |tx| {
         let tender_id = match status {
             "draft" => {
-                insert_tender!("NULL, NULL, NULL, NULL", title, organizer, status)
+                insert_tender!("NULL, NULL, NULL, NULL, NULL", title, organizer, status)
                     .fetch_one(&mut *tx)
                     .await?
             }
             "announced" | "accepting" => {
                 insert_tender!(
                     "core.now() - interval '2 days', core.now() + interval '12 days',
-                     core.now() + interval '13 days', NULL",
+                     core.now() + interval '13 days', NULL, NULL",
+                    title,
+                    organizer,
+                    status
+                )
+                .fetch_one(&mut *tx)
+                .await?
+            }
+            // Тендер «идут торги» без `trading_at` был тендером, у которого
+            // торги не назначены: портал показывал статус «торги», а карточка
+            // - прочерк вместо времени. Момент лежит между вскрытием и
+            // «сейчас» - торги уже начались (CHECK `opening_before_trading`)
+            "trading" => {
+                insert_tender!(
+                    "core.now() - interval '20 days', core.now() - interval '8 days',
+                     core.now() - interval '7 days', core.now() - interval '7 days',
+                     core.now() - interval '30 minutes'",
                     title,
                     organizer,
                     status
@@ -613,7 +636,8 @@ async fn seed_tender(
             _ => {
                 insert_tender!(
                     "core.now() - interval '20 days', core.now() - interval '8 days',
-                     core.now() - interval '7 days', core.now() - interval '7 days'",
+                     core.now() - interval '7 days', core.now() - interval '7 days',
+                     NULL",
                     title,
                     organizer,
                     status
@@ -1238,4 +1262,75 @@ async fn seed_finished_auction(db: &Db, tender_id: uuid::Uuid) -> Result<(), See
     .await?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Рубеж G-091: реквизиты демо-участников проходят ту же проверку, что и
+    /// форма подачи (`tou_domain::identity`).
+    ///
+    /// Прежние `000000000001..3` контрольный разряд не проходили, а сам seed
+    /// пишет их мимо приложения - прямо в `core.applications`. Стенд получался
+    /// наполнен заявками с реквизитом, который живая форма отвергает: на нем
+    /// нельзя было показать ни повторную подачу, ни печать договора.
+    #[test]
+    fn demo_applicant_id_numbers_pass_the_domain_check() {
+        for (email, name, bin, _) in DEMO_APPLICANTS {
+            assert_eq!(
+                tou_domain::identity::validate_id_number(bin),
+                Ok(()),
+                "БИН {bin} демо-участника {name} <{email}> не проходит проверку"
+            );
+        }
+    }
+
+    /// Демо-участники различаются реквизитом, а не только почтой: БИН -
+    /// то, чем сторона опознается в договоре и в реестре уклонившихся
+    /// (FR-1101), и одинаковый на троих сделал бы стенд неотличимым.
+    #[test]
+    fn demo_applicant_id_numbers_are_distinct() {
+        let mut seen = std::collections::BTreeSet::new();
+        for (_, _, bin, _) in DEMO_APPLICANTS {
+            assert!(seen.insert(bin), "БИН {bin} повторяется у демо-участников");
+        }
+    }
+
+    /// Рубеж G-077: у демо-тендера «идут торги» время торгов задано.
+    ///
+    /// Пока `trading_at` не было в списке столбцов вставки, портал показывал
+    /// статус «идут торги» и прочерк вместо времени - расписание тендера
+    /// не сходилось с его же состоянием, и на стенде нельзя было показать
+    /// ни обратный отсчет до торгов, ни ссылку на комнату.
+    ///
+    /// Проверяется текст запроса, а не строка в БД: сроки заданы литералами
+    /// SQL (иначе `query!` не примет запрос статической строкой), поэтому
+    /// прочесть их можно только там, где они написаны. Отдельный прогон
+    /// против живой БД тут ничего не добавил бы: он проверял бы состояние
+    /// стенда, а не то, что кладет туда seed.
+    #[test]
+    fn the_trading_demo_tender_has_a_trading_moment() {
+        let source = include_str!("seed.rs");
+        assert!(
+            source.contains("opening_at, opened_at, trading_at)"),
+            "trading_at выпал из списка столбцов вставки тендера"
+        );
+        assert!(
+            PORTAL_TENDERS
+                .iter()
+                .any(|(_, status, _)| *status == "trading"),
+            "демо-тендера в статусе «идут торги» больше нет - проверять нечего"
+        );
+
+        let branch = source
+            .split_once("\"trading\" => {")
+            .and_then(|(_, tail)| tail.split_once(".fetch_one"))
+            .map(|(branch, _)| branch)
+            .expect("ветка вставки тендера в статусе торгов");
+        assert!(
+            branch.contains("interval '30 minutes'"),
+            "у тендера «идут торги» нет момента торгов: {branch}"
+        );
+    }
 }

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.dossier_items SET file_key = $2\n         WHERE tender_id = $1 AND kind = 'announcement'\n           AND source_table = 'core.tenders' AND source_id = $1\n           AND file_key IS NULL\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.dossier_items",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "564bad0baed729004f2fe0021ee04f4cd9335c64d4ce9ea51bd116f7d1eed0f4"
+}

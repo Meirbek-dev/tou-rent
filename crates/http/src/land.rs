@@ -52,6 +52,11 @@ pub struct LandPlotDto {
     /// `dormitory` - под общежитие, `other` - иное назначение (п. 104)
     pub designation: String,
     pub designation_label: String,
+    /// Та же подпись на казахском и английском (NFR-01); `null` - перевода
+    /// в справочнике нет, и кабинет откатывается на `designation_label`.
+    /// Пока их не отдавали, портал показывал русскую подпись во всех локалях
+    pub designation_label_kk: Option<String>,
+    pub designation_label_en: Option<String>,
     pub permitted_use: String,
     #[schema(value_type = Option<String>, example = "100000000.00")]
     pub min_investment: Option<Decimal>,
@@ -69,6 +74,8 @@ fn plot_dto(record: PlotRecord) -> LandPlotDto {
         cadastral_number: record.cadastral_number,
         designation: record.designation,
         designation_label: record.designation_label,
+        designation_label_kk: record.designation_label_kk,
+        designation_label_en: record.designation_label_en,
         permitted_use: record.permitted_use,
         min_investment: record.min_investment,
         published_at: record.published_at,

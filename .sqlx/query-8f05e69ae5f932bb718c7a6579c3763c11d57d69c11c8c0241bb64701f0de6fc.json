@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO refdata.rate_coefficients\n               (coefficient, option_code, label_ru, label_kk, label_en, value, effective_from)\n             VALUES ($1, $2, $3, $4, $5, $6, $7)\n             ON CONFLICT (coefficient, option_code, effective_from) DO NOTHING\n             RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "refdata.rate_coefficients",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Numeric",
+        "Date"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8f05e69ae5f932bb718c7a6579c3763c11d57d69c11c8c0241bb64701f0de6fc"
+}

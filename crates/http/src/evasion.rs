@@ -220,7 +220,10 @@ pub async fn evader_registry(
     State(state): State<AppState>,
     Query(params): Query<EvaderPageParams>,
 ) -> Result<Json<EvaderPage>, ApiError> {
-    user.require(Action::ApplicationReadAll)?;
+    // Право реестра, а не право чтения заявок (G-130): реестр нужен
+    // финансам - уклонение решает судьбу взноса (FR-703, п. 120), - а
+    // содержимое заявок им не открывается
+    user.require(Action::EvaderRead)?;
 
     let after = params.after.as_deref().map(cursor::parse).transpose()?;
     let limit = crate::page_limit(params.limit);

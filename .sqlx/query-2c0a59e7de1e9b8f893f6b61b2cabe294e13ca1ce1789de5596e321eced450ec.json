@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.evasions (contract_id, tender_id, lot_id, application_id,\n                                        user_id, place, ground)\n             SELECT c.id, c.tender_id, c.lot_id, c.winner_application_id, c.tenant_id,\n                    c.place, $2\n             FROM core.contracts c WHERE c.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2c0a59e7de1e9b8f893f6b61b2cabe294e13ca1ce1789de5596e321eced450ec"
+}

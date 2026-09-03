@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.contracts\n           (tender_id, lot_id, object_id, tenant_id, place, status, monthly_rate,\n            lease_months, drafted_at, handed_to_tenant_at)\n         VALUES ($1, $2, $3, $4, 'winner', 'draft', 79750.00, 12,\n                 core.now() - interval '2 days', core.now() - interval '1 day')\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "adb588dc8d1ebd191a81f625a045495d8ca2f815a9793fb328b4a43985c9d1e2"
+}

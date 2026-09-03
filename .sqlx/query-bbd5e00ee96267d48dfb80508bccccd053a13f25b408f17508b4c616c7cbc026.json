@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.tender_docs (tender_id, version, title, file_key)\n         VALUES ($1, 1, 'Тендерная документация', $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bbd5e00ee96267d48dfb80508bccccd053a13f25b408f17508b4c616c7cbc026"
+}

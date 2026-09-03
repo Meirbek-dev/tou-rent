@@ -26,12 +26,32 @@ pub enum AmendmentError {
     Db(#[from] sqlx::Error),
 }
 
+/// Отказ п. 27 приезжает наверх своей причиной, а не общей (G-100).
+///
+/// Семь исходов домена сводились к одному `tender_documentation_change`, и
+/// интерфейс отвечал «изменить документацию или сроки приема заявок сейчас
+/// нельзя» на все - в том числе там, где организатору достаточно было
+/// поставить срок позже нынешнего или продлить прием на десять дней вместо
+/// семи. Устраняются эти отказы по-разному, значит и называться обязаны
+/// по-разному; остальные исходы (окно двух дней, тендер не опубликован,
+/// срок не назначен) - по-прежнему общая причина.
+fn amendment_rule(err: &tou_domain::amendment::AmendmentError) -> RuleViolation {
+    use tou_domain::amendment::AmendmentError as Domain;
+    match err {
+        Domain::NotExtended => RuleViolation::TenderAmendmentNotExtended,
+        Domain::ExtensionTooShort => RuleViolation::TenderAmendmentExtensionTooShort,
+        Domain::DeadlinePassed | Domain::AlreadyOpened => {
+            RuleViolation::TenderAmendmentIntakeClosed
+        }
+        Domain::NotPublished | Domain::NoDeadline | Domain::FrozenBeforeDeadline => {
+            RuleViolation::TenderDocumentationChange
+        }
+    }
+}
+
 impl From<tou_domain::amendment::AmendmentError> for AmendmentError {
     fn from(err: tou_domain::amendment::AmendmentError) -> Self {
-        AmendmentError::Rejected(RuleRejection::new(
-            RuleViolation::TenderDocumentationChange,
-            err.to_string(),
-        ))
+        AmendmentError::Rejected(RuleRejection::new(amendment_rule(&err), err.to_string()))
     }
 }
 

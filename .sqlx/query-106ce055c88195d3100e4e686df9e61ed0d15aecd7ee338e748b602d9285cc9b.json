@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.investment_acceptances\n           (contract_id, act_date, accepted_amount, accepted_by)\n         VALUES ($1, $2, 100000000.00, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Date",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "106ce055c88195d3100e4e686df9e61ed0d15aecd7ee338e748b602d9285cc9b"
+}

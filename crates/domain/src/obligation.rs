@@ -58,10 +58,20 @@ pub enum ObligationAction {
     /// Депозит возвращен после возврата объекта без претензий
     /// (5 р. дней, п. 136)
     DepositRefund,
+    /// Провести вскрытие конвертов в назначенный час (п. 41–43, FR-501).
+    ///
+    /// Круг 1 гаунтлета (G-147). Наступивший срок вскрытия не порождал
+    /// ничего: тендер оставался «прием заявок» с истекшим приемом, никто
+    /// об этом не узнавал, и процедура стояла до тех пор, пока секретарь
+    /// сам не заглядывал в список. Вскрытие - действие человека на
+    /// заседании (п. 50), автоматически его не совершить, поэтому двигатель
+    /// ставит обязанность, а не переводит тендер: срок наступил в тот же
+    /// момент, значит первая же эскалация известит секретаря.
+    HoldOpening,
 }
 
 impl ObligationAction {
-    pub const ALL: [ObligationAction; 21] = [
+    pub const ALL: [ObligationAction; 22] = [
         ObligationAction::AdmissionProtocol,
         ObligationAction::NotifyAdmitted,
         ObligationAction::ResultsProtocol,
@@ -83,6 +93,7 @@ impl ObligationAction {
         ObligationAction::DepositPayment,
         ObligationAction::DepositTopUp,
         ObligationAction::DepositRefund,
+        ObligationAction::HoldOpening,
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -108,6 +119,7 @@ impl ObligationAction {
             ObligationAction::DepositPayment => "deposit_payment",
             ObligationAction::DepositTopUp => "deposit_top_up",
             ObligationAction::DepositRefund => "deposit_refund",
+            ObligationAction::HoldOpening => "hold_opening",
         }
     }
 
@@ -253,6 +265,15 @@ impl ObligationAction {
                 rule_ref: "п. 136",
                 assignee: Role::Finance,
                 term: Term::BusinessDays(5),
+            },
+            // Вскрытие конвертов ведет секретарь комиссии (FR-501,
+            // п. 41–43): срок наступает вместе с назначенным часом, поэтому
+            // дней у него ноль - обязанность просрочена в тот же момент
+            ObligationAction::HoldOpening => ObligationRule {
+                action: self,
+                rule_ref: "п. 41",
+                assignee: Role::Secretary,
+                term: Term::BusinessDays(0),
             },
             // Возврат взноса - за департаментом финансов (FR-1002, п. 26)
             ObligationAction::FeeRefund => ObligationRule {

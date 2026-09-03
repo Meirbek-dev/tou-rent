@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE refdata.special_categories\n         SET competition = $2::text::core.special_competition WHERE code = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ca2f477682e73eb5dc93740ceaa0a1025f7eb9e63f23557a41fef8bdaae03a1a"
+}

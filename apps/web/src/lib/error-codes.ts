@@ -24,6 +24,7 @@ const ERROR_MESSAGES = {
   unauthorized: m.error_unauthorized,
   forbidden: m.error_forbidden,
   invalid_credentials: m.error_invalid_credentials,
+  email_not_confirmed: m.error_email_not_confirmed,
   email_taken: m.error_email_taken,
   id_number_taken: m.error_id_number_taken,
   verification_failed: m.error_verification_failed,

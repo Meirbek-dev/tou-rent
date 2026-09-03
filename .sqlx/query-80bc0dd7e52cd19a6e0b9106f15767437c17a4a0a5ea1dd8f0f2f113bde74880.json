@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SET LOCAL ROLE tou_rent_app",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "80bc0dd7e52cd19a6e0b9106f15767437c17a4a0a5ea1dd8f0f2f113bde74880"
+}

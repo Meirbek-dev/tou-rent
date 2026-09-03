@@ -298,6 +298,11 @@ pub enum TransitionError {
 
 /// Старт торгов председателем (FR-602): таймер `duration_minutes` от объявления;
 /// в демо-режиме длительность задается параметром запуска api.
+///
+/// Старт первой комнаты переводит и сам тендер: `qualification → trading`
+/// (INV-021, п. 60, - см. [`crate::tenders::start_trading_on`]). Переход
+/// идет той же транзакцией: комната, которая идет, при тендере «на допуске»
+/// - расхождение статуса с фактом, а не два независимых события.
 pub async fn start(
     db: &Db,
     actor: Uuid,
@@ -323,7 +328,10 @@ pub async fn start(
                 // Круг торгов (FR-604): первый ход - за участником с
                 // наименьшим номером журнала регистрации
                 crate::auction_turns::open_circle(&mut *tx, id).await?;
-                require(&mut *tx, id).await
+                let record = require(&mut *tx, id).await?;
+                // Тендер идет на торги вместе с первой своей комнатой (G-110)
+                crate::tenders::start_trading_on(&mut *tx, record.tender_id).await?;
+                Ok(record)
             }
             None => Err(status_conflict(&mut *tx, id, "старт возможен из статуса scheduled").await),
         }

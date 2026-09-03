@@ -15,6 +15,7 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use tou_db::refdata::{self, NewCoefficientVersion};
 use tou_domain::policy::{Action, Compound};
+use tou_domain::rule::RuleViolation;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -95,6 +96,20 @@ fn positive_amount(value: &Decimal, _ctx: &()) -> garde::Result {
     }
 }
 
+/// Множитель Прил. 4 строго положителен (CHECK `rate_coefficients_value_check`).
+///
+/// Круг 1 гаунтлета (G-138): рубеж стоял только в БД, и нулевой множитель
+/// приходил админу отказом по правилу `other_rule` - без имени поля и без
+/// границы. Ноль обнуляет ставку целиком (множители перемножаются),
+/// отрицательный выворачивает ее знак.
+fn positive_value(value: &Decimal, _ctx: &()) -> garde::Result {
+    if *value > Decimal::ZERO {
+        Ok(())
+    } else {
+        Err(garde::Error::new("величина коэффициента должна быть > 0"))
+    }
+}
+
 /// Величина МРП на год (FR-1901). У показателя одна величина на год, поэтому
 /// это правка значения, а не новая версия.
 #[utoipa::path(
@@ -125,6 +140,47 @@ pub async fn set_mrp(
         year: record.year,
         amount: record.amount,
     }))
+}
+
+/// Удаление заведенного по ошибке года МРП (FR-1901, Прил. 4).
+///
+/// Круг 1 гаунтлета (G-141). МРП правится значением, а не версией, поэтому
+/// год, заведенный с опечаткой, оставался в справочнике навсегда: удаления
+/// не было ни в контракте, ни в правах роли приложения.
+///
+/// Удаляется только год, на котором ничего не стоит: величина попадает в
+/// замороженный снимок расчета лота и инвестиционного договора (FR-202), а
+/// по текущему году считаются новые ставки. Оба случая стережет триггер БД
+/// `core.check_mrp_year_in_use` и отказывает причиной `mrp_year_in_use`.
+#[utoipa::path(
+    delete,
+    path = "/api/v1/refdata/mrp/{year}",
+    tag = "refdata",
+    params(("year" = i32, Path, description = "Год", minimum = 2000, maximum = 2100)),
+    responses(
+        (status = 204, description = "Год удален"),
+        (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
+        (status = 404, description = "Год не заведен", body = crate::error::Problem),
+        (status = 409, description = "Год участвует в расчетах (FR-201, FR-202)",
+         body = crate::error::Problem),
+        (status = 422, description = "Год вне допустимых границ", body = crate::error::Problem),
+    )
+)]
+pub async fn delete_mrp(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(year): Path<i32>,
+) -> Result<axum::http::StatusCode, ApiError> {
+    user.require(Action::RefdataManage)?;
+    check_year(year)?;
+
+    // Удаление несуществующего года - 404, а не молчаливое «готово»: админ
+    // обязан узнать, что стер не то, что собирался. След в аудите пишет
+    // триггер `audit.record_natural_key` на самой таблице (FR-1601)
+    if !refdata::delete_mrp(&state.db, user.id(), year).await? {
+        return Err(ApiError::NotFound);
+    }
+    Ok(axum::http::StatusCode::NO_CONTENT)
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -192,7 +248,8 @@ pub struct NewCoefficientRequest {
     pub label_kk: Option<String>,
     #[garde(inner(length(chars, min = 1, max = 200)))]
     pub label_en: Option<String>,
-    #[garde(skip)]
+    /// Величина множителя (> 0)
+    #[garde(custom(positive_value))]
     #[schema(value_type = String, example = "1.2000")]
     pub value: Decimal,
     /// Дата вступления версии в силу (FR-202)
@@ -213,6 +270,8 @@ pub struct NewCoefficientRequest {
     responses(
         (status = 201, description = "Версия добавлена", body = CoefficientVersionDto),
         (status = 403, description = "Недостаточно прав", body = crate::error::Problem),
+        (status = 409, description = "Версия на эту дату уже заведена (FR-202)",
+         body = crate::error::Problem),
         (status = 422, description = "Данные не прошли проверку", body = crate::error::Problem),
     )
 )]
@@ -236,7 +295,10 @@ pub async fn add_coefficient(
         )));
     }
 
-    let id = refdata::upsert_coefficient_version(
+    // Версия только добавляется (FR-202): совпадение по дате вступления -
+    // отказ, а не тихая правка прежней величины (G-137). Прошлый расчет
+    // обязан остаться объяснимым тем справочником, по которому он сделан
+    let id = refdata::add_coefficient_version(
         &state.db,
         user.id(),
         NewCoefficientVersion {
@@ -249,7 +311,16 @@ pub async fn add_coefficient(
             effective_from: body.effective_from,
         },
     )
-    .await?;
+    .await?
+    .ok_or_else(|| {
+        ApiError::rule(
+            RuleViolation::CoefficientVersionExists,
+            format!(
+                "FR-202: версия множителя '{}' опции '{}' на {} уже заведена",
+                body.coefficient, body.option_code, body.effective_from
+            ),
+        )
+    })?;
 
     // Признак «действует сегодня» считает БД - пересчитывать его в Rust
     // значило бы завести вторую версию правила
@@ -300,6 +371,31 @@ mod tests {
             amount: Decimal::from(3932),
         };
         assert!(ok.validate().is_ok());
+    }
+
+    /// G-138: неположительная величина множителя отказывается проверкой
+    /// типа (422 с именем поля), а не CHECK таблицы (409 `other_rule`).
+    /// Ноль обнуляет ставку целиком - множители перемножаются.
+    #[test]
+    fn non_positive_coefficient_value_is_rejected_by_validation() {
+        let request = |value: &str| NewCoefficientRequest {
+            coefficient: "kt".to_owned(),
+            option_code: "default".to_owned(),
+            label_ru: "проба".to_owned(),
+            label_kk: None,
+            label_en: None,
+            value: value.parse().expect("десятичное число"),
+            effective_from: time::Date::from_calendar_date(2026, time::Month::January, 1)
+                .expect("дата"),
+        };
+
+        for raw in ["0", "-1", "-0.0001"] {
+            assert!(
+                request(raw).validate().is_err(),
+                "величина {raw} должна отказываться проверкой"
+            );
+        }
+        assert!(request("1.2000").validate().is_ok());
     }
 
     /// Границы года совпадают с CHECK `mrp_year_check`.

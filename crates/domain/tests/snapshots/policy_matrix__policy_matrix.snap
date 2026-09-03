@@ -13,6 +13,7 @@ ApplicationWithdraw: participant
 ApplicationReadOwn: participant
 ApplicationReadAll: secretary, commission
 JournalRead: secretary
+EvaderRead: organizer, secretary, commission, finance
 OpeningPerform: secretary
 AdmissionDecide: secretary
 ProtocolGenerate: secretary

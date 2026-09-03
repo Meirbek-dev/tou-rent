@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id FROM core.users\n         WHERE email = $1::citext AND is_active\n           AND CASE WHEN $2 = 'email'\n                    THEN email_confirmed_at IS NULL\n                    ELSE phone_confirmed_at IS NULL\n               END",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.users",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "citext",
+            "kind": "Simple"
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "36957f00cd2035d2e83ca7dd67d6a2ddce41484379e427c231c7eb6a045bec65"
+}

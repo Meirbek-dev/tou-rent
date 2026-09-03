@@ -105,6 +105,22 @@ impl RegistryCellDto {
         }
     }
 
+    /// Значение, переведенное в самой БД: подпись категории справочника,
+    /// наименование объекта. Перечень открыт (справочник правит админ),
+    /// поэтому подписи приходят строками, а не константами [`Label`].
+    ///
+    /// Пустой перевод остается пустым: кабинет откатывается на `text_ru`
+    /// сам, а сервер, скопировав русскую строку в `text_kk`, отличить
+    /// «перевода нет» от «перевод совпадает» уже не дал бы.
+    fn localized(ru: String, kk: Option<String>, en: Option<String>) -> Self {
+        Self {
+            text_ru: ru,
+            text_kk: kk.unwrap_or_default(),
+            text_en: en.unwrap_or_default(),
+            timestamps: Vec::new(),
+        }
+    }
+
     /// Значение из закрытого перечня.
     fn label((ru, kk, en): Label) -> Self {
         Self {
@@ -263,7 +279,7 @@ async fn build(
                     vec![
                         RegistryCellDto::moment(Some(row.decided_at)),
                         RegistryCellDto::label(order_kind(&row.order_kind)),
-                        RegistryCellDto::plain(row.subject),
+                        RegistryCellDto::localized(row.subject, row.subject_kk, row.subject_en),
                         optional(row.applicant),
                         RegistryCellDto::label(decision(&row.decision)),
                         RegistryCellDto::plain(row.rationale),

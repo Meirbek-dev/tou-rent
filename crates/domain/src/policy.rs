@@ -53,6 +53,15 @@ pub enum Action {
     ApplicationReadOwn,
     ApplicationReadAll,
     JournalRead,
+    /// Реестр уклонившихся (FR-505, п. 52.4, 120): кого автоматически
+    /// отклоняют в будущих тендерах и чей взнос удержан.
+    ///
+    /// Отдельно от [`Action::ApplicationReadAll`] намеренно (G-130).
+    /// Реестр - список ролей и оснований, а не содержимое заявок: он нужен
+    /// финансам (удержание и возврат взносов, FR-703), а полный доступ
+    /// к заявкам им не нужен и не выдается. Пока реестр охранялся правом
+    /// чтения заявок, кабинет финансов получал на него 403.
+    EvaderRead,
     // М5: вскрытие и допуск
     OpeningPerform,
     AdmissionDecide,
@@ -146,7 +155,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 39] = [
+    pub const ALL: [Action; 40] = [
         Action::ObjectRead,
         Action::ObjectManage,
         Action::RateCalculate,
@@ -158,6 +167,7 @@ impl Action {
         Action::ApplicationReadOwn,
         Action::ApplicationReadAll,
         Action::JournalRead,
+        Action::EvaderRead,
         Action::OpeningPerform,
         Action::AdmissionDecide,
         Action::ProtocolGenerate,
@@ -319,6 +329,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::TenderRead
                 | A::TenderManage
                 | A::TenderPublish
+                | A::EvaderRead
                 | A::ContractRead
                 | A::ContractManage
                 | A::ActManage
@@ -338,6 +349,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
                 | A::TenderRead
                 | A::ApplicationReadAll
                 | A::JournalRead
+                | A::EvaderRead
                 | A::OpeningPerform
                 | A::AdmissionDecide
                 | A::MeetingManage
@@ -355,6 +367,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
             A::ObjectRead
                 | A::TenderRead
                 | A::ApplicationReadAll
+                | A::EvaderRead
                 | A::ContractRead
                 | A::AuctionWatch
                 | A::CoiDeclare
@@ -380,6 +393,7 @@ pub fn is_allowed(role: Role, action: Action) -> bool {
             A::ObjectRead
                 | A::TenderRead
                 | A::ContractRead
+                | A::EvaderRead
                 | A::FeeConfirm
                 | A::LedgerRead
                 | A::NotificationReadOwn
@@ -465,6 +479,32 @@ mod tests {
         // а само действие недоступно organizer и admin
         assert!(!is_allowed(Role::Organizer, Action::ApplicationReadAll));
         assert!(!is_allowed(Role::Admin, Action::ApplicationReadAll));
+    }
+
+    /// G-130: реестр уклонившихся читает и департамент финансов - от
+    /// уклонения зависит судьба гарантийного взноса (FR-505, FR-703,
+    /// п. 120). Право отдельное: полный доступ к заявкам финансам не
+    /// выдается, а раньше реестр охранялся именно им - и кабинет финансов
+    /// получал на него 403.
+    #[test]
+    fn the_evader_registry_is_open_to_finance_without_opening_applications() {
+        assert!(is_allowed(Role::Finance, Action::EvaderRead));
+        assert!(!is_allowed(Role::Finance, Action::ApplicationReadAll));
+
+        // Никто из читавших реестр прежним правом его не потерял
+        for role in Role::ALL {
+            if is_allowed(role, Action::ApplicationReadAll) {
+                assert!(
+                    is_allowed(role, Action::EvaderRead),
+                    "{role:?} читал реестр по ApplicationReadAll и не должен был это потерять"
+                );
+            }
+        }
+
+        // Реестр - не публичные сведения (п. 5-6)
+        for role in [Role::Guest, Role::Participant] {
+            assert!(!is_allowed(role, Action::EvaderRead), "{role:?} и реестр");
+        }
     }
 
     #[test]
