@@ -598,6 +598,7 @@
   "acts_create_return": "Draw up the return act",
   "contract_place_second": "runner-up",
   "evasion_title": "Evasion of contract signing",
+  "participant_number": "Participant #{number}",
   "evasion_consequence": "The evader's guarantee fee is held; the right to the contract passes to the runner-up under the same terms.",
   "evasion_declare_title": "Winner evasion",
   "evasion_ground_label": "Ground for evasion",

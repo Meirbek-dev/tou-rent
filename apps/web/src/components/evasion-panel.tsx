@@ -24,9 +24,11 @@ import { notifySuccess } from "@/lib/toast"
 export function EvasionPanel({
   tenderId,
   canGenerateProtocol,
+  anonymizeParticipants = false,
 }: {
   tenderId: string
   canGenerateProtocol: boolean
+  anonymizeParticipants?: boolean
 }) {
   const queryClient = useQueryClient()
   const evasions = useQuery(tenderEvasionsQuery(tenderId))
@@ -55,12 +57,18 @@ export function EvasionPanel({
                 className="flex flex-col gap-1 text-sm"
                 data-testid="evasions"
               >
-                {rows.map((evasion) => (
+                {rows.map((evasion, index) => (
                   <li
                     key={evasion.id}
                     className="flex flex-wrap items-center gap-x-3"
                   >
-                    <span className="font-medium">{evasion.user_name}</span>
+                    <span className="font-medium">
+                      {anonymizeParticipants
+                        ? m.participant_number({
+                            number: index + 1,
+                          })
+                        : evasion.user_name}
+                    </span>
                     <span className="text-muted-foreground">
                       {serverLabel(evasion, "place_title")}
                     </span>

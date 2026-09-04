@@ -598,6 +598,7 @@
   "acts_create_return": "Составить акт возврата",
   "contract_place_second": "участник № 2",
   "evasion_title": "Уклонение от подписания договора",
+  "participant_number": "Участник №{number}",
   "evasion_consequence": "Взнос уклонившегося удерживается; право на договор переходит к участнику № 2 в те же сроки.",
   "evasion_declare_title": "Уклонение победителя",
   "evasion_ground_label": "Основание уклонения",

@@ -598,6 +598,7 @@
   "acts_create_return": "Қайтару актісін жасау",
   "contract_place_second": "№ 2 қатысушы",
   "evasion_title": "Шартқа қол қоюдан жалтару",
+  "participant_number": "Қатысушы №{number}",
   "evasion_consequence": "Жалтарған тұлғаның жарнасы ұсталады; шарт жасасу құқығы сол мерзімдерде № 2 қатысушыға өтеді.",
   "evasion_declare_title": "Жеңімпаздың жалтаруы",
   "evasion_ground_label": "Жалтару негізі",

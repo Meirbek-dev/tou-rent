@@ -577,7 +577,11 @@ function SecretaryTenderPage() {
           {tab === "risk" && (
             <div className="flex flex-col gap-4">
               <DossierPanel subject={{ kind: "tender", id: tenderId }} />
-              <EvasionPanel tenderId={tenderId} canGenerateProtocol />
+              <EvasionPanel
+                tenderId={tenderId}
+                canGenerateProtocol
+                anonymizeParticipants
+              />
               <FailurePanel
                 tenderId={tenderId}
                 canDeclare
