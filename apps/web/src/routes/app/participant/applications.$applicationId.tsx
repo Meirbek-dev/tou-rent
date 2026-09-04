@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 import { Link, createFileRoute, notFound } from "@tanstack/react-router"
-import { DownloadIcon, FileTextIcon } from "lucide-react"
+import { ClipboardCheckIcon, DownloadIcon, FileTextIcon } from "lucide-react"
 import {
   useMutation,
   useQuery,
@@ -273,6 +273,9 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
         contentClassName="flex flex-col gap-4"
       >
         <RequiredApplicationForms />
+        <ApplicantDocumentRequirements
+          deadline={formatDateTime(tender?.submission_deadline)}
+        />
         <p className="text-sm text-muted-foreground">
           {application.package_complete
             ? m.application_package_complete()
@@ -426,6 +429,80 @@ function RequiredApplicationForms() {
             </a>
           </div>
         ))}
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function ApplicantDocumentRequirements({
+  deadline,
+}: {
+  deadline: string | null
+}) {
+  return (
+    <Alert className="px-4 py-4">
+      <ClipboardCheckIcon />
+      <AlertTitle>{m.application_requirements_title()}</AlertTitle>
+      <AlertDescription className="mt-2 flex flex-col gap-4 text-pretty">
+        <section className="flex flex-col gap-3">
+          <h3 className="font-medium text-foreground">
+            {m.application_qualification_documents_title()}
+          </h3>
+          <dl className="flex flex-col gap-3">
+            <div>
+              <dt className="font-medium text-foreground">
+                {m.application_legal_entities_label()}
+              </dt>
+              <dd>{m.application_legal_entities_description()}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-foreground">
+                {m.application_entrepreneurs_label()}
+              </dt>
+              <dd>{m.application_entrepreneurs_description()}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-foreground">
+                {m.application_licenses_label()}
+              </dt>
+              <dd>{m.application_licenses_description()}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="flex flex-col gap-3">
+          <h3 className="font-medium text-foreground">
+            {m.application_financial_documents_title()}
+          </h3>
+          <dl className="flex flex-col gap-3">
+            <div>
+              <dt className="font-medium text-foreground">
+                {m.application_tax_certificate_label()}
+              </dt>
+              <dd>{m.application_tax_certificate_description()}</dd>
+            </div>
+            <div>
+              <dt className="font-medium text-foreground">
+                {m.application_guarantee_payment_label()}
+              </dt>
+              <dd>{m.application_guarantee_payment_description()}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <h3 className="font-medium text-foreground">
+            {m.application_preparation_title()}
+          </h3>
+          <p>{m.application_preparation_steps()}</p>
+          <p>{m.application_pdf_reason()}</p>
+        </section>
+
+        <p className="font-medium text-foreground">
+          {deadline === null
+            ? m.application_upload_before_deadline()
+            : m.application_upload_by({ deadline })}
+        </p>
       </AlertDescription>
     </Alert>
   )
