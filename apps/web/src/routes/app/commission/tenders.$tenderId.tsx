@@ -97,6 +97,9 @@ function CommissionTenderPage() {
       application.status === "submitted" ||
       application.status === "fee_confirmed"
   )
+  const participantNumbers = new Map(
+    applications.map((application, index) => [application.id, index + 1])
+  )
 
   return (
     <PageShell>
@@ -195,7 +198,11 @@ function CommissionTenderPage() {
           <p className="text-muted-foreground">{m.voting_empty()}</p>
         ) : (
           votable.map((application) => (
-            <VoteForm key={application.id} application={application} />
+            <VoteForm
+              key={application.id}
+              application={application}
+              participantNumber={participantNumbers.get(application.id) ?? 1}
+            />
           ))
         )}
       </section>
@@ -203,7 +210,13 @@ function CommissionTenderPage() {
   )
 }
 
-function VoteForm({ application }: { application: ApplicationDto }) {
+function VoteForm({
+  application,
+  participantNumber,
+}: {
+  application: ApplicationDto
+  participantNumber: number
+}) {
   const queryClient = useQueryClient()
   const votes = useQuery(applicationVotesQuery(application.id))
   const [dissent, setDissent] = useState("")
@@ -228,14 +241,7 @@ function VoteForm({ application }: { application: ApplicationDto }) {
     onError: (error: unknown) => notifyError(problemMessage(error)),
   })
 
-  const applicantName =
-    typeof application.applicant_details === "object" &&
-    application.applicant_details !== null &&
-    "name" in application.applicant_details
-      ? String(
-          (application.applicant_details as Record<string, unknown>)["name"]
-        )
-      : application.id.slice(0, 8)
+  const applicantName = m.participant_number({ number: participantNumber })
 
   return (
     <div

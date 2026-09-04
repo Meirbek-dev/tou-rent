@@ -634,8 +634,15 @@ function ManageTender({
                 canRepeat
                 onChanged={refresh}
               />
-              <EvasionPanel tenderId={tenderId} canGenerateProtocol={false} />
-              <DossierPanel subject={{ kind: "tender", id: tenderId }} />
+              <EvasionPanel
+                tenderId={tenderId}
+                canGenerateProtocol={false}
+                anonymizeParticipants
+              />
+              <DossierPanel
+                subject={{ kind: "tender", id: tenderId }}
+                anonymizeApplicationTitles
+              />
             </div>
           )}
         </TabsContent>

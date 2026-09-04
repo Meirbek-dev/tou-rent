@@ -18,7 +18,13 @@ import type { DossierSubject } from "@/lib/publications"
  * и решение особого порядка; механизм у них общий, различаются заголовок
  * и срок хранения материалов (INV-042).
  */
-export function DossierPanel({ subject }: { subject: DossierSubject }) {
+export function DossierPanel({
+  subject,
+  anonymizeApplicationTitles = false,
+}: {
+  subject: DossierSubject
+  anonymizeApplicationTitles?: boolean
+}) {
   const dossier = useQuery(dossierQuery(subject))
 
   const tender = subject.kind === "tender"
@@ -73,41 +79,61 @@ export function DossierPanel({ subject }: { subject: DossierSubject }) {
           description: m.dossier_empty(),
         }}
       >
-        {(items) => (
-          <ul
-            className="flex flex-col gap-1 text-sm"
-            data-testid="dossier-items"
-          >
-            {items.map((item) => (
-              <li key={item.id} className="flex flex-wrap items-center gap-x-3">
-                <span className="text-muted-foreground">
-                  {serverLabel(item, "kind_title")}
-                </span>
-                <span>{item.title ?? "-"}</span>
-                <span
-                  className="text-muted-foreground"
-                  suppressHydrationWarning
-                >
-                  {formatDateTime(item.occurred_at)}
-                </span>
-                {item.has_file && (
-                  <span className="text-muted-foreground">
-                    {m.dossier_file()}
-                  </span>
-                )}
-                {/* INV-042: WORM-хранение - 5 лет тендерные материалы, 3 года решения */}
-                <span
-                  className="text-muted-foreground"
-                  suppressHydrationWarning
-                >
-                  {m.dossier_retention({
-                    date: formatDate(item.retain_until) ?? item.retain_until,
-                  })}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+        {(items) => {
+          const applicationNumbers = new Map(
+            items
+              .filter((item) => item.kind === "application")
+              .map((item, index) => [item.id, index + 1])
+          )
+
+          return (
+            <ul
+              className="flex flex-col gap-1 text-sm"
+              data-testid="dossier-items"
+            >
+              {items.map((item) => {
+                const applicationNumber = applicationNumbers.get(item.id)
+                const title =
+                  anonymizeApplicationTitles && applicationNumber !== undefined
+                    ? m.participant_number({ number: applicationNumber })
+                    : (item.title ?? "-")
+
+                return (
+                  <li
+                    key={item.id}
+                    className="flex flex-wrap items-center gap-x-3"
+                  >
+                    <span className="text-muted-foreground">
+                      {serverLabel(item, "kind_title")}
+                    </span>
+                    <span>{title}</span>
+                    <span
+                      className="text-muted-foreground"
+                      suppressHydrationWarning
+                    >
+                      {formatDateTime(item.occurred_at)}
+                    </span>
+                    {item.has_file && (
+                      <span className="text-muted-foreground">
+                        {m.dossier_file()}
+                      </span>
+                    )}
+                    {/* INV-042: WORM-хранение - 5 лет тендерные материалы, 3 года решения */}
+                    <span
+                      className="text-muted-foreground"
+                      suppressHydrationWarning
+                    >
+                      {m.dossier_retention({
+                        date:
+                          formatDate(item.retain_until) ?? item.retain_until,
+                      })}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          )
+        }}
       </QueryBoundary>
     </section>
   )
