@@ -26,6 +26,7 @@ import { lotAuctionQuery } from "@/lib/auctions"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import {
+  loadOwnApplication,
   myApplicationsQuery,
   reasonLabel,
   rejectionReasonsQuery,
@@ -82,8 +83,10 @@ export const Route = createFileRoute(
   "/app/participant/applications/$applicationId"
 )({
   loader: async ({ context, params }) => {
-    const list = await context.queryClient.ensureQueryData(myApplicationsQuery)
-    const application = list.find((a) => a.id === params.applicationId)
+    const application = await loadOwnApplication(
+      context.queryClient,
+      params.applicationId
+    )
     if (application === undefined) throw notFound()
     await Promise.all([
       context.queryClient.ensureQueryData(rejectionReasonsQuery),

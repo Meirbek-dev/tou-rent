@@ -4,6 +4,7 @@ import { api } from "@/lib/api"
 import { serverLabel } from "@/lib/server-label"
 
 import type { components } from "@tou/api-client"
+import type { QueryClient } from "@tanstack/react-query"
 
 export type ApplicationDto = components["schemas"]["ApplicationDto"]
 export type ApplicationStatus = components["schemas"]["ApplicationStatusDto"]
@@ -22,6 +23,18 @@ export const myApplicationsQuery = queryOptions({
     return data
   },
 })
+
+/** Проверяем наличие карточки по свежему списку, включая только что поданную заявку. */
+export async function loadOwnApplication(
+  queryClient: QueryClient,
+  applicationId: string
+): Promise<ApplicationDto | undefined> {
+  const applications = await queryClient.fetchQuery({
+    ...myApplicationsQuery,
+    staleTime: 0,
+  })
+  return applications.find((application) => application.id === applicationId)
+}
 
 /** Заявки тендера глазами секретаря/комиссии: цены до вскрытия - null. */
 export const tenderApplicationsQuery = (tenderId: string) =>
