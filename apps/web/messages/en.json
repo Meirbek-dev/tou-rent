@@ -1089,7 +1089,7 @@
   "apply_confirm_title": "Submit the application?",
   "apply_confirm_description": "Price: {price}. Guarantee fee: {fee}. Applications close: {deadline}. The application enters the registration journal.",
   "participant_dash_subtitle": "How your applications are progressing and which tenders are still open.",
-  "app_next_submitted": "Awaiting confirmation of the guarantee fee",
+  "app_next_submitted": "Application submitted. Make sure all required PDF documents have been uploaded. The commission will review your application after the envelopes are opened. Follow its status and notifications in your personal account.",
   "app_next_fee_confirmed": "Awaiting the commission's admission decision",
   "app_next_admitted": "Admitted to the auction",
   "my_applications_empty_hint": "An application appears here as soon as you submit it.",
