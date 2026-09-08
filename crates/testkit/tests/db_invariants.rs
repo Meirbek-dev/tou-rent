@@ -726,6 +726,97 @@ async fn fr404_withdrawal_before_deadline_is_recorded() {
     assert_eq!(recorded, 1, "отзыв обязан попасть в журнал (Прил. 12)");
 }
 
+/// FR-401/404: несколько циклов отзыва сохраняют историю и освобождают лот.
+#[tokio::test]
+async fn fr404_withdrawn_applications_allow_resubmission() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, "1 day").await.expect("fixture");
+
+    let first = submitted_application(&mut tx, &f)
+        .await
+        .expect("first submission");
+    withdraw(&mut tx, &f, first)
+        .await
+        .expect("first withdrawal");
+    let second = submitted_application(&mut tx, &f)
+        .await
+        .expect("second submission");
+    withdraw(&mut tx, &f, second)
+        .await
+        .expect("second withdrawal");
+    let third = submitted_application(&mut tx, &f)
+        .await
+        .expect("third submission");
+
+    let history = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, status::text FROM core.applications
+         WHERE lot_id = $1 AND participant_id = $2 ORDER BY id",
+    )
+    .bind(f.lot_id)
+    .bind(f.participant_id)
+    .fetch_all(&mut *tx)
+    .await
+    .expect("application history");
+    assert_eq!(
+        history,
+        vec![
+            (first, "withdrawn".to_owned()),
+            (second, "withdrawn".to_owned()),
+            (third, "submitted".to_owned()),
+        ]
+    );
+}
+
+/// Новая подача после отзыва не разрешает вторую действующую заявку.
+#[tokio::test]
+async fn fr404_resubmission_still_rejects_active_duplicates() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, "1 day").await.expect("fixture");
+    let first = submitted_application(&mut tx, &f)
+        .await
+        .expect("first submission");
+    withdraw(&mut tx, &f, first).await.expect("withdrawal");
+    submitted_application(&mut tx, &f)
+        .await
+        .expect("resubmission");
+
+    let error = submitted_application(&mut tx, &f)
+        .await
+        .expect_err("active duplicate");
+    assert_eq!(
+        error
+            .as_database_error()
+            .and_then(|error| error.constraint()),
+        Some("applications_active_lot_participant_idx")
+    );
+}
+
+/// Отзыв не позволяет обойти срок приема при следующей подаче.
+#[tokio::test]
+async fn fr404_resubmission_after_deadline_is_rejected() {
+    let db = require_db!();
+    let mut tx = db.begin().await.expect("begin");
+    let f = fixture(&mut tx, "1 day").await.expect("fixture");
+    let first = submitted_application(&mut tx, &f)
+        .await
+        .expect("first submission");
+    withdraw(&mut tx, &f, first).await.expect("withdrawal");
+    sqlx::query!(
+        "UPDATE core.tenders SET submission_deadline = now() - interval '1 hour' WHERE id = $1",
+        f.tender_id
+    )
+    .execute(&mut *tx)
+    .await
+    .expect("deadline passed");
+
+    let error = submitted_application(&mut tx, &f)
+        .await
+        .expect_err("late resubmission");
+    assert!(error.to_string().contains("INV-037"), "{error}");
+}
+
 /// FR-404 (п. 45): после дедлайна отзыв невозможен. Рубеж - тот же
 /// журнальный триггер INV-037: запись об отзыве не проходит, и вместе
 /// с ней откатывается смена статуса - заявка остается поданной.
