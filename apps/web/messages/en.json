@@ -1,4 +1,6 @@
 {
+  "commission_qualification_empty": "No qualification information provided.",
+  "commission_materials_sealed": "Qualification information and documents are available after the envelopes are opened.",
   "rule_commission_membership_locked": "Membership is linked to an open meeting, attendance or declarations. Changes are blocked to preserve history. A new membership requires a separate commission.",
   "rule_commission_candidate_invalid": "The employee must have a confirmed active account and the Commission role. A secretary cannot be a voting member.",
   "admin_commission_title": "Commission membership",

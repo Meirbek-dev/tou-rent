@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 import { ApplicationStatusBadge } from "@/components/application-status-badge"
+import { CommissionApplicationMaterials } from "@/components/commission-application-materials"
 import { ConfirmAction } from "@/components/confirm-action"
 import { PageHeader } from "@/components/page-header"
 import { PageShell } from "@/components/page-shell"
@@ -28,6 +29,7 @@ import { notifyError, notifySuccess } from "@/lib/toast"
 import { ArrowLeftIcon } from "lucide-react"
 
 import type { VoteValue } from "@/lib/commission"
+import type { LotDto } from "@/lib/api"
 import type { ApplicationDto } from "@/lib/participant"
 
 // Заседание глазами члена комиссии (FR-1103–1104): декларация конфликта
@@ -201,6 +203,8 @@ function CommissionTenderPage() {
             <VoteForm
               key={application.id}
               application={application}
+              lot={tender.lots.find((lot) => lot.id === application.lot_id)}
+              opened={tender.opened_at != null}
               participantNumber={participantNumbers.get(application.id) ?? 1}
             />
           ))
@@ -213,9 +217,13 @@ function CommissionTenderPage() {
 function VoteForm({
   application,
   participantNumber,
+  lot,
+  opened,
 }: {
   application: ApplicationDto
   participantNumber: number
+  lot: LotDto | undefined
+  opened: boolean
 }) {
   const queryClient = useQueryClient()
   const votes = useQuery(applicationVotesQuery(application.id))
@@ -257,6 +265,12 @@ function VoteForm({
             : m.application_price_sealed()}
         </span>
       </div>
+
+      <CommissionApplicationMaterials
+        application={application}
+        lot={lot}
+        opened={opened}
+      />
 
       {/* Подсчет и уже поданные голоса грузятся отдельным запросом: до сих
           пор он подвешивал весь маршрут, а отказ уводил экран в границу
