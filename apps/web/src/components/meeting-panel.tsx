@@ -155,29 +155,38 @@ export function MeetingPanel({
           >
             <fieldset className="flex flex-col gap-2">
               <legend className="sr-only">{m.attendance_legend()}</legend>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {members.map((member) => (
-                  <label
-                    key={member.member_id}
-                    className="flex items-center gap-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      name="present"
-                      value={member.member_id}
-                      checked={isPresent(member.member_id)}
-                      onChange={(event) =>
-                        setPresent((current) => ({
-                          ...current,
-                          [member.member_id]: event.target.checked,
-                        }))
-                      }
-                    />
-                    <span>{member.full_name}</span>
-                    <span className="text-muted-foreground">
-                      {memberRoleLabel(member.member_role)}
-                    </span>
-                  </label>
+              <div className="flex flex-col gap-4">
+                {["chairman", "deputy", "member", "reserve"].map((role) => (
+                  <section key={role} className="flex flex-col gap-2">
+                    <h4 className="font-medium">{memberRoleLabel(role)}</h4>
+                    {members
+                      .filter((member) => member.member_role === role)
+                      .map((member, index) => (
+                        <label
+                          key={member.member_id}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            name="present"
+                            value={member.member_id}
+                            checked={isPresent(member.member_id)}
+                            onChange={(event) =>
+                              setPresent((current) => ({
+                                ...current,
+                                [member.member_id]: event.target.checked,
+                              }))
+                            }
+                          />
+                          <span>
+                            {role === "member" || role === "reserve"
+                              ? `${index + 1}. `
+                              : ""}
+                            {member.full_name}
+                          </span>
+                        </label>
+                      ))}
+                  </section>
                 ))}
               </div>
             </fieldset>

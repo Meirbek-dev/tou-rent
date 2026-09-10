@@ -63,6 +63,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/commissions/{id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["manage_member"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/data": {
         parameters: {
             query?: never;
@@ -4420,6 +4436,11 @@ export interface components {
             seq: number;
             viewing_terms?: string | null;
         };
+        ManageMemberRequest: {
+            member_role?: null | components["schemas"]["MemberRoleDto"];
+            /** Format: uuid */
+            user_id: string;
+        };
         MarkReadRequest: {
             /** @description Конкретные уведомления; отсутствие поля - прочитать все */
             ids?: string[] | null;
@@ -4958,7 +4979,7 @@ export interface components {
          * @description Причина отказа по правилу предметной области (закрытый перечень)
          * @enum {string}
          */
-        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_schedule_order" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
+        Rule: "tender_status_transition" | "tender_publication_terms" | "tender_schedule_order" | "tender_documentation_change" | "tender_cancellation" | "tender_failure_ground" | "application_intake_closed" | "application_deadline_passed" | "application_already_submitted" | "application_not_pending" | "sealed_price_key_missing" | "commission_composition" | "commission_membership_locked" | "commission_candidate_invalid" | "commission_meeting" | "commission_vote" | "admission_notice" | "auction_not_running" | "auction_start_price_missing" | "bid_below_minimum" | "auction_timer" | "auction_turn_order" | "auction_announcement" | "auction_result_mismatch" | "result_protocol" | "protocol_publication" | "publication_retention" | "public_record_link" | "dossier_immutable" | "contract_conclusion" | "contract_stage_order" | "contract_terms_immutable" | "winner_evasion" | "act_order" | "contract_registration" | "contract_amendment" | "document_check_incomplete" | "contract_deposit" | "guarantee_deposit" | "deposit_refund_reason" | "ledger_entry" | "ledger_balance_negative" | "special_order_application" | "special_order_transition" | "special_order_competition" | "board_decision" | "board_decision_without_opinion" | "investment_contract" | "investment_documents_missing" | "benefit_scheme" | "benefit_approval_missing" | "spinoff_teaching_quota" | "special_publication" | "land_application" | "land_contract_terms_missing" | "object_in_use" | "status_not_allowed" | "append_only_table" | "overlapping_period" | "duplicate_record" | "related_record_missing" | "other_rule";
         SaveSiteAnnouncementRequest: {
             body: string;
             body_kk: string;
@@ -5399,6 +5420,58 @@ export interface operations {
             };
             /** @description Недостаточно прав */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    manage_member: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Комиссия */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ManageMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description Состав изменен; требуется утверждение */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Только администратор */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Комиссия не найдена */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Изменение состава запрещено */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

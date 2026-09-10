@@ -133,6 +133,71 @@
         }
       }
     },
+    "/api/v1/admin/commissions/{id}/members": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "manage_member",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Комиссия",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ManageMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Состав изменен; требуется утверждение"
+          },
+          "403": {
+            "description": "Только администратор",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Комиссия не найдена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Изменение состава запрещено",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/data": {
       "get": {
         "tags": [
@@ -12237,6 +12302,29 @@
           }
         }
       },
+      "ManageMemberRequest": {
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "properties": {
+          "member_role": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MemberRoleDto",
+                "description": "null удаляет человека из состава; учетная запись сохраняется."
+              }
+            ]
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
       "MarkReadRequest": {
         "type": "object",
         "properties": {
@@ -13708,6 +13796,8 @@
           "application_not_pending",
           "sealed_price_key_missing",
           "commission_composition",
+          "commission_membership_locked",
+          "commission_candidate_invalid",
           "commission_meeting",
           "commission_vote",
           "admission_notice",

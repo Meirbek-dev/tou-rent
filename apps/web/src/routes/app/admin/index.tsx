@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 import { getLocale } from "#/paraglide/runtime"
 import { ConfirmAction } from "@/components/confirm-action"
+import { AdminCommissionPanel } from "@/components/admin-commission-panel"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
@@ -86,6 +87,7 @@ import type {
  * повседневного: обе идут в обход процедуры и открыты одним рубежом. */
 const TABS = [
   "users",
+  "commission",
   "announcement",
   "mrp",
   "coefficients",
@@ -124,8 +126,11 @@ function AdminHome() {
         }}
         className="gap-6"
       >
-        <TabsList className="max-w-full overflow-x-auto overflow-y-hidden">
+        <TabsList className="w-full flex-wrap justify-start gap-1 overflow-visible group-data-horizontal/tabs:h-auto [&>[data-slot=tabs-trigger]]:h-auto [&>[data-slot=tabs-trigger]]:min-h-8 [&>[data-slot=tabs-trigger]]:max-w-full [&>[data-slot=tabs-trigger]]:flex-none [&>[data-slot=tabs-trigger]]:whitespace-normal">
           <TabsTrigger value="users">{m.admin_users_title()}</TabsTrigger>
+          <TabsTrigger value="commission">
+            {m.admin_commission_title()}
+          </TabsTrigger>
           <TabsTrigger value="announcement">
             {m.admin_announcement_tab()}
           </TabsTrigger>
@@ -142,6 +147,7 @@ function AdminHome() {
             сейчас не смотрят, незачем */}
         <TabsContent value={tab}>
           {tab === "users" && <UsersPanel />}
+          {tab === "commission" && <AdminCommissionPanel />}
           {tab === "announcement" && <SiteAnnouncementPanel />}
           {tab === "mrp" && <MrpPanel />}
           {tab === "coefficients" && <CoefficientsPanel />}

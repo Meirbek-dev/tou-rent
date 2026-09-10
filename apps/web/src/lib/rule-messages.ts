@@ -33,6 +33,8 @@ const RULE_MESSAGES: Record<string, () => string> = {
   application_not_pending: m.rule_application_not_pending,
   sealed_price_key_missing: m.rule_sealed_price_key_missing,
   commission_composition: m.rule_commission_composition,
+  commission_membership_locked: m.rule_commission_membership_locked,
+  commission_candidate_invalid: m.rule_commission_candidate_invalid,
   commission_meeting: m.rule_commission_meeting,
   commission_vote: m.rule_commission_vote,
   admission_notice: m.rule_admission_notice,

@@ -53,6 +53,10 @@ pub enum RuleViolation {
     /// FR-1101: состав комиссии - председатель, заместитель, нечетное число
     /// голосующих от семи (п. 9, 16–17)
     CommissionComposition,
+    /// Состав уже использован в заседании или связанных документах.
+    CommissionMembershipLocked,
+    /// Кандидат не имеет подтвержденной активной учетной записи и нужных прав.
+    CommissionCandidateInvalid,
     /// FR-1102: заседание комиссии, кворум, председательствующий (п. 12)
     CommissionMeeting,
     /// FR-1103, FR-1104: право голоса и порядок голосования (п. 13, 15)
@@ -170,6 +174,8 @@ impl RuleViolation {
         RuleViolation::ApplicationNotPending,
         RuleViolation::SealedPriceKeyMissing,
         RuleViolation::CommissionComposition,
+        RuleViolation::CommissionMembershipLocked,
+        RuleViolation::CommissionCandidateInvalid,
         RuleViolation::CommissionMeeting,
         RuleViolation::CommissionVote,
         RuleViolation::AdmissionNotice,
@@ -235,6 +241,8 @@ impl RuleViolation {
             RuleViolation::ApplicationNotPending => "application_not_pending",
             RuleViolation::SealedPriceKeyMissing => "sealed_price_key_missing",
             RuleViolation::CommissionComposition => "commission_composition",
+            RuleViolation::CommissionMembershipLocked => "commission_membership_locked",
+            RuleViolation::CommissionCandidateInvalid => "commission_candidate_invalid",
             RuleViolation::CommissionMeeting => "commission_meeting",
             RuleViolation::CommissionVote => "commission_vote",
             RuleViolation::AdmissionNotice => "admission_notice",
@@ -319,6 +327,8 @@ impl RuleViolation {
             "INV-037" => RuleViolation::ApplicationDeadlinePassed,
             "INV-040" => RuleViolation::SealedPriceKeyMissing,
             "FR-1101" => RuleViolation::CommissionComposition,
+            "COMMISSION-LOCKED" => RuleViolation::CommissionMembershipLocked,
+            "COMMISSION-CANDIDATE" => RuleViolation::CommissionCandidateInvalid,
             "FR-1102" => RuleViolation::CommissionMeeting,
             "FR-1103" | "FR-1104" => RuleViolation::CommissionVote,
             "FR-504" => RuleViolation::AdmissionNotice,

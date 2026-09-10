@@ -46,6 +46,32 @@ pub struct CommissionRecord {
     pub approved_at: Option<OffsetDateTime>,
 }
 
+/// Управление составом администратором; использованная комиссия неизменяема.
+pub async fn manage_member(
+    db: &Db,
+    actor: Uuid,
+    commission_id: Uuid,
+    user_id: Uuid,
+    role: Option<&str>,
+) -> Result<(), CommissionError> {
+    crate::with_actor(db, actor, async |tx| {
+        let found = sqlx::query_scalar!(
+            r#"SELECT core.admin_commission_member($1, $2, $3) AS "found!""#,
+            commission_id,
+            user_id,
+            role
+        )
+        .fetch_one(tx)
+        .await
+        .map_err(map_rule)?;
+        if !found {
+            return Err(CommissionError::NotFound);
+        }
+        Ok(())
+    })
+    .await
+}
+
 /// Действующая комиссия на сегодня (срок полномочий - п. 9–11).
 pub async fn active(db: &Db) -> Result<Option<CommissionRecord>, sqlx::Error> {
     sqlx::query_as!(

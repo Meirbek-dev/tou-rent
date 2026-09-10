@@ -39,6 +39,54 @@ pub enum MemberRoleDto {
     Reserve,
 }
 
+impl MemberRoleDto {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Chairman => "chairman",
+            Self::Deputy => "deputy",
+            Self::Member => "member",
+            Self::Reserve => "reserve",
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct ManageMemberRequest {
+    pub user_id: Uuid,
+    /// null удаляет человека из состава; учетная запись сохраняется.
+    pub member_role: Option<MemberRoleDto>,
+}
+
+#[utoipa::path(
+    post, path = "/api/v1/admin/commissions/{id}/members", tag = "admin",
+    params(("id" = Uuid, Path, description = "Комиссия")),
+    request_body = ManageMemberRequest,
+    responses(
+        (status = 204, description = "Состав изменен; требуется утверждение"),
+        (status = 403, description = "Только администратор", body = crate::error::Problem),
+        (status = 404, description = "Комиссия не найдена", body = crate::error::Problem),
+        (status = 409, description = "Изменение состава запрещено", body = crate::error::Problem)
+    )
+)]
+pub async fn manage_member(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<ManageMemberRequest>,
+) -> Result<StatusCode, ApiError> {
+    user.require(Action::UserManage)?;
+    commission::manage_member(
+        &state.db,
+        user.id(),
+        id,
+        body.user_id,
+        body.member_role.map(MemberRoleDto::as_str),
+    )
+    .await
+    .map_err(rule_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
 impl From<MemberRole> for MemberRoleDto {
     fn from(role: MemberRole) -> Self {
         match role {

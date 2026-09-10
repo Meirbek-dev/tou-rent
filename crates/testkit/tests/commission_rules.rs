@@ -17,6 +17,71 @@ async fn try_pool() -> Result<Option<tou_db::Db>, sqlx::Error> {
     }
 }
 
+#[tokio::test]
+async fn admin_membership_requires_candidate_role_and_preserves_history() {
+    let db = try_pool()
+        .await
+        .expect("database")
+        .expect("TESTKIT_DATABASE_URL required");
+    let mut tx = db.begin().await.expect("transaction");
+    let f = fixture(&mut tx).await.expect("fixture");
+    let candidate = user(&mut tx, "new-member").await.expect("candidate");
+    let rejected_candidate = rejected(&mut tx, async |conn| {
+        sqlx::query("SELECT core.admin_commission_member($1, $2, 'reserve')")
+            .bind(f.commission_id)
+            .bind(candidate)
+            .execute(conn)
+            .await
+            .map(|_| ())
+    })
+    .await
+    .expect("savepoint")
+    .expect("role is required");
+    assert!(rejected_candidate.contains("COMMISSION-CANDIDATE"));
+    sqlx::query("INSERT INTO core.role_grants (user_id, role) VALUES ($1, 'commission')")
+        .bind(candidate)
+        .execute(&mut *tx)
+        .await
+        .expect("role");
+    approve(&mut tx, f.commission_id).await.expect("approve");
+    sqlx::query("SELECT core.admin_commission_member($1, $2, 'reserve')")
+        .bind(f.commission_id)
+        .bind(candidate)
+        .execute(&mut *tx)
+        .await
+        .expect("add");
+    let unapproved: bool =
+        sqlx::query_scalar("SELECT approved_at IS NULL FROM core.commissions WHERE id=$1")
+            .bind(f.commission_id)
+            .fetch_one(&mut *tx)
+            .await
+            .expect("approval state");
+    assert!(unapproved, "composition edits clear approval");
+    approve(&mut tx, f.commission_id)
+        .await
+        .expect("approve again");
+    let meeting = create_meeting(&mut tx, &f).await.expect("meeting");
+    for (index, member) in f.members.iter().take(5).enumerate() {
+        attend(&mut tx, meeting, *member, true, index == 0)
+            .await
+            .expect("attendance");
+    }
+    open_meeting(&mut tx, meeting).await.expect("open meeting");
+    let locked = rejected(&mut tx, async |conn| {
+        sqlx::query("SELECT core.admin_commission_member($1, $2, NULL)")
+            .bind(f.commission_id)
+            .bind(candidate)
+            .execute(conn)
+            .await
+            .map(|_| ())
+    })
+    .await
+    .expect("savepoint")
+    .expect("opened commission must be locked");
+    assert!(locked.contains("COMMISSION-LOCKED"));
+    tx.rollback().await.expect("rollback test data");
+}
+
 macro_rules! require_db {
     () => {
         match try_pool()

@@ -172,6 +172,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(admission::open_tender))
         .routes(routes!(admission::qualification_meeting))
         .routes(routes!(commission::active_commission))
+        .routes(routes!(commission::manage_member))
         .routes(routes!(commission::approve_commission))
         .routes(routes!(commission::record_attendance))
         .routes(routes!(commission::open_meeting))
