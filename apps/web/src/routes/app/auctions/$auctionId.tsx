@@ -24,17 +24,13 @@ import {
   startAuction,
 } from "@/lib/auctions"
 import { problemMessage } from "@/lib/auth"
+import { auctionParticipantLabel } from "@/lib/auction-participant-label"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { ArrowLeftIcon } from "lucide-react"
 
-import type {
-  AuctionDto,
-  AuctionRoomDto,
-  BidDto,
-  CircleParticipantDto,
-} from "@/lib/auctions"
+import type { AuctionDto, AuctionRoomDto, BidDto } from "@/lib/auctions"
 
 // Комната торгов (FR-601–603, 606): лента ставок в реальном времени,
 // server-authoritative таймер, панель председателя, итог с победителем
@@ -436,14 +432,15 @@ function Circle({
             </span>
             <span className="font-medium">{participant.applicant_name}</span>
             <span className="text-muted-foreground">
-              {stateLabel(participant)}
+              {auctionParticipantLabel(participant, room.auction)}
             </span>
-            {room.current_turn_application_id ===
-              participant.application_id && (
-              <span data-testid="current-turn" className="font-medium">
-                {m.auction_turn_now()}
-              </span>
-            )}
+            {room.auction.status === "running" &&
+              room.current_turn_application_id ===
+                participant.application_id && (
+                <span data-testid="current-turn" className="font-medium">
+                  {m.auction_turn_now()}
+                </span>
+              )}
             {isChair &&
               participant.status === "active" &&
               room.auction.status !== "finished" && (
@@ -480,19 +477,6 @@ function Circle({
       )}
     </section>
   )
-}
-
-function stateLabel(participant: CircleParticipantDto): string {
-  switch (participant.status) {
-    case "passed":
-      return m.auction_state_passed()
-    case "absent":
-      return m.auction_state_absent({
-        amount: formatTenge(participant.initial_price),
-      })
-    default:
-      return m.auction_state_active()
-  }
 }
 
 /** Ставка допущенного участника: минимум подсказывает сервер (INV-063). */
@@ -562,18 +546,25 @@ function BidForm({
         <Button
           data-testid="place-bid"
           onClick={() => place.mutate()}
-          disabled={place.isPending || !myTurn}
+          disabled={place.isPending || pass.isPending || !myTurn}
         >
           {m.auction_place_bid()}
         </Button>
-        <Button
-          variant="outline"
-          data-testid="pass-turn"
-          onClick={() => pass.mutate()}
-          disabled={pass.isPending || !myTurn}
-        >
-          {m.auction_pass()}
-        </Button>
+        <ConfirmAction
+          title={m.auction_pass_confirm_title()}
+          description={m.auction_pass_confirm_description()}
+          confirmLabel={m.auction_pass_confirm_submit()}
+          cancelLabel={m.auction_pass_confirm_cancel()}
+          disabled={pass.isPending || place.isPending || !myTurn}
+          onConfirm={() => {
+            if (myTurn && !pass.isPending && !place.isPending) pass.mutate()
+          }}
+          trigger={
+            <Button variant="outline" data-testid="pass-turn">
+              {m.auction_pass()}
+            </Button>
+          }
+        />
       </div>
       {pass.error !== null && (
         <p role="alert" className="text-sm text-destructive">

@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { api, tenderQuery } from "@/lib/api"
+import { documentKindLabel } from "@/lib/application-documents"
 import { lotAuctionQuery } from "@/lib/auctions"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
@@ -56,27 +57,6 @@ const DOCUMENT_KINDS: readonly ApplicationDocumentKind[] = [
   "price_proposal_form",
   "qualification_form",
 ]
-
-function documentKindLabel(kind: string): string {
-  switch (kind) {
-    case "application_form":
-      return m.application_document_application_form()
-    case "registration_certificate":
-      return m.application_document_registration_certificate()
-    case "tax_clearance":
-      return m.application_document_tax_clearance()
-    case "guarantee_payment":
-      return m.application_document_guarantee_payment()
-    case "qualification_documents":
-      return m.application_document_qualification_documents()
-    case "price_proposal_form":
-      return m.application_document_price_proposal_form()
-    case "qualification_form":
-      return m.application_document_qualification_form()
-    default:
-      return m.application_document_legacy()
-  }
-}
 
 // Карточка своей заявки: файлы (FR-401) и отзыв до дедлайна (FR-404).
 export const Route = createFileRoute(

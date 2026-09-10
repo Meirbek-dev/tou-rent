@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
+import { documentKindLabel } from "@/lib/application-documents"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import {
@@ -518,6 +519,7 @@ function SecretaryTenderPage() {
                                       href={`/api/v1/applications/${application.id}/files/${file.id}`}
                                       className="text-sm underline-offset-4 hover:underline"
                                     >
+                                      {documentKindLabel(file.document_kind)} —{" "}
                                       {file.filename}
                                     </a>
                                   ))}
