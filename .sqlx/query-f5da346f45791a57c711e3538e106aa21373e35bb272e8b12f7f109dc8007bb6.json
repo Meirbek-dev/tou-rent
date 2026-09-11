@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.id, u.full_name AS \"title!\", NULL::text AS \"title_kk?\",\n                      t.title || ' · ' || a.status::text AS \"details?\",\n                      a.submitted_at AS \"created_at?\"\n               FROM core.applications a\n               JOIN core.users u ON u.id = a.participant_id\n               JOIN core.tenders t ON t.id = a.tender_id\n               ORDER BY a.id DESC LIMIT $1",
+  "query": "SELECT a.id, u.full_name AS \"title!\", NULL::text AS \"title_kk?\",\n                      '№' || l.seq || ' — ' || o.name || ' · ' || a.status::text AS \"details?\",\n                      a.submitted_at AS \"created_at?\"\n               FROM core.applications a\n               JOIN core.users u ON u.id = a.participant_id\n               JOIN core.lots l ON l.id = a.lot_id\n               JOIN core.objects o ON o.id = l.object_id\n               ORDER BY a.id DESC LIMIT $1",
   "describe": {
     "columns": [
       {
@@ -62,5 +62,5 @@
       false
     ]
   },
-  "hash": "8ba6c8a9a439f44c2db592b5175e192e584a55bec5bbecf8bbac95403d3df98e"
+  "hash": "f5da346f45791a57c711e3538e106aa21373e35bb272e8b12f7f109dc8007bb6"
 }

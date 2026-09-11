@@ -58,6 +58,7 @@ import {
   usersQuery,
 } from "@/lib/admin"
 import { meQuery, problemMessage } from "@/lib/auth"
+import { adminRecordDetails } from "@/lib/admin-record-details"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import { holidaysQuery } from "@/lib/obligations"
 import { fromAlmatyInput, toAlmatyInput } from "@/lib/organizer"
@@ -549,7 +550,7 @@ function RecordsPanel({
                     <TableRow key={record.id}>
                       <TableCell className="font-medium">{title}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {record.details ?? ""}
+                        {adminRecordDetails(kind, record.details)}
                       </TableCell>
                       <TableCell suppressHydrationWarning>
                         {formatDateTime(record.created_at) ?? ""}

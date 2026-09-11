@@ -237,11 +237,12 @@ pub async fn list_records(db: &Db, kind: PurgeScope) -> Result<Page<AdminRecord>
         PurgeScope::Applications => records!(
             db,
             r#"SELECT a.id, u.full_name AS "title!", NULL::text AS "title_kk?",
-                      t.title || ' · ' || a.status::text AS "details?",
+                      '№' || l.seq || ' — ' || o.name || ' · ' || a.status::text AS "details?",
                       a.submitted_at AS "created_at?"
                FROM core.applications a
                JOIN core.users u ON u.id = a.participant_id
-               JOIN core.tenders t ON t.id = a.tender_id
+               JOIN core.lots l ON l.id = a.lot_id
+               JOIN core.objects o ON o.id = l.object_id
                ORDER BY a.id DESC LIMIT $1"#
         )?,
         PurgeScope::Protocols => records!(
