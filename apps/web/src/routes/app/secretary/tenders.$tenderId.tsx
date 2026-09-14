@@ -17,6 +17,7 @@ import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
 import { Button, buttonVariants } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Table,
@@ -27,7 +28,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
-import { documentKindLabel } from "@/lib/application-documents"
+import { applicationDocumentLabel } from "@/lib/application-archive"
+import { useApplicationArchive } from "@/hooks/use-application-archive"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
 import {
@@ -112,6 +114,12 @@ function SecretaryTenderPage() {
 
   if (tender === null) throw notFound()
   const sealed = tender.opened_at == null
+  const archive = useApplicationArchive(
+    tenderId,
+    applications,
+    tender.lots,
+    sealed
+  )
 
   const refresh = async () => {
     await Promise.all([
@@ -443,6 +451,31 @@ function SecretaryTenderPage() {
                 description={sealed ? m.prices_sealed_note() : undefined}
                 contentClassName="px-0"
               >
+                {!sealed && applications.length > 0 && (
+                  <div className="mb-4 flex flex-col items-start gap-2 px-(--card-spacing)">
+                    <Button
+                      variant="outline"
+                      disabled={
+                        archive.busy ||
+                        !applications.some((a) => a.files.length > 0)
+                      }
+                      onClick={() => void archive.download()}
+                    >
+                      {archive.busy && archive.currentId === undefined && (
+                        <Spinner data-icon="inline-start" />
+                      )}
+                      {m.application_archive_all()}
+                    </Button>
+                    <p role="status" className="text-sm text-muted-foreground">
+                      {archive.status}
+                    </p>
+                    {archive.error !== "" && (
+                      <p role="alert" className="text-sm text-destructive">
+                        {archive.error}
+                      </p>
+                    )}
+                  </div>
+                )}
                 {applications.length === 0 ? (
                   <p className="px-(--card-spacing) text-muted-foreground">
                     {m.tender_applications_empty()}
@@ -513,14 +546,30 @@ function SecretaryTenderPage() {
                                 </span>
                               ) : (
                                 <div className="flex flex-col gap-0.5">
+                                  <Button
+                                    variant="outline"
+                                    className="mb-2 self-start"
+                                    disabled={archive.busy}
+                                    aria-label={m.application_archive_one_label(
+                                      { id: application.id }
+                                    )}
+                                    onClick={() =>
+                                      void archive.download(application.id)
+                                    }
+                                  >
+                                    {archive.busy &&
+                                      archive.currentId === application.id && (
+                                        <Spinner data-icon="inline-start" />
+                                      )}
+                                    {m.application_archive_one()}
+                                  </Button>
                                   {application.files.map((file) => (
                                     <a
                                       key={file.id}
                                       href={`/api/v1/applications/${application.id}/files/${file.id}`}
                                       className="text-sm underline-offset-4 hover:underline"
                                     >
-                                      {documentKindLabel(file.document_kind)} —{" "}
-                                      {file.filename}
+                                      {applicationDocumentLabel(file)}
                                     </a>
                                   ))}
                                 </div>
