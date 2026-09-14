@@ -1,4 +1,6 @@
 {
+  "application_lot_column": "Лот",
+  "application_applicant_column": "Өтінім беруші",
   "application_archive_all": "Барлық өтінімдерді жүктеу (ZIP)",
   "application_archive_one": "Тіркемелерді жүктеу (ZIP)",
   "application_archive_one_label": "{id} өтінімінің тіркемелерін жүктеу",

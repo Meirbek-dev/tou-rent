@@ -1,4 +1,6 @@
 {
+  "application_lot_column": "Lot",
+  "application_applicant_column": "Applicant",
   "application_archive_all": "Download all applications (ZIP)",
   "application_archive_one": "Download attachments (ZIP)",
   "application_archive_one_label": "Download attachments for application {id}",

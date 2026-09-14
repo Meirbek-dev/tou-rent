@@ -28,7 +28,10 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { api, localizedTenderTitle, tenderQuery } from "@/lib/api"
-import { applicationDocumentLabel } from "@/lib/application-archive"
+import {
+  applicationApplicantLabel,
+  applicationDocumentLabel,
+} from "@/lib/application-archive"
 import { useApplicationArchive } from "@/hooks/use-application-archive"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime, formatTenge } from "@/lib/format"
@@ -489,6 +492,12 @@ function SecretaryTenderPage() {
                             {m.application_card_short()}
                           </TableHead>
                           <TableHead scope="col">
+                            {m.application_lot_column()}
+                          </TableHead>
+                          <TableHead scope="col">
+                            {m.application_applicant_column()}
+                          </TableHead>
+                          <TableHead scope="col">
                             {m.object_status_label()}
                           </TableHead>
                           <TableHead scope="col">
@@ -503,10 +512,22 @@ function SecretaryTenderPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {applications.map((application) => (
+                        {applications.map((application, index) => (
                           <TableRow key={application.id}>
                             <TableCell className="font-medium tabular-nums">
                               {application.id.slice(0, 8)}
+                            </TableCell>
+                            <TableCell className="tabular-nums">
+                              {tender.lots.find(
+                                (lot) => lot.id === application.lot_id
+                              )?.seq ?? "—"}
+                            </TableCell>
+                            <TableCell className="max-w-64 min-w-40 wrap-anywhere whitespace-normal">
+                              {applicationApplicantLabel(
+                                application,
+                                sealed,
+                                index + 1
+                              )}
                             </TableCell>
                             <TableCell>
                               <div className="flex flex-col gap-1">

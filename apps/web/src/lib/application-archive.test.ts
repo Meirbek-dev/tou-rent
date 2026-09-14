@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from "vite-plus/test"
 import { unzipSync } from "fflate"
 import { m } from "#/paraglide/messages"
 import {
+  applicationApplicantLabel,
+  applicationArchiveFilename,
   applicationArchiveEntries,
   applicationDocumentLabel,
   ARCHIVE_MAX_BYTES,
@@ -35,6 +37,29 @@ function application(id = "app-1", name = "Иванов И.И."): ApplicationDto
 const lots = [{ id: "lot-2", seq: 2 }]
 
 describe("application archives", () => {
+  it("names a single ZIP by lot and applicant, not the application ID", () => {
+    expect(applicationArchiveFilename("tender", lots, application())).toBe(
+      "Лот № 2 — Иванов И.И.zip"
+    )
+  })
+  it("uses an organization's name and sanitizes it for a ZIP filename", () => {
+    const app = application("app-legal", 'ТОО "Пример"')
+    expect(applicationApplicantLabel(app)).toBe('ТОО "Пример"')
+    expect(applicationArchiveFilename("tender", lots, app)).toBe(
+      "Лот № 2 — ТОО _Пример_.zip"
+    )
+  })
+  it("keeps the tender ID in the combined ZIP name", () => {
+    expect(applicationArchiveFilename("tender", lots)).toBe(
+      "Заявки — tender.zip"
+    )
+  })
+  it("does not reveal the applicant label before opening", () => {
+    expect(applicationApplicantLabel(application(), true, 2)).toBe(
+      m.participant_number({ number: 2 })
+    )
+    expect(applicationApplicantLabel(application())).toBe("Иванов И.И.")
+  })
   it("uses the site's document label, with flat files for one application", () => {
     const [entry] = applicationArchiveEntries([application()], lots, false)
     expect(entry?.path).toBe(applicationDocumentLabel(file))

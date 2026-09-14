@@ -51,6 +51,43 @@ export function applicationDocumentLabel(
   return `${documentKindLabel(file.document_kind)} — ${file.filename}`
 }
 
+export function applicationApplicantLabel(
+  application: Pick<ApplicationDto, "id" | "applicant_details">,
+  sealed = false,
+  number = 1
+): string {
+  if (sealed) return m.participant_number({ number })
+  const name: unknown = application.applicant_details["name"]
+  return typeof name === "string" && name.trim() !== ""
+    ? name.trim()
+    : application.id
+}
+
+function applicationArchiveTitle(
+  application: ApplicationDto,
+  lots: readonly Pick<LotDto, "id" | "seq">[]
+): string {
+  const lot = lots.find((item) => item.id === application.lot_id)
+  return m.application_archive_folder({
+    lot: String(lot?.seq ?? application.lot_id),
+    name: applicationApplicantLabel(application),
+  })
+}
+
+export function applicationArchiveFilename(
+  tenderId: string,
+  lots: readonly Pick<LotDto, "id" | "seq">[],
+  application?: ApplicationDto
+): string {
+  return (
+    safeArchiveName(
+      application === undefined
+        ? m.application_archive_filename({ id: tenderId })
+        : applicationArchiveTitle(application, lots)
+    ) + ".zip"
+  )
+}
+
 export function applicationArchiveEntries(
   applications: readonly ApplicationDto[],
   lots: readonly Pick<LotDto, "id" | "seq">[],
@@ -58,16 +95,8 @@ export function applicationArchiveEntries(
 ): ArchiveEntry[] {
   const usedFolders = new Set<string>()
   return applications.flatMap((application) => {
-    const name: unknown = application.applicant_details["name"]
-    const lot = lots.find((item) => item.id === application.lot_id)
     const folder = uniqueName(
-      m.application_archive_folder({
-        lot: String(lot?.seq ?? application.lot_id),
-        name:
-          typeof name === "string" && name.trim() !== ""
-            ? name
-            : application.id,
-      }),
+      applicationArchiveTitle(application, lots),
       usedFolders,
       false
     )

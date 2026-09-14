@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react"
 import { m } from "#/paraglide/messages"
 import {
   applicationArchiveEntries,
+  applicationArchiveFilename,
   createApplicationArchive,
-  safeArchiveName,
 } from "../lib/application-archive"
 import type { ApplicationDto } from "../lib/participant"
 import type { LotDto } from "../lib/api"
@@ -50,10 +50,11 @@ export function useApplicationArchive(
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
-      link.download =
-        safeArchiveName(
-          m.application_archive_filename({ id: applicationId ?? tenderId })
-        ) + ".zip"
+      link.download = applicationArchiveFilename(
+        tenderId,
+        lots,
+        applicationId === undefined ? undefined : selected[0]
+      )
       document.body.append(link)
       try {
         link.click()

@@ -1,4 +1,6 @@
 {
+  "application_lot_column": "Лот",
+  "application_applicant_column": "Заявитель",
   "application_archive_all": "Скачать все заявки (ZIP)",
   "application_archive_one": "Скачать вложения (ZIP)",
   "application_archive_one_label": "Скачать вложения заявки {id}",
