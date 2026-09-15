@@ -142,6 +142,16 @@ async fn offline_documents_enforce_recipient_visibility_and_preserve_outcomes() 
     assert_eq!(state, "submitted");
     let dossier: i64 = sqlx::query_scalar("SELECT count(*) FROM core.dossier_items WHERE source_table='core.commission_documents' AND tender_id=$1 AND file_key IS NOT NULL").bind(tender).fetch_one(&pool).await.unwrap();
     assert_eq!(dossier, 2);
+    let dossier = tou_db::publications::dossier(&pool, tender)
+        .await
+        .expect("commission documents must be readable from the dossier");
+    assert_eq!(
+        dossier
+            .iter()
+            .filter(|item| item.kind.as_str() == "commission_document")
+            .count(),
+        2
+    );
     let audited: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM audit.log WHERE table_name='core.commission_documents' AND row_id=$1",
     )

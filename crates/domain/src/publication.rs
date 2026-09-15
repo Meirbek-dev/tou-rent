@@ -75,6 +75,8 @@ pub enum DossierKind {
     Application,
     /// Протокол комиссии (допуск, итоги, несостоявшийся, победитель № 2)
     Protocol,
+    /// Документ комиссии, загруженный секретарем (протокол или решение офлайн)
+    CommissionDocument,
     /// Факт публикации и снятия протокола (п. 75–76, INV-076)
     Publication,
     /// Заключение уполномоченного подразделения (FR-1202, п. 89)
@@ -92,10 +94,11 @@ pub enum DossierKind {
 }
 
 impl DossierKind {
-    pub const ALL: [DossierKind; 10] = [
+    pub const ALL: [DossierKind; 11] = [
         DossierKind::Announcement,
         DossierKind::Application,
         DossierKind::Protocol,
+        DossierKind::CommissionDocument,
         DossierKind::Publication,
         DossierKind::Review,
         DossierKind::Decision,
@@ -110,6 +113,7 @@ impl DossierKind {
             DossierKind::Announcement => "announcement",
             DossierKind::Application => "application",
             DossierKind::Protocol => "protocol",
+            DossierKind::CommissionDocument => "commission_document",
             DossierKind::Publication => "publication",
             DossierKind::Review => "review",
             DossierKind::Decision => "decision",
@@ -126,6 +130,7 @@ impl DossierKind {
             DossierKind::Announcement => "объявление и редакции документации",
             DossierKind::Application => "заявки участников",
             DossierKind::Protocol => "протоколы комиссии",
+            DossierKind::CommissionDocument => "документы комиссии",
             DossierKind::Publication => "публикация протоколов",
             DossierKind::Review => "заключения подразделения",
             DossierKind::Decision => "решения Правления",
@@ -143,6 +148,7 @@ impl DossierKind {
             DossierKind::Announcement => "01-announcement",
             DossierKind::Application => "02-applications",
             DossierKind::Protocol => "03-protocols",
+            DossierKind::CommissionDocument => "03-commission-documents",
             DossierKind::Publication => "04-publication",
             DossierKind::Review => "05-reviews",
             DossierKind::Decision => "06-decisions",
