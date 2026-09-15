@@ -31,8 +31,10 @@ pub struct CommissionDocumentDto {
     pub filename: String,
     pub size_bytes: i64,
     pub uploaded_by: Uuid,
+    #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub uploaded_at: OffsetDateTime,
+    #[serde(with = "time::serde::rfc3339::option")]
     #[schema(value_type = Option<String>, format = DateTime)]
     pub shared_at: Option<OffsetDateTime>,
 }
@@ -229,6 +231,51 @@ pub async fn commission_document_pdf(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn document_fixture() -> CommissionDocumentDto {
+        CommissionDocumentDto {
+            id: Uuid::nil(),
+            tender_id: Uuid::nil(),
+            application_id: Some(Uuid::nil()),
+            title: "Протокол".into(),
+            number: "1".into(),
+            document_date: "2026-09-15".into(),
+            filename: "protocol.pdf".into(),
+            size_bytes: 100,
+            uploaded_by: Uuid::nil(),
+            uploaded_at: time::macros::datetime!(2026-09-15 12:30:00 UTC),
+            shared_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn uploaded_document_response_has_rfc3339_date_and_null_visibility() {
+        let response = Json(document_fixture()).into_response();
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["uploaded_at"], "2026-09-15T12:30:00Z");
+        assert_eq!(value["shared_at"], serde_json::Value::Null);
+    }
+
+    #[tokio::test]
+    async fn shared_document_list_response_has_rfc3339_dates() {
+        let mut document = document_fixture();
+        document.shared_at = Some(time::macros::datetime!(2026-09-15 17:45:00 +05:00));
+        let response = Json(CommissionDocumentPage {
+            items: vec![document],
+            truncated: false,
+        })
+        .into_response();
+        let body = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["items"][0]["uploaded_at"], "2026-09-15T12:30:00Z");
+        assert_eq!(value["items"][0]["shared_at"], "2026-09-15T17:45:00+05:00");
+    }
+
     #[test]
     fn metadata_rejects_blank_and_control_characters() {
         for value in ["", "  ", "line\nbreak"] {
