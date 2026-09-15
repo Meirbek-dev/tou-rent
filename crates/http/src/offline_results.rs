@@ -53,7 +53,10 @@ pub struct OfflineLotResult {
 pub struct OfflineResultsState {
     pub recorded: bool,
     pub eligible: bool,
+    /// Corrects an earlier standard failure without deleting its protocol.
+    pub correcting: bool,
     pub protocol_id: Option<Uuid>,
+    pub superseded_protocol_id: Option<Uuid>,
     pub recorded_by: Option<Uuid>,
     pub recorded_at: Option<String>,
     pub lots: Vec<OfflineLotResult>,

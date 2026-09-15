@@ -73,6 +73,11 @@ function OfflineEntry(props: {
 }) {
   return (
     <div className="flex flex-col items-start gap-3">
+      {props.state.correcting && (
+        <p className="text-sm text-destructive">
+          {m.offline_correction_help()}
+        </p>
+      )}
       <p className="text-sm">{m.offline_help()}</p>
       <Dialog>
         <DialogTrigger render={<Button variant="outline" />}>
@@ -116,6 +121,11 @@ function OfflineResults({ state }: { state: OfflineState }) {
         {m.offline_protocol()}
       </a>
       <p className="text-sm text-muted-foreground">{m.offline_preserved()}</p>
+      {state.superseded_protocol_id !== null && (
+        <p className="text-sm text-muted-foreground">
+          {m.offline_superseded_protocol()}
+        </p>
+      )}
       <ol className="flex flex-col gap-4">
         {state.lots.map((lot) => (
           <li key={lot.lot_id} className="flex flex-col gap-1">

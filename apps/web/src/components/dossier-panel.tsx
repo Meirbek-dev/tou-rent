@@ -107,6 +107,11 @@ export function DossierPanel({
                       {serverLabel(item, "kind_title")}
                     </span>
                     <span>{title}</span>
+                    {item.superseded && (
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                        {m.dossier_superseded()}
+                      </span>
+                    )}
                     <span
                       className="text-muted-foreground"
                       suppressHydrationWarning

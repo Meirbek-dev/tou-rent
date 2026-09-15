@@ -279,6 +279,7 @@ pub struct DossierItemDto {
     pub kind_title_ru: String,
     pub title: Option<String>,
     pub has_file: bool,
+    pub superseded: bool,
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub occurred_at: OffsetDateTime,
@@ -295,6 +296,7 @@ fn dossier_dto(item: tou_db::publications::DossierItem) -> DossierItemDto {
         kind_title_ru: item.kind.title_ru().to_owned(),
         title: item.title,
         has_file: item.file_key.is_some(),
+        superseded: item.superseded,
         occurred_at: item.occurred_at,
         retain_until: item.retain_until,
     }
@@ -461,6 +463,7 @@ async fn archive_response(
             "occurred_at": item.occurred_at.unix_timestamp(),
             "retain_until": item.retain_until.unix_timestamp(),
             "source": item.source_table,
+            "superseded": item.superseded,
             "file": entry,
         }));
         if let (Some(key), Some(entry)) = (item.file_key.as_ref(), entry) {

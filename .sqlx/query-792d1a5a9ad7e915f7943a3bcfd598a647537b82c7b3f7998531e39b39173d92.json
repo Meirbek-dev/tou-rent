@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n           (SELECT count(*) FROM core.applications a\n            WHERE a.tender_id = t.id AND a.status <> 'withdrawn')::bigint AS \"applications!\",\n           (SELECT count(*) FROM core.applications a\n            WHERE a.tender_id = t.id AND a.status = 'admitted')::bigint AS \"admitted!\",\n           t.opened_at IS NOT NULL AS \"opened!\",\n           (t.submission_deadline IS NOT NULL AND t.submission_deadline < core.now()) AS \"deadline_passed!\",\n           t.status::text AS \"status!\",\n           t.failure_ground,\n           EXISTS(SELECT 1 FROM core.protocols p\n                  WHERE p.tender_id=t.id AND p.kind::text='failed') AS \"failed_protocol_generated!\",\n           t.repeat_of,\n           -- Лоты с завершенными торгами и лоты, где договориться больше не с кем:\n           -- победитель уклонился, а участника № 2 нет либо уклонился и он (п. 81.4)\n           (SELECT count(*) FROM core.auctions a\n            JOIN core.lots l ON l.id = a.lot_id\n            WHERE l.tender_id = t.id AND a.status = 'finished')::bigint AS \"finished_lots!\",\n           (SELECT count(*) FROM core.auctions a\n            JOIN core.lots l ON l.id = a.lot_id\n            WHERE l.tender_id = t.id AND a.status = 'finished'\n              AND EXISTS (SELECT 1 FROM core.evasions e\n                          WHERE e.lot_id = l.id AND e.place = 'winner')\n              AND (a.runner_up_application_id IS NULL\n                   OR EXISTS (SELECT 1 FROM core.evasions e\n                              WHERE e.lot_id = l.id AND e.place = 'runner_up'))\n           )::bigint AS \"exhausted_lots!\"\n         FROM core.tenders t WHERE t.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "applications!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "admitted!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "opened!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "deadline_passed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "status!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "failure_ground",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "failure_ground"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "failed_protocol_generated!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "repeat_of",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "repeat_of"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "finished_lots!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "exhausted_lots!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      true,
+      null,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "792d1a5a9ad7e915f7943a3bcfd598a647537b82c7b3f7998531e39b39173d92"
+}

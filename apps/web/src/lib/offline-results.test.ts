@@ -5,7 +5,9 @@ import type { OfflineDecision, OfflineState } from "./offline-results"
 const state: OfflineState = {
   recorded: false,
   eligible: true,
+  correcting: false,
   protocol_id: null,
+  superseded_protocol_id: null,
   recorded_at: null,
   recorded_by: null,
   lots: [

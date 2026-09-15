@@ -223,6 +223,8 @@ pub struct DossierItem {
     pub occurred_at: OffsetDateTime,
     /// Срок хранения материала: считает БД по предмету досье (INV-042)
     pub retain_until: OffsetDateTime,
+    /// A later signed offline record supersedes this generated failure protocol.
+    pub superseded: bool,
 }
 
 /// Строка выборки: то же, что [`DossierItem`], но `kind` - еще текст из БД
@@ -236,6 +238,7 @@ struct DossierRow {
     source_id: Option<Uuid>,
     occurred_at: OffsetDateTime,
     retain_until: OffsetDateTime,
+    superseded: bool,
 }
 
 impl TryFrom<DossierRow> for DossierItem {
@@ -254,6 +257,7 @@ impl TryFrom<DossierRow> for DossierItem {
             source_id: row.source_id,
             occurred_at: row.occurred_at,
             retain_until: row.retain_until,
+            superseded: row.superseded,
         })
     }
 }
@@ -264,7 +268,10 @@ macro_rules! dossier_query {
         sqlx::query_as!(
             DossierRow,
             "SELECT id, kind, title, file_key, source_table, source_id,
-                    occurred_at, retain_until
+                    occurred_at, retain_until,
+                    EXISTS(SELECT 1 FROM core.offline_tender_results r
+                      WHERE source_table='core.protocols'
+                        AND r.superseded_protocol_id=source_id) AS \"superseded!\"
              FROM core.dossier_items" + $tail
             $(, $arg)*
         )

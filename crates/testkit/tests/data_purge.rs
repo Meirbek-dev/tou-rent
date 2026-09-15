@@ -55,14 +55,21 @@ const KEPT: [&str; 7] = [
 
 /// Порядок удаления из текста функции: строки шагов вида `['table', '...']`.
 fn purged_tables() -> BTreeSet<&'static str> {
-    include_str!("../../db/migrations/20260902120000_admin_data_purge_kinds.sql")
-        .lines()
-        .filter_map(|line| {
-            let rest = line.trim().strip_prefix("['")?;
-            let end = rest.find('\'')?;
-            Some(&rest[..end])
-        })
-        .collect()
+    let mut tables: BTreeSet<&'static str> =
+        include_str!("../../db/migrations/20260902120000_admin_data_purge_kinds.sql")
+            .lines()
+            .filter_map(|line| {
+                let rest = line.trim().strip_prefix("['")?;
+                let end = rest.find('\'')?;
+                Some(&rest[..end])
+            })
+            .collect();
+    let offline_patch =
+        include_str!("../../db/migrations/20260915146000_offline_results_data_purge.sql");
+    if offline_patch.contains("['offline_tender_results'") {
+        tables.insert("offline_tender_results");
+    }
+    tables
 }
 
 /// Каждая таблица `core` либо стирается, либо названа оставляемой, а

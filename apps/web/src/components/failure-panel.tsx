@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { m } from "#/paraglide/messages"
 import { Panel } from "@/components/panel"
 import { QueryBoundary } from "@/components/query-boundary"
+import { ConfirmAction } from "@/components/confirm-action"
 import { Button } from "@/components/ui/button"
 import { problemMessage } from "@/lib/auth"
 import {
@@ -85,31 +86,43 @@ export function FailurePanel({
 
               <div className="flex flex-wrap gap-3">
                 {canDeclare && !state.failed && (
-                  <Button
-                    variant="outline"
-                    data-testid="declare-failed"
+                  <ConfirmAction
+                    title={m.failure_confirm_title()}
+                    description={m.failure_confirm_description()}
+                    confirmLabel={m.failure_declare()}
                     disabled={declare.isPending}
-                    onClick={() => declare.mutate()}
-                  >
-                    {m.failure_declare()}
-                  </Button>
+                    trigger={
+                      <Button
+                        variant="outline"
+                        data-testid="declare-failed"
+                        disabled={declare.isPending}
+                      >
+                        {m.failure_declare()}
+                      </Button>
+                    }
+                    onConfirm={() => declare.mutate()}
+                  />
                 )}
                 {canDeclare && state.failed && (
                   <>
-                    <Button
-                      variant="outline"
-                      data-testid="failed-protocol"
-                      disabled={protocol.isPending}
-                      onClick={() => protocol.mutate()}
-                    >
-                      {m.failure_protocol()}
-                    </Button>
-                    <a
-                      href={`/api/v1/tenders/${tenderId}/failed-protocol.pdf`}
-                      className="text-sm underline-offset-4 hover:underline"
-                    >
-                      {m.failure_protocol_pdf()}
-                    </a>
+                    {!state.failed_protocol_generated && (
+                      <Button
+                        variant="outline"
+                        data-testid="failed-protocol"
+                        disabled={protocol.isPending}
+                        onClick={() => protocol.mutate()}
+                      >
+                        {m.failure_protocol()}
+                      </Button>
+                    )}
+                    {state.failed_protocol_generated && (
+                      <a
+                        href={`/api/v1/tenders/${tenderId}/failed-protocol.pdf`}
+                        className="text-sm underline-offset-4 hover:underline"
+                      >
+                        {m.failure_protocol_pdf()}
+                      </a>
+                    )}
                   </>
                 )}
                 {canRepeat &&

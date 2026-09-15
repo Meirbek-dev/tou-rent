@@ -11368,6 +11368,7 @@
           "kind",
           "kind_title_ru",
           "has_file",
+          "superseded",
           "occurred_at",
           "retain_until"
         ],
@@ -11394,6 +11395,9 @@
             "type": "string",
             "format": "date-time",
             "description": "Срок хранения материала (INV-042): 5 лет тендерные, 3 года решения"
+          },
+          "superseded": {
+            "type": "boolean"
           },
           "title": {
             "type": [
@@ -11674,6 +11678,7 @@
         "description": "Состояние тендера глазами п. 81–83: наступило ли основание и что из него\nследует. Показывается секретарю до признания - «не состоялся» не должно\nбыть неожиданностью.",
         "required": [
           "offline_recorded",
+          "failed_protocol_generated",
           "applications",
           "admitted",
           "deadline_passed",
@@ -11703,6 +11708,9 @@
             "description": "Срок приема заявок истек (до него о числе заявок судить рано)"
           },
           "failed": {
+            "type": "boolean"
+          },
+          "failed_protocol_generated": {
             "type": "boolean"
           },
           "ground": {
@@ -13408,9 +13416,14 @@
         "required": [
           "recorded",
           "eligible",
+          "correcting",
           "lots"
         ],
         "properties": {
+          "correcting": {
+            "type": "boolean",
+            "description": "Corrects an earlier standard failure without deleting its protocol."
+          },
           "eligible": {
             "type": "boolean"
           },
@@ -13437,6 +13450,13 @@
             ]
           },
           "recorded_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "superseded_protocol_id": {
             "type": [
               "string",
               "null"

@@ -4067,6 +4067,7 @@ export interface components {
              * @description Срок хранения материала (INV-042): 5 лет тендерные, 3 года решения
              */
             retain_until: string;
+            superseded: boolean;
             title?: string | null;
         };
         DossierSectionDto: {
@@ -4173,6 +4174,7 @@ export interface components {
             /** @description Срок приема заявок истек (до него о числе заявок судить рано) */
             deadline_passed: boolean;
             failed: boolean;
+            failed_protocol_generated: boolean;
             /** @description Код основания п. 81, если оно наступило */
             ground?: string | null;
             ground_rule_ref?: string | null;
@@ -4781,6 +4783,8 @@ export interface components {
         /** @enum {string} */
         OfflineResolution: "no_applications" | "rejected" | "single_source";
         OfflineResultsState: {
+            /** @description Corrects an earlier standard failure without deleting its protocol. */
+            correcting: boolean;
             eligible: boolean;
             lots: components["schemas"]["OfflineLotResult"][];
             /** Format: uuid */
@@ -4789,6 +4793,8 @@ export interface components {
             recorded_at?: string | null;
             /** Format: uuid */
             recorded_by?: string | null;
+            /** Format: uuid */
+            superseded_protocol_id?: string | null;
         };
         OidcProviderDto: {
             label: string;

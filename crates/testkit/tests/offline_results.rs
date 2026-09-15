@@ -215,3 +215,193 @@ async fn offline_closure_preserves_source_records_and_cancels_only_obsolete_duty
     }
     tx.rollback().await.unwrap();
 }
+
+#[tokio::test]
+async fn signed_offline_results_supersede_an_unpublished_generated_failure_protocol() {
+    let Some(url) = tou_testkit::database_url().expect("database configuration") else {
+        return;
+    };
+    let db = tou_db::connect(&url).await.unwrap();
+    let mut tx = db.begin().await.unwrap();
+    let actor: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.users(email,full_name) VALUES($1::citext,'Correction fixture') RETURNING id",
+    )
+    .bind(format!("correction-{}@example.test", Uuid::now_v7()))
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query("SELECT set_config('app.user_id',$1,true)")
+        .bind(actor.to_string())
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let tender: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.tenders(title,organizer_id,status,opened_at,submission_deadline) \
+         VALUES('Correction fixture',$1,'qualification',core.now(),core.now()+interval '1 day') \
+         RETURNING id",
+    )
+    .bind(actor)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    let object: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.objects(kind,name,address,area_m2) \
+         VALUES('premises','Correction fixture','Test',10) RETURNING id",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    let lot: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.lots(tender_id,seq,object_id,purpose,lease_months,base_rate_monthly,guarantee_fee,rate_calculation) \
+         VALUES($1,1,$2,'Test',12,100,100,'{}') RETURNING id",
+    )
+    .bind(tender)
+    .bind(object)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    let application: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.applications(tender_id,lot_id,participant_id,applicant_kind,applicant_details) \
+         VALUES($1,$2,$3,'individual','{\"name\":\"Correction applicant\"}') RETURNING id",
+    )
+    .bind(tender)
+    .bind(lot)
+    .bind(actor)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO core.price_proposals(application_id,amount) VALUES($1,125)")
+        .bind(application)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE core.tenders SET submission_deadline=core.now()-interval '1 minute' WHERE id=$1",
+    )
+    .bind(tender)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query(
+        "UPDATE core.tenders SET status='failed',failure_ground='fewer_than_two_admitted', \
+         consequence='repeat',failed_at=core.now() WHERE id=$1",
+    )
+    .bind(tender)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+    let failed_at: time::OffsetDateTime =
+        sqlx::query_scalar("SELECT failed_at FROM core.tenders WHERE id=$1")
+            .bind(tender)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    let failed_protocol: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.protocols(tender_id,kind,number,content,pdf_key) \
+         VALUES($1,'failed','N-TEST','{}',$2) RETURNING id",
+    )
+    .bind(tender)
+    .bind(format!("protocols/{tender}/failed.pdf"))
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    let signed_protocol: Uuid = sqlx::query_scalar(
+        "INSERT INTO core.commission_documents(tender_id,title,number,document_date,filename,file_key,size_bytes,uploaded_by) \
+         VALUES($1,'Signed correction','TEST',(core.now() AT TIME ZONE 'Asia/Almaty')::date,'test.pdf',$2,100,$3) RETURNING id",
+    )
+    .bind(tender)
+    .bind(format!("tests/{}.pdf", Uuid::now_v7()))
+    .bind(actor)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    let decisions = json!([{
+        "lot_id": lot,
+        "application_id": application,
+        "resolution": "single_source",
+        "note": "Signed commission decision"
+    }]);
+
+    // A protocol that was ever public cannot be silently superseded.
+    sqlx::query("SAVEPOINT published_protocol")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE core.protocols SET published_at=core.now() WHERE id=$1")
+        .bind(failed_protocol)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query(
+            "INSERT INTO core.offline_tender_results(tender_id,protocol_id,recorded_by,lots) \
+             VALUES($1,$2,$3,$4)",
+        )
+        .bind(tender)
+        .bind(signed_protocol)
+        .bind(actor)
+        .bind(&decisions)
+        .execute(&mut *tx)
+        .await
+        .is_err()
+    );
+    sqlx::query("ROLLBACK TO SAVEPOINT published_protocol")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+
+    sqlx::query(
+        "INSERT INTO core.offline_tender_results(tender_id,protocol_id,recorded_by,lots) \
+         VALUES($1,$2,$3,$4)",
+    )
+    .bind(tender)
+    .bind(signed_protocol)
+    .bind(actor)
+    .bind(&decisions)
+    .execute(&mut *tx)
+    .await
+    .unwrap();
+
+    let correction: Option<Uuid> = sqlx::query_scalar(
+        "SELECT superseded_protocol_id FROM core.offline_tender_results WHERE tender_id=$1",
+    )
+    .bind(tender)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert_eq!(correction, Some(failed_protocol));
+    let tender_state: (String, Option<String>, Option<String>, time::OffsetDateTime) =
+        sqlx::query_as(
+            "SELECT status::text,failure_ground,consequence::text,failed_at \
+             FROM core.tenders WHERE id=$1",
+        )
+        .bind(tender)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
+    assert_eq!(tender_state.0, "failed");
+    assert_eq!(tender_state.1, None);
+    assert_eq!(tender_state.2, None);
+    assert_eq!(
+        tender_state.3, failed_at,
+        "original failure time is retained"
+    );
+    let protocol_still_exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM core.protocols WHERE id=$1)")
+            .bind(failed_protocol)
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+    assert!(protocol_still_exists);
+    let superseded_in_dossier: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM core.dossier_items d \
+         JOIN core.offline_tender_results r ON r.superseded_protocol_id=d.source_id \
+         WHERE d.tender_id=$1 AND d.source_table='core.protocols')",
+    )
+    .bind(tender)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert!(superseded_in_dossier);
+    tx.rollback().await.unwrap();
+}

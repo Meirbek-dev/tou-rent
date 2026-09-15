@@ -39,6 +39,7 @@ pub(crate) fn map_rule(err: sqlx::Error) -> FailureError {
 /// Состояние тендера глазами п. 81–83.
 pub struct FailureState {
     pub offline_recorded: bool,
+    pub failed_protocol_generated: bool,
     pub facts: Facts,
     /// Наступившее основание (если наступило)
     pub ground: Option<FailureGround>,
@@ -63,6 +64,8 @@ pub async fn state(db: &Db, tender_id: Uuid) -> Result<Option<FailureState>, sql
            (t.submission_deadline IS NOT NULL AND t.submission_deadline < core.now()) AS "deadline_passed!",
            t.status::text AS "status!",
            t.failure_ground,
+           EXISTS(SELECT 1 FROM core.protocols p
+                  WHERE p.tender_id=t.id AND p.kind::text='failed') AS "failed_protocol_generated!",
            t.repeat_of,
            -- Лоты с завершенными торгами и лоты, где договориться больше не с кем:
            -- победитель уклонился, а участника № 2 нет либо уклонился и он (п. 81.4)
@@ -92,6 +95,7 @@ pub async fn state(db: &Db, tender_id: Uuid) -> Result<Option<FailureState>, sql
     let deadline_passed = row.deadline_passed;
     let status = row.status;
     let ground = row.failure_ground;
+    let failed_protocol_generated = row.failed_protocol_generated;
     let repeat_of = row.repeat_of;
     let finished_lots = row.finished_lots;
     let exhausted_lots = row.exhausted_lots;
@@ -117,6 +121,7 @@ pub async fn state(db: &Db, tender_id: Uuid) -> Result<Option<FailureState>, sql
 
     Ok(Some(FailureState {
         offline_recorded,
+        failed_protocol_generated,
         facts,
         ground: detected,
         consequence: detected.map(|ground| Consequence::of(ground, facts, previous_failures)),
