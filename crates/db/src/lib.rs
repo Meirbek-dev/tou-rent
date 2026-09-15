@@ -32,6 +32,7 @@ pub mod ledger;
 pub mod notifications;
 pub mod objects;
 pub mod obligations;
+pub mod offline_results;
 pub mod prices;
 pub mod public_records;
 pub mod publications;

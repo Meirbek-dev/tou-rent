@@ -13,6 +13,7 @@ import {
   CommissionDocuments,
 } from "@/components/commission-documents"
 import { FailurePanel } from "@/components/failure-panel"
+import { OfflineResultsPanel } from "@/components/offline-results-panel"
 import { ApplicationStatusBadge } from "@/components/application-status-badge"
 import { AuctionLotsPanel } from "@/components/auction-lots-panel"
 import { DecisionForm } from "@/components/decision-form"
@@ -250,7 +251,7 @@ function SecretaryTenderPage() {
                 {m.protocol_generate()}
               </Button>
             )}
-            {protocol !== null && (
+            {protocol !== null && tender.status !== "failed" && (
               <a
                 href={`/api/v1/tenders/${tender.id}/admission-protocol.pdf`}
                 data-testid="admission-protocol-pdf"
@@ -326,6 +327,14 @@ function SecretaryTenderPage() {
         <TabsContent value={tab}>
           {tab === "overview" && (
             <div className="flex flex-col gap-4">
+              {tender.opened_at !== null &&
+                (tender.status === "qualification" ||
+                  tender.status === "failed") && (
+                  <OfflineResultsPanel
+                    tenderId={tenderId}
+                    onChanged={refresh}
+                  />
+                )}
               <Panel title={m.tender_facts_title()} titleAs="h3">
                 <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   <Term

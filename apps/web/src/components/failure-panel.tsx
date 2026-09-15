@@ -72,7 +72,9 @@ export function FailurePanel({
     <QueryBoundary query={failure} skeleton={<></>}>
       {(state) =>
         // Панель нужна там, где основание наступило или уже признано
-        state.ground == null && !state.failed ? null : (
+        state.offline_recorded ? (
+          <p>{m.offline_recorded()}</p>
+        ) : state.ground == null && !state.failed ? null : (
           <div data-testid="failure-panel">
             <Panel
               title={m.failure_title()}

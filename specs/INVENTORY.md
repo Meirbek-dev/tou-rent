@@ -50,6 +50,7 @@
 `core.land_plots` · `core.land_applications` · `core.land_decisions` · `core.land_contracts` · `core.land_contract_covenants` (T40, FR-1801, INV-105) ·
 `core.contract_amendments` · `core.contract_amendment_changes` (T42, FR-906) ·
 `core.commission_documents` (FR-703, FR-1601, FR-1602; Q-025) ·
+`core.offline_tender_results` (FR-801, FR-802, FR-1601; Q-026) ·
 `core.objects` · `core.auctions` · `core.ledger_accounts` (круг 2 гаунтлета:
 реестр имущества, итог торгов и лицевые счета мутировались без единого события)
 

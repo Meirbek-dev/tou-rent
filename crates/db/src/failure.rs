@@ -24,7 +24,7 @@ pub enum FailureError {
     Db(#[from] sqlx::Error),
 }
 
-fn map_rule(err: sqlx::Error) -> FailureError {
+pub(crate) fn map_rule(err: sqlx::Error) -> FailureError {
     if let sqlx::Error::Database(db_err) = &err
         && matches!(
             db_err.code().as_deref(),
@@ -38,6 +38,7 @@ fn map_rule(err: sqlx::Error) -> FailureError {
 
 /// Состояние тендера глазами п. 81–83.
 pub struct FailureState {
+    pub offline_recorded: bool,
     pub facts: Facts,
     /// Наступившее основание (если наступило)
     pub ground: Option<FailureGround>,
@@ -107,9 +108,15 @@ pub async fn state(db: &Db, tender_id: Uuid) -> Result<Option<FailureState>, sql
     };
 
     let previous_failures = failures_in_chain(db, repeat_of).await?;
-    let detected = facts.ground();
+    let offline_recorded = crate::offline_results::recorded(db, tender_id).await?;
+    let detected = if offline_recorded {
+        None
+    } else {
+        facts.ground()
+    };
 
     Ok(Some(FailureState {
+        offline_recorded,
         facts,
         ground: detected,
         consequence: detected.map(|ground| Consequence::of(ground, facts, previous_failures)),
@@ -232,6 +239,12 @@ pub struct FailedTenderRow {
 /// означал бы третью попытку в обход п. 83.
 pub async fn repeat_tender(db: &Db, actor: Uuid, tender_id: Uuid) -> Result<Uuid, FailureError> {
     let state = state(db, tender_id).await?.ok_or(FailureError::NotFound)?;
+    if state.offline_recorded {
+        return Err(FailureError::Rejected(RuleRejection::new(
+            RuleViolation::TenderFailureGround,
+            "офлайн-итоги зафиксированы по лотам: повтор всего тендера не допускается",
+        )));
+    }
     if !state.failed {
         return Err(FailureError::Rejected(RuleRejection::new(
             RuleViolation::TenderFailureGround,

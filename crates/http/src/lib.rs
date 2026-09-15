@@ -33,6 +33,7 @@ pub mod ledger;
 pub mod notifications;
 pub mod objects;
 pub mod obligations;
+pub mod offline_results;
 pub mod oidc;
 pub mod pdf;
 pub mod public_records;
@@ -250,6 +251,8 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(acts::upload_act_scan))
         .routes(routes!(acts::act_pdf))
         .routes(routes!(failure::failure_state))
+        .routes(routes!(offline_results::state))
+        .routes(routes!(offline_results::record))
         .routes(routes!(failure::declare_failed))
         .routes(routes!(failure::repeat_tender))
         .routes(routes!(failure::generate_failed_protocol))
@@ -420,7 +423,7 @@ mod tests {
     fn schema_type_names_are_unique_across_modules() {
         use std::collections::BTreeMap;
 
-        let sources: [(&str, &str); 48] = [
+        let sources: [(&str, &str); 49] = [
             ("acts", include_str!("acts.rs")),
             ("admin", include_str!("admin.rs")),
             ("admin_data", include_str!("admin_data.rs")),
@@ -456,6 +459,7 @@ mod tests {
             ("notifications", include_str!("notifications.rs")),
             ("objects", include_str!("objects.rs")),
             ("obligations", include_str!("obligations.rs")),
+            ("offline_results", include_str!("offline_results.rs")),
             ("oidc", include_str!("oidc.rs")),
             ("pdf", include_str!("pdf.rs")),
             ("public_records", include_str!("public_records.rs")),

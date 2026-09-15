@@ -197,7 +197,9 @@ impl NotifyAdmittedStore for PgNotifyAdmittedStore<'_> {
             .await?;
 
             let tender = sqlx::query!(
-                "SELECT title, zoom_url, trading_at FROM core.tenders WHERE id = $1",
+                "SELECT title, zoom_url, trading_at FROM core.tenders t WHERE id = $1
+                 AND NOT EXISTS(SELECT 1 FROM core.offline_tender_results WHERE tender_id=t.id)
+                 FOR UPDATE",
                 command.tender_id
             )
             .fetch_optional(&mut *tx)

@@ -2982,6 +2982,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenders/{id}/offline-results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["state"];
+        put?: never;
+        post: operations["record"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenders/{id}/open": {
         parameters: {
             query?: never;
@@ -4160,6 +4176,7 @@ export interface components {
             /** @description Код основания п. 81, если оно наступило */
             ground?: string | null;
             ground_rule_ref?: string | null;
+            offline_recorded: boolean;
             /** @description Вскрытие состоялось: до него о допуске судить рано */
             opened: boolean;
             /** @description Сколько несостоявшихся уже было в цепочке повторов */
@@ -4738,6 +4755,41 @@ export interface components {
             /** @description Показана не вся выборка */
             truncated: boolean;
         };
+        OfflineLotDecision: {
+            /** Format: uuid */
+            application_id?: string | null;
+            /** Format: uuid */
+            lot_id: string;
+            /** @description Excerpt from the signed protocol; for rejection, include its reason. */
+            note: string;
+            resolution: components["schemas"]["OfflineResolution"];
+        };
+        OfflineLotResult: {
+            applicant?: string | null;
+            /** Format: uuid */
+            application_id?: string | null;
+            application_status?: string | null;
+            ground?: string | null;
+            /** Format: uuid */
+            lot_id: string;
+            note: string;
+            price?: string | null;
+            resolution?: null | components["schemas"]["OfflineResolution"];
+            /** Format: int32 */
+            seq: number;
+        };
+        /** @enum {string} */
+        OfflineResolution: "no_applications" | "rejected" | "single_source";
+        OfflineResultsState: {
+            eligible: boolean;
+            lots: components["schemas"]["OfflineLotResult"][];
+            /** Format: uuid */
+            protocol_id?: string | null;
+            recorded: boolean;
+            recorded_at?: string | null;
+            /** Format: uuid */
+            recorded_by?: string | null;
+        };
         OidcProviderDto: {
             label: string;
             /** @description Ссылка начала входа - обычная навигация, работает без JS (NFR-04) */
@@ -4962,6 +5014,12 @@ export interface components {
              */
             area_m2: string;
             options?: components["schemas"]["RateOptionsDto"];
+        };
+        RecordOfflineResults: {
+            confirmed_signed_protocol: boolean;
+            lots: components["schemas"]["OfflineLotDecision"][];
+            /** Format: uuid */
+            protocol_id: string;
         };
         RecusalDto: {
             full_name: string;
@@ -11697,6 +11755,68 @@ export interface operations {
                 };
             };
             /** @description Нет протокола, нет допущенных или уже разосланы */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfflineResultsState"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    record: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordOfflineResults"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OfflineResultsState"];
+                };
+            };
             409: {
                 headers: {
                     [name: string]: unknown;

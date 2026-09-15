@@ -47,6 +47,7 @@ fn failure_error(err: FailureError) -> ApiError {
 /// быть неожиданностью.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct FailureStateDto {
+    pub offline_recorded: bool,
     /// Поданные и не отозванные заявки
     pub applications: usize,
     pub admitted: usize,
@@ -88,6 +89,7 @@ pub async fn failure_state(
         .await?
         .ok_or(ApiError::NotFound)?;
     Ok(Json(FailureStateDto {
+        offline_recorded: found.offline_recorded,
         applications: found.facts.applications,
         admitted: found.facts.admitted,
         deadline_passed: found.facts.deadline_passed,

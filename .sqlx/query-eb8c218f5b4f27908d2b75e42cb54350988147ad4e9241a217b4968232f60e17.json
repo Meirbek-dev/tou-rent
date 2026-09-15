@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO core.offline_tender_results(tender_id,protocol_id,recorded_by,lots)\n          VALUES($1,$2,$3,$4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eb8c218f5b4f27908d2b75e42cb54350988147ad4e9241a217b4968232f60e17"
+}

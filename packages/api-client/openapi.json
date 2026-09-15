@@ -8486,6 +8486,96 @@
         }
       }
     },
+    "/api/v1/tenders/{id}/offline-results": {
+      "get": {
+        "tags": [
+          "failure"
+        ],
+        "operationId": "state",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineResultsState"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "failure"
+        ],
+        "operationId": "record",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordOfflineResults"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfflineResultsState"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tenders/{id}/open": {
       "post": {
         "tags": [
@@ -11583,6 +11673,7 @@
         "type": "object",
         "description": "Состояние тендера глазами п. 81–83: наступило ли основание и что из него\nследует. Показывается секретарю до признания - «не состоялся» не должно\nбыть неожиданностью.",
         "required": [
+          "offline_recorded",
           "applications",
           "admitted",
           "deadline_passed",
@@ -11626,6 +11717,9 @@
               "string",
               "null"
             ]
+          },
+          "offline_recorded": {
+            "type": "boolean"
           },
           "opened": {
             "type": "boolean",
@@ -13211,6 +13305,146 @@
           }
         }
       },
+      "OfflineLotDecision": {
+        "type": "object",
+        "required": [
+          "lot_id",
+          "resolution",
+          "note"
+        ],
+        "properties": {
+          "application_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "lot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": "string",
+            "description": "Excerpt from the signed protocol; for rejection, include its reason."
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/OfflineResolution"
+          }
+        }
+      },
+      "OfflineLotResult": {
+        "type": "object",
+        "required": [
+          "lot_id",
+          "seq",
+          "note"
+        ],
+        "properties": {
+          "applicant": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "application_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "application_status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ground": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "note": {
+            "type": "string"
+          },
+          "price": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resolution": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/OfflineResolution"
+              }
+            ]
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "OfflineResolution": {
+        "type": "string",
+        "enum": [
+          "no_applications",
+          "rejected",
+          "single_source"
+        ]
+      },
+      "OfflineResultsState": {
+        "type": "object",
+        "required": [
+          "recorded",
+          "eligible",
+          "lots"
+        ],
+        "properties": {
+          "eligible": {
+            "type": "boolean"
+          },
+          "lots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfflineLotResult"
+            }
+          },
+          "protocol_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "recorded": {
+            "type": "boolean"
+          },
+          "recorded_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recorded_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          }
+        }
+      },
       "OidcProviderDto": {
         "type": "object",
         "required": [
@@ -13759,6 +13993,29 @@
           },
           "options": {
             "$ref": "#/components/schemas/RateOptionsDto"
+          }
+        }
+      },
+      "RecordOfflineResults": {
+        "type": "object",
+        "required": [
+          "protocol_id",
+          "confirmed_signed_protocol",
+          "lots"
+        ],
+        "properties": {
+          "confirmed_signed_protocol": {
+            "type": "boolean"
+          },
+          "lots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OfflineLotDecision"
+            }
+          },
+          "protocol_id": {
+            "type": "string",
+            "format": "uuid"
           }
         }
       },
