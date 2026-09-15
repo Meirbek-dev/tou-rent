@@ -16,6 +16,7 @@ pub mod auctions;
 pub mod auth;
 pub mod benefit;
 pub mod commission;
+pub mod commission_documents;
 pub mod contract_amendments;
 pub mod contracts;
 pub mod csrf;
@@ -261,6 +262,11 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(evasion::winner2_protocol_pdf))
         .routes(routes!(publications::tender_protocols))
         .routes(routes!(publications::my_protocols))
+        .routes(routes!(commission_documents::list_commission_documents))
+        .routes(routes!(commission_documents::my_commission_documents))
+        .routes(routes!(commission_documents::upload_commission_document))
+        .routes(routes!(commission_documents::share_commission_document))
+        .routes(routes!(commission_documents::commission_document_pdf))
         .routes(routes!(publications::publish_protocol))
         .routes(routes!(publications::protocol_pdf))
         .routes(routes!(publications::tender_dossier))
@@ -414,7 +420,7 @@ mod tests {
     fn schema_type_names_are_unique_across_modules() {
         use std::collections::BTreeMap;
 
-        let sources: [(&str, &str); 47] = [
+        let sources: [(&str, &str); 48] = [
             ("acts", include_str!("acts.rs")),
             ("admin", include_str!("admin.rs")),
             ("admin_data", include_str!("admin_data.rs")),
@@ -427,6 +433,10 @@ mod tests {
             ("auth", include_str!("auth.rs")),
             ("benefit", include_str!("benefit.rs")),
             ("commission", include_str!("commission.rs")),
+            (
+                "commission_documents",
+                include_str!("commission_documents.rs"),
+            ),
             (
                 "contract_amendments",
                 include_str!("contract_amendments.rs"),

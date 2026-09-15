@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE core.commission_documents\n          SET shared_at = CASE WHEN $2 THEN coalesce(shared_at, core.now()) ELSE NULL END\n          WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a1444c18ba223643ecce27c1721258aee5314e194c24a83ed870e2e7440efe99"
+}

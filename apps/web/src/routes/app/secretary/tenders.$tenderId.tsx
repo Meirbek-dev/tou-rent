@@ -8,6 +8,10 @@ import { m } from "#/paraglide/messages"
 import { DossierPanel } from "@/components/dossier-panel"
 import { EvasionPanel } from "@/components/evasion-panel"
 import { ProtocolsPanel } from "@/components/protocols-panel"
+import {
+  ApplicationDocumentsDialog,
+  CommissionDocuments,
+} from "@/components/commission-documents"
 import { FailurePanel } from "@/components/failure-panel"
 import { ApplicationStatusBadge } from "@/components/application-status-badge"
 import { AuctionLotsPanel } from "@/components/auction-lots-panel"
@@ -595,6 +599,13 @@ function SecretaryTenderPage() {
                                   ))}
                                 </div>
                               )}
+                              {!sealed && (
+                                <ApplicationDocumentsDialog
+                                  tenderId={tenderId}
+                                  applicationId={application.id}
+                                  label={`${m.application_lot_column()} ${tender.lots.find((lot) => lot.id === application.lot_id)?.seq ?? "—"} — ${applicationApplicantLabel(application)}`}
+                                />
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
@@ -629,8 +640,9 @@ function SecretaryTenderPage() {
           )}
 
           {tab === "protocols" && (
-            <div>
+            <div className="flex flex-col gap-6">
               <ProtocolsPanel tenderId={tenderId} canPublish />
+              {!sealed && <CommissionDocuments tenderId={tenderId} manager />}
             </div>
           )}
 

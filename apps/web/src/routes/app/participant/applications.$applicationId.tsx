@@ -35,6 +35,7 @@ import {
 import { notifyError, notifySuccess } from "@/lib/toast"
 import { cn } from "@/lib/utils"
 import { uploadError } from "@/lib/validation"
+import { CommissionDocuments } from "@/components/commission-documents"
 
 import type { ApplicationDto } from "@/lib/participant"
 import type { ReactNode } from "react"
@@ -250,6 +251,10 @@ function ApplicationCard({ application }: { application: ApplicationDto }) {
       {application.status === "admitted" && (
         <AuctionRoomCta lotId={application.lot_id} />
       )}
+      <CommissionDocuments
+        tenderId={application.tender_id}
+        applicationId={application.id}
+      />
 
       <Panel
         title={m.application_files_title()}

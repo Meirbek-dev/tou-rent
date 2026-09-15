@@ -20,6 +20,7 @@ pub mod auctions;
 pub mod audit;
 pub mod benefit;
 pub mod commission;
+pub mod commission_documents;
 pub mod contract_amendments;
 pub mod contracts;
 pub mod evasion;

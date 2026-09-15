@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM core.tenders t\n      WHERE t.id = $1 AND t.opened_at IS NOT NULL AND ($2::uuid IS NULL OR EXISTS (\n        SELECT 1 FROM core.applications a WHERE a.id = $2 AND a.tender_id = t.id))) AS \"valid!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "valid!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "523dbcd0a5855dec6ac66838676e96ba4c9389d6a7048620435e09e64e6d9854"
+}

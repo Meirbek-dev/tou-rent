@@ -8,7 +8,7 @@
 //! что объект уносит тендеры, где он выставлен лотом, а точечное удаление
 //! лота или материала досье не трогает их тендер. Отдельно - полнота
 //! перечня: каждая таблица схемы `core` либо в порядке удаления функции,
-//! либо в явном перечне оставляемых, третьего нет; и у каждого вида
+//! либо удаляется проверенным каскадом, либо в перечне оставляемых; у каждого вида
 //! данных кабинета есть перечень записей.
 //!
 //! Подключение - TESTKIT_DATABASE_URL (A-021).
@@ -75,8 +75,25 @@ fn purged_tables() -> BTreeSet<&'static str> {
 async fn purge_covers_every_core_table() {
     let db = require_db!();
 
-    let purged = purged_tables();
+    let mut purged = purged_tables();
     assert!(purged.len() > 40, "перечень шагов не прочитан: {purged:?}");
+
+    // Новые документы удаляются FK-каскадом и при удалении заявки, и тендера.
+    // Это не KEPT: проверяем обе связи здесь, фактическое удаление и сохранность
+    // общего протокола при удалении одной заявки — в commission_documents.rs.
+    let cascades: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_constraint WHERE contype='f' AND confdeltype='c'
+         AND conrelid='core.commission_documents'::regclass
+         AND confrelid IN ('core.applications'::regclass, 'core.tenders'::regclass)",
+    )
+    .fetch_one(&db)
+    .await
+    .expect("каскады документов комиссии");
+    assert_eq!(
+        cascades, 2,
+        "документы должны удаляться вместе с владельцем"
+    );
+    purged.insert("commission_documents");
 
     let tables: Vec<String> = sqlx::query_scalar!(
         r#"SELECT table_name AS "table_name!"

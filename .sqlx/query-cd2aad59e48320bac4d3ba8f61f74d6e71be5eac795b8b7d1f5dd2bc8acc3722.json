@@ -1,0 +1,162 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, tender_id, application_id, title, number, document_date, filename,\n                  file_key, size_bytes, uploaded_by, uploaded_at, shared_at\n           FROM core.commission_documents d WHERE d.id = $1 AND ($2 OR (d.shared_at IS NOT NULL AND EXISTS (\n      SELECT 1 FROM core.applications a WHERE a.participant_id = $3\n        AND a.tender_id = d.tender_id AND (d.application_id IS NULL OR d.application_id = a.id))))",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "tender_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "application_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "number",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "document_date",
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "document_date"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "filename",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "filename"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "file_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "file_key"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "uploaded_by",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "uploaded_by"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "uploaded_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "uploaded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "shared_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.commission_documents",
+            "name": "shared_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bool",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "cd2aad59e48320bac4d3ba8f61f74d6e71be5eac795b8b7d1f5dd2bc8acc3722"
+}

@@ -2407,6 +2407,104 @@
         }
       }
     },
+    "/api/v1/commission-documents/my": {
+      "get": {
+        "tags": [
+          "commission-documents"
+        ],
+        "operationId": "my_commission_documents",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDocumentPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/commission-documents/{id}/pdf": {
+      "get": {
+        "tags": [
+          "commission-documents"
+        ],
+        "operationId": "commission_document_pdf",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/commission-documents/{id}/visibility": {
+      "put": {
+        "tags": [
+          "commission-documents"
+        ],
+        "operationId": "share_commission_document",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareCommissionDocument"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDocumentDto"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/commissions/active": {
       "get": {
         "tags": [
@@ -7534,6 +7632,119 @@
         }
       }
     },
+    "/api/v1/tenders/{id}/commission-documents": {
+      "get": {
+        "tags": [
+          "commission-documents"
+        ],
+        "operationId": "list_commission_documents",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDocumentPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "commission-documents"
+        ],
+        "operationId": "upload_commission_document",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "application_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "title",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "number",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "document_date",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommissionDocumentDto"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tenders/{id}/conflict-of-interest": {
       "post": {
         "tags": [
@@ -10404,6 +10615,86 @@
           "has_conflict": {
             "type": "boolean",
             "description": "true - конфликт есть, комиссия решает вопрос об отводе (п. 15)"
+          }
+        }
+      },
+      "CommissionDocumentDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "tender_id",
+          "title",
+          "number",
+          "document_date",
+          "filename",
+          "size_bytes",
+          "uploaded_by",
+          "uploaded_at"
+        ],
+        "properties": {
+          "application_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "document_date": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string"
+          },
+          "shared_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tender_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uploaded_by": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "CommissionDocumentPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "truncated"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommissionDocumentDto"
+            }
+          },
+          "truncated": {
+            "type": "boolean"
           }
         }
       },
@@ -13922,6 +14213,17 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ShareCommissionDocument": {
+        "type": "object",
+        "required": [
+          "shared"
+        ],
+        "properties": {
+          "shared": {
+            "type": "boolean"
           }
         }
       },

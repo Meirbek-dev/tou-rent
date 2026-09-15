@@ -887,6 +887,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/commission-documents/my": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["my_commission_documents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/commission-documents/{id}/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["commission_document_pdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/commission-documents/{id}/visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["share_commission_document"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/commissions/active": {
         parameters: {
             query?: never;
@@ -2624,6 +2672,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tenders/{id}/commission-documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_commission_documents"];
+        put?: never;
+        post: operations["upload_commission_document"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tenders/{id}/conflict-of-interest": {
         parameters: {
             query?: never;
@@ -3738,6 +3802,30 @@ export interface components {
             details?: string | null;
             /** @description true - конфликт есть, комиссия решает вопрос об отводе (п. 15) */
             has_conflict: boolean;
+        };
+        CommissionDocumentDto: {
+            /** Format: uuid */
+            application_id?: string | null;
+            document_date: string;
+            filename: string;
+            /** Format: uuid */
+            id: string;
+            number: string;
+            /** Format: date-time */
+            shared_at?: string | null;
+            /** Format: int64 */
+            size_bytes: number;
+            /** Format: uuid */
+            tender_id: string;
+            title: string;
+            /** Format: date-time */
+            uploaded_at: string;
+            /** Format: uuid */
+            uploaded_by: string;
+        };
+        CommissionDocumentPage: {
+            items: components["schemas"]["CommissionDocumentDto"][];
+            truncated: boolean;
         };
         CommissionDto: {
             /** @description Состав утвержден и проверен по п. 9–11 (FR-1101) */
@@ -5013,6 +5101,9 @@ export interface components {
          */
         SetRecordingRequest: {
             recording_url?: string | null;
+        };
+        ShareCommissionDocument: {
+            shared: boolean;
         };
         SiteAnnouncementDto: {
             body: string;
@@ -7186,6 +7277,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    my_commission_documents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDocumentPage"];
+                };
+            };
+        };
+    };
+    commission_document_pdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    share_commission_document: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareCommissionDocument"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDocumentDto"];
                 };
             };
         };
@@ -10946,6 +11110,65 @@ export interface operations {
             };
             /** @description Отмена невозможна (п. 78) */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_commission_documents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDocumentPage"];
+                };
+            };
+        };
+    };
+    upload_commission_document: {
+        parameters: {
+            query: {
+                application_id?: string;
+                title: string;
+                number: string;
+                document_date: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": string;
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommissionDocumentDto"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

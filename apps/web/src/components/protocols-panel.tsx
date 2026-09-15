@@ -74,6 +74,8 @@ export function ProtocolsPanel({
               >
                 <span className="font-medium">
                   {protocolKindLabel(protocol.kind)}
+                  {" · "}
+                  {m.cd_generated()}
                   {protocol.number != null && (
                     <span className="tabular-nums"> №{protocol.number}</span>
                   )}
