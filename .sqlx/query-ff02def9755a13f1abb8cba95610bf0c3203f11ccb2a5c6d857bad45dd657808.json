@@ -1,0 +1,143 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.id, p.tender_id, t.title AS tender_title,\n                      p.kind::text AS \"kind!\", p.number, p.pdf_key, p.generated_at,\n                      p.published_at, p.unpublish_at, p.unpublished_at,\n                      p.visible_to_participants\n               FROM core.protocols p\n               JOIN core.tenders t ON t.id = p.tender_id WHERE p.tender_id = $1 ORDER BY p.generated_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tender_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "tender_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "tender_title",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "number",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "number"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "pdf_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "pdf_key"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "generated_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "generated_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "published_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "published_at"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "unpublish_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "unpublish_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "unpublished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "unpublished_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "visible_to_participants",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "core.protocols",
+            "name": "visible_to_participants"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "ff02def9755a13f1abb8cba95610bf0c3203f11ccb2a5c6d857bad45dd657808"
+}

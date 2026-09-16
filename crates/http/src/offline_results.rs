@@ -55,6 +55,8 @@ pub struct OfflineResultsState {
     pub eligible: bool,
     /// Corrects an earlier standard failure without deleting its protocol.
     pub correcting: bool,
+    /// The generated failure protocol must first be hidden from participant cabinets.
+    pub correction_requires_hidden_protocol: bool,
     pub protocol_id: Option<Uuid>,
     pub superseded_protocol_id: Option<Uuid>,
     pub recorded_by: Option<Uuid>,

@@ -68,6 +68,9 @@ pub struct ProtocolRecord {
     /// Момент автоматического снятия - публикация + 6 месяцев (INV-076)
     pub unpublish_at: Option<OffsetDateTime>,
     pub unpublished_at: Option<OffsetDateTime>,
+    /// Копия показывается в личных кабинетах участников. Публичная
+    /// публикация и хранение в досье от этого признака не зависят.
+    pub visible_to_participants: bool,
 }
 
 impl ProtocolRecord {
@@ -91,7 +94,8 @@ macro_rules! protocol_query {
             ProtocolRecord,
             r#"SELECT p.id, p.tender_id, t.title AS tender_title,
                       p.kind::text AS "kind!", p.number, p.pdf_key, p.generated_at,
-                      p.published_at, p.unpublish_at, p.unpublished_at
+                      p.published_at, p.unpublish_at, p.unpublished_at,
+                      p.visible_to_participants
                FROM core.protocols p
                JOIN core.tenders t ON t.id = p.tender_id"# + $tail
             $(, $arg)*
@@ -126,7 +130,7 @@ pub async fn list_for_participant(
     participant_id: Uuid,
 ) -> Result<crate::Page<ProtocolRecord>, sqlx::Error> {
     let rows = protocol_query!(
-        " WHERE EXISTS (SELECT 1 FROM core.applications a
+        " WHERE p.visible_to_participants AND EXISTS (SELECT 1 FROM core.applications a
                         WHERE a.tender_id = p.tender_id AND a.participant_id = $1)
           ORDER BY p.generated_at DESC LIMIT $2",
         participant_id,
@@ -137,6 +141,35 @@ pub async fn list_for_participant(
     let page = crate::Page::probe(rows, crate::MAX_ROWS);
     crate::warn_if_truncated(page.truncated, "publications::list_for_participant");
     Ok(page)
+}
+
+/// Управляет только копией в кабинете участника. Протокол остается в досье,
+/// а юридический факт публичной публикации не переписывается.
+pub async fn set_participant_visibility(
+    db: &Db,
+    actor: Uuid,
+    protocol_id: Uuid,
+    visible: bool,
+) -> Result<ProtocolRecord, PublicationError> {
+    crate::with_actor(db, actor, async |tx| {
+        let updated = sqlx::query!(
+            "UPDATE core.protocols SET visible_to_participants = $2 WHERE id = $1",
+            protocol_id,
+            visible
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(map_rule)?;
+        if updated.rows_affected() == 0 {
+            return Err(PublicationError::NotFound);
+        }
+
+        protocol_query!(" WHERE p.id = $1", protocol_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(map_rule)
+    })
+    .await
 }
 
 /// Публикация протокола (FR-702, п. 75). Срок публичного доступа считает БД

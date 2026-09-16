@@ -16,7 +16,7 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use object_store::ObjectStoreExt as _;
 use object_store::path::Path as ObjectPath;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use time::OffsetDateTime;
 use tou_db::publications::{self, ProtocolRecord, PublicationError};
@@ -65,6 +65,8 @@ pub struct ProtocolDto {
     pub unpublished_at: Option<OffsetDateTime>,
     /// Виден ли протокол публично сейчас (FR-1402)
     pub is_public: bool,
+    /// Показывается ли копия в личных кабинетах участников.
+    pub visible_to_participants: bool,
 }
 
 fn protocol_dto(record: ProtocolRecord) -> ProtocolDto {
@@ -81,7 +83,39 @@ fn protocol_dto(record: ProtocolRecord) -> ProtocolDto {
         unpublish_at: record.unpublish_at,
         unpublished_at: record.unpublished_at,
         is_public,
+        visible_to_participants: record.visible_to_participants,
     }
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+pub struct SetProtocolParticipantVisibility {
+    pub visible: bool,
+}
+
+/// Показ копии протокола в кабинетах участников. Переключатель не снимает
+/// публичную публикацию и не удаляет материал из досье.
+#[utoipa::path(
+    put,
+    path = "/api/v1/protocols/{id}/participant-visibility",
+    tag = "publications",
+    params(("id" = Uuid, Path, description = "Протокол")),
+    request_body = SetProtocolParticipantVisibility,
+    responses(
+        (status = 200, description = "Видимость копии изменена", body = ProtocolDto),
+        (status = 404, description = "Протокол не найден", body = crate::error::Problem),
+    )
+)]
+pub async fn set_protocol_participant_visibility(
+    user: CurrentUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<SetProtocolParticipantVisibility>,
+) -> Result<Json<ProtocolDto>, ApiError> {
+    user.require(Action::ProtocolGenerate)?;
+    let record = publications::set_participant_visibility(&state.db, user.id(), id, body.visible)
+        .await
+        .map_err(publication_error)?;
+    Ok(Json(protocol_dto(record)))
 }
 
 /// Протоколы тендера. Гость и посторонний видят опубликованные (FR-1402),

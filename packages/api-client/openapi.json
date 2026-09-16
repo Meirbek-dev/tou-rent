@@ -5135,6 +5135,59 @@
         }
       }
     },
+    "/api/v1/protocols/{id}/participant-visibility": {
+      "put": {
+        "tags": [
+          "publications"
+        ],
+        "summary": "Показ копии протокола в кабинетах участников. Переключатель не снимает\nпубличную публикацию и не удаляет материал из досье.",
+        "operationId": "set_protocol_participant_visibility",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Протокол",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetProtocolParticipantVisibility"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Видимость копии изменена",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProtocolDto"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Протокол не найден",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/protocols/{id}/pdf": {
       "get": {
         "tags": [
@@ -13417,12 +13470,17 @@
           "recorded",
           "eligible",
           "correcting",
+          "correction_requires_hidden_protocol",
           "lots"
         ],
         "properties": {
           "correcting": {
             "type": "boolean",
             "description": "Corrects an earlier standard failure without deleting its protocol."
+          },
+          "correction_requires_hidden_protocol": {
+            "type": "boolean",
+            "description": "The generated failure protocol must first be hidden from participant cabinets."
           },
           "eligible": {
             "type": "boolean"
@@ -13633,7 +13691,8 @@
           "kind",
           "has_pdf",
           "generated_at",
-          "is_public"
+          "is_public",
+          "visible_to_participants"
         ],
         "properties": {
           "generated_at": {
@@ -13689,6 +13748,10 @@
               "null"
             ],
             "format": "date-time"
+          },
+          "visible_to_participants": {
+            "type": "boolean",
+            "description": "Показывается ли копия в личных кабинетах участников."
           }
         }
       },
@@ -14478,6 +14541,17 @@
             "type": "string",
             "description": "Величина МРП в тенге; ограничение «больше нуля» держит и БД",
             "example": "3932"
+          }
+        }
+      },
+      "SetProtocolParticipantVisibility": {
+        "type": "object",
+        "required": [
+          "visible"
+        ],
+        "properties": {
+          "visible": {
+            "type": "boolean"
           }
         }
       },

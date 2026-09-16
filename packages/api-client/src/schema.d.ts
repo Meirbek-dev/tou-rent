@@ -1756,6 +1756,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/protocols/{id}/participant-visibility": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Показ копии протокола в кабинетах участников. Переключатель не снимает
+         *     публичную публикацию и не удаляет материал из досье.
+         */
+        put: operations["set_protocol_participant_visibility"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/protocols/{id}/pdf": {
         parameters: {
             query?: never;
@@ -4785,6 +4805,8 @@ export interface components {
         OfflineResultsState: {
             /** @description Corrects an earlier standard failure without deleting its protocol. */
             correcting: boolean;
+            /** @description The generated failure protocol must first be hidden from participant cabinets. */
+            correction_requires_hidden_protocol: boolean;
             eligible: boolean;
             lots: components["schemas"]["OfflineLotResult"][];
             /** Format: uuid */
@@ -4884,6 +4906,8 @@ export interface components {
             unpublish_at?: string | null;
             /** Format: date-time */
             unpublished_at?: string | null;
+            /** @description Показывается ли копия в личных кабинетах участников. */
+            visible_to_participants: boolean;
         };
         /** @description Публикация особого порядка (FR-1403). */
         PublicRecordDto: {
@@ -5158,6 +5182,9 @@ export interface components {
              * @example 3932
              */
             amount: string;
+        };
+        SetProtocolParticipantVisibility: {
+            visible: boolean;
         };
         /**
          * @description Ссылка на запись состоявшихся торгов (FR-306, п. 72). `null` или пустая
@@ -9313,6 +9340,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MyProtocolPage"];
+                };
+            };
+        };
+    };
+    set_protocol_participant_visibility: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Протокол */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetProtocolParticipantVisibility"];
+            };
+        };
+        responses: {
+            /** @description Видимость копии изменена */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtocolDto"];
+                };
+            };
+            /** @description Протокол не найден */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };

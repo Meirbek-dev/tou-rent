@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jsonb_build_object(\n          'recorded', r.tender_id IS NOT NULL,\n          'protocol_id', r.protocol_id, 'recorded_by', r.recorded_by,\n          'recorded_at', r.recorded_at,\n          'superseded_protocol_id', r.superseded_protocol_id,\n          'correcting', coalesce(r.tender_id IS NULL AND t.status='failed' AND t.failure_ground IS NOT NULL, false),\n          'correction_requires_hidden_protocol', coalesce(r.tender_id IS NULL AND t.status='failed'\n            AND EXISTS(SELECT 1 FROM core.protocols p WHERE p.tender_id=t.id\n              AND p.kind::text='failed' AND p.published_at IS NOT NULL\n              AND p.visible_to_participants), false),\n          'eligible', coalesce(t.status IN ('qualification','failed') AND t.opened_at IS NOT NULL\n            AND (t.status<>'failed' OR t.failure_ground IS NOT NULL)\n            AND t.submission_deadline < core.now() AND t.repeat_of IS NULL\n            AND NOT EXISTS(SELECT 1 FROM core.auctions x JOIN core.lots l ON l.id=x.lot_id WHERE l.tender_id=t.id)\n            AND NOT EXISTS(SELECT 1 FROM core.contracts WHERE tender_id=t.id)\n            AND NOT EXISTS(SELECT 1 FROM core.protocols WHERE tender_id=t.id AND kind::text='results')\n            AND NOT EXISTS(SELECT 1 FROM core.protocols WHERE tender_id=t.id AND kind::text='failed'\n              AND (t.status='qualification'\n                OR (published_at IS NOT NULL AND visible_to_participants)))\n            AND NOT EXISTS(SELECT 1 FROM core.lots WHERE tender_id=t.id AND cancelled_at IS NOT NULL)\n            AND NOT EXISTS(SELECT 1 FROM core.tenders child WHERE child.repeat_of=t.id)\n            AND NOT EXISTS(SELECT 1 FROM core.applications WHERE tender_id=t.id AND status<>'withdrawn' GROUP BY lot_id HAVING count(*)>1), false),\n          'lots', coalesce(r.lots, (SELECT jsonb_agg(jsonb_build_object(\n            'lot_id', l.id, 'seq', l.seq, 'application_id', a.id,\n            'applicant', a.applicant_details->>'name', 'price', core.price_amount(p)::text,\n            'ground', NULL, 'resolution', NULL, 'note', '', 'application_status', a.status::text\n          ) ORDER BY l.seq,a.id) FROM core.lots l\n            LEFT JOIN core.applications a ON a.lot_id=l.id AND a.status<>'withdrawn'\n            LEFT JOIN core.price_proposals p ON p.application_id=a.id\n            WHERE l.tender_id=t.id), '[]'::jsonb)\n        ) AS \"state!\" FROM core.tenders t LEFT JOIN core.offline_tender_results r ON r.tender_id=t.id\n        WHERE t.id=$1 AND t.opened_at IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state!",
+        "type_info": "Jsonb",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "17f6640ac8318335cdf94a3a1f80feb3401a5674c65189bfcc7bad5c2a53c975"
+}

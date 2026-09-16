@@ -6,6 +6,7 @@ const state: OfflineState = {
   recorded: false,
   eligible: true,
   correcting: false,
+  correction_requires_hidden_protocol: false,
   protocol_id: null,
   superseded_protocol_id: null,
   recorded_at: null,

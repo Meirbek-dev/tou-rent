@@ -58,7 +58,11 @@ export function OfflineResultsPanel({
               onChanged={onChanged}
             />
           ) : (
-            <p>{m.offline_unavailable()}</p>
+            <p>
+              {state.correction_requires_hidden_protocol
+                ? m.offline_hide_failed_protocol_first()
+                : m.offline_unavailable()}
+            </p>
           )
         }
       </QueryBoundary>

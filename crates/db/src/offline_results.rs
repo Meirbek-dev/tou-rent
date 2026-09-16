@@ -20,6 +20,10 @@ pub async fn state(db: &Db, actor: Uuid, tender: Uuid) -> Result<Option<Value>, 
           'recorded_at', r.recorded_at,
           'superseded_protocol_id', r.superseded_protocol_id,
           'correcting', coalesce(r.tender_id IS NULL AND t.status='failed' AND t.failure_ground IS NOT NULL, false),
+          'correction_requires_hidden_protocol', coalesce(r.tender_id IS NULL AND t.status='failed'
+            AND EXISTS(SELECT 1 FROM core.protocols p WHERE p.tender_id=t.id
+              AND p.kind::text='failed' AND p.published_at IS NOT NULL
+              AND p.visible_to_participants), false),
           'eligible', coalesce(t.status IN ('qualification','failed') AND t.opened_at IS NOT NULL
             AND (t.status<>'failed' OR t.failure_ground IS NOT NULL)
             AND t.submission_deadline < core.now() AND t.repeat_of IS NULL
@@ -27,7 +31,8 @@ pub async fn state(db: &Db, actor: Uuid, tender: Uuid) -> Result<Option<Value>, 
             AND NOT EXISTS(SELECT 1 FROM core.contracts WHERE tender_id=t.id)
             AND NOT EXISTS(SELECT 1 FROM core.protocols WHERE tender_id=t.id AND kind::text='results')
             AND NOT EXISTS(SELECT 1 FROM core.protocols WHERE tender_id=t.id AND kind::text='failed'
-              AND (t.status='qualification' OR published_at IS NOT NULL))
+              AND (t.status='qualification'
+                OR (published_at IS NOT NULL AND visible_to_participants)))
             AND NOT EXISTS(SELECT 1 FROM core.lots WHERE tender_id=t.id AND cancelled_at IS NOT NULL)
             AND NOT EXISTS(SELECT 1 FROM core.tenders child WHERE child.repeat_of=t.id)
             AND NOT EXISTS(SELECT 1 FROM core.applications WHERE tender_id=t.id AND status<>'withdrawn' GROUP BY lot_id HAVING count(*)>1), false),

@@ -17,6 +17,7 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Spinner } from "@/components/ui/spinner"
+import { Switch } from "@/components/ui/switch"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
 import { notifySuccess } from "@/lib/toast"
@@ -132,10 +133,29 @@ export function CommissionDocuments({
                       </a>
                       {manager && (
                         <>
-                          <p className="text-sm text-muted-foreground">
-                            {doc.shared_at ? m.cd_visible() : m.cd_hidden()} ·{" "}
-                            {formatDateTime(doc.uploaded_at)}
-                          </p>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <label className="flex items-center gap-2 text-sm">
+                              <Switch
+                                size="sm"
+                                checked={doc.shared_at !== null}
+                                disabled={share.isPending}
+                                onCheckedChange={(shared) =>
+                                  shared
+                                    ? setConfirmId(doc.id)
+                                    : share.mutate({
+                                        id: doc.id,
+                                        shared: false,
+                                      })
+                                }
+                              />
+                              <span>
+                                {doc.shared_at ? m.cd_visible() : m.cd_hidden()}
+                              </span>
+                            </label>
+                            <span className="text-sm text-muted-foreground">
+                              {formatDateTime(doc.uploaded_at)}
+                            </span>
+                          </div>
                           {confirmId === doc.id ? (
                             <div className="flex flex-col gap-2">
                               <p role="status" className="text-sm">
@@ -161,21 +181,7 @@ export function CommissionDocuments({
                                 </Button>
                               </div>
                             </div>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="self-start"
-                              disabled={share.isPending}
-                              onClick={() =>
-                                doc.shared_at
-                                  ? share.mutate({ id: doc.id, shared: false })
-                                  : setConfirmId(doc.id)
-                              }
-                            >
-                              {doc.shared_at ? m.cd_hide() : m.cd_share()}
-                            </Button>
-                          )}
+                          ) : null}
                         </>
                       )}
                     </li>

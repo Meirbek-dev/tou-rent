@@ -72,3 +72,15 @@ export const publishProtocol = (protocolId: string) =>
       params: { path: { id: protocolId } },
     })
   )
+
+/** Показ копии протокола в личных кабинетах участников. */
+export const setProtocolParticipantVisibility = (
+  protocolId: string,
+  visible: boolean
+) =>
+  mutate(
+    api.PUT("/api/v1/protocols/{id}/participant-visibility", {
+      params: { path: { id: protocolId } },
+      body: { visible },
+    })
+  )

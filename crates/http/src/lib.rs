@@ -271,6 +271,7 @@ fn api_router() -> OpenApiRouter<AppState> {
         .routes(routes!(commission_documents::share_commission_document))
         .routes(routes!(commission_documents::commission_document_pdf))
         .routes(routes!(publications::publish_protocol))
+        .routes(routes!(publications::set_protocol_participant_visibility))
         .routes(routes!(publications::protocol_pdf))
         .routes(routes!(publications::tender_dossier))
         .routes(routes!(publications::dossier_archive))

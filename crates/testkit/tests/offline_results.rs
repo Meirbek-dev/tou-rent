@@ -217,7 +217,7 @@ async fn offline_closure_preserves_source_records_and_cancels_only_obsolete_duty
 }
 
 #[tokio::test]
-async fn signed_offline_results_supersede_an_unpublished_generated_failure_protocol() {
+async fn signed_offline_results_require_a_published_failure_protocol_to_be_hidden() {
     let Some(url) = tou_testkit::database_url().expect("database configuration") else {
         return;
     };
@@ -322,13 +322,14 @@ async fn signed_offline_results_supersede_an_unpublished_generated_failure_proto
         "note": "Signed commission decision"
     }]);
 
-    // A protocol that was ever public cannot be silently superseded.
-    sqlx::query("SAVEPOINT published_protocol")
+    // A published protocol must be explicitly hidden from participant cabinets
+    // before a signed correction can supersede it.
+    sqlx::query("UPDATE core.protocols SET published_at=core.now() WHERE id=$1")
+        .bind(failed_protocol)
         .execute(&mut *tx)
         .await
         .unwrap();
-    sqlx::query("UPDATE core.protocols SET published_at=core.now() WHERE id=$1")
-        .bind(failed_protocol)
+    sqlx::query("SAVEPOINT visible_failed_protocol")
         .execute(&mut *tx)
         .await
         .unwrap();
@@ -345,7 +346,12 @@ async fn signed_offline_results_supersede_an_unpublished_generated_failure_proto
         .await
         .is_err()
     );
-    sqlx::query("ROLLBACK TO SAVEPOINT published_protocol")
+    sqlx::query("ROLLBACK TO SAVEPOINT visible_failed_protocol")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE core.protocols SET visible_to_participants=false WHERE id=$1")
+        .bind(failed_protocol)
         .execute(&mut *tx)
         .await
         .unwrap();

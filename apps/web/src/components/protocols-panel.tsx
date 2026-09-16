@@ -5,9 +5,14 @@ import { m } from "#/paraglide/messages"
 import { QueryBoundary } from "@/components/query-boundary"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import { problemMessage } from "@/lib/auth"
 import { formatDateTime } from "@/lib/format"
-import { publishProtocol, tenderProtocolsQuery } from "@/lib/publications"
+import {
+  publishProtocol,
+  setProtocolParticipantVisibility,
+  tenderProtocolsQuery,
+} from "@/lib/publications"
 import { notifySuccess } from "@/lib/toast"
 
 /**
@@ -40,6 +45,26 @@ export function ProtocolsPanel({
       })
     },
   })
+  const visibility = useMutation({
+    mutationFn: ({ id, visible }: { id: string; visible: boolean }) =>
+      setProtocolParticipantVisibility(id, visible),
+    onSuccess: async (protocol) => {
+      notifySuccess(
+        protocol.visible_to_participants
+          ? m.protocols_participant_visibility_enabled()
+          : m.protocols_participant_visibility_disabled()
+      )
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: tenderProtocolsQuery(tenderId).queryKey,
+        }),
+        queryClient.invalidateQueries({ queryKey: ["protocols", "my"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["offline-results", tenderId],
+        }),
+      ])
+    },
+  })
 
   return (
     <section
@@ -50,6 +75,11 @@ export function ProtocolsPanel({
       <h3 id="protocols" className="font-heading text-lg font-semibold">
         {m.protocols_title()}
       </h3>
+      {canPublish && (
+        <p className="text-sm text-muted-foreground">
+          {m.protocols_participant_visibility_help()}
+        </p>
+      )}
       <QueryBoundary
         query={protocols}
         skeleton={
@@ -121,6 +151,23 @@ export function ProtocolsPanel({
                     {m.protocols_publish()}
                   </Button>
                 )}
+                {canPublish && (
+                  <label className="ml-auto flex items-center gap-2 text-sm">
+                    <Switch
+                      size="sm"
+                      checked={protocol.visible_to_participants}
+                      disabled={visibility.isPending}
+                      onCheckedChange={(visible) =>
+                        visibility.mutate({ id: protocol.id, visible })
+                      }
+                    />
+                    <span>
+                      {protocol.visible_to_participants
+                        ? m.protocols_visible_to_participants()
+                        : m.protocols_hidden_from_participants()}
+                    </span>
+                  </label>
+                )}
               </li>
             ))}
           </ul>
@@ -129,6 +176,11 @@ export function ProtocolsPanel({
       {publish.isError && (
         <p role="alert" className="text-sm text-destructive">
           {problemMessage(publish.error)}
+        </p>
+      )}
+      {visibility.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {problemMessage(visibility.error)}
         </p>
       )}
     </section>
