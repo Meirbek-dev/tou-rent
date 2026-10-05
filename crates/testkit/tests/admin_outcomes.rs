@@ -49,23 +49,37 @@ async fn admin_outcome_changes_only_tender_and_preserves_evidence() {
         .fetch_one(&mut *tx)
         .await
         .unwrap();
-        let application: Uuid = sqlx::query_scalar(
-            "INSERT INTO core.applications(tender_id,lot_id,participant_id,applicant_kind,applicant_details) \
-             VALUES($1,$2,$3,'individual','{\"name\":\"Offline winner\"}') RETURNING id",
-        )
-        .bind(tender)
-        .bind(lot)
-        .bind(actor)
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap();
-        sqlx::query("INSERT INTO core.price_proposals(application_id,amount) VALUES($1,125)")
-            .bind(application)
-            .execute(&mut *tx)
+        if seq == 1 {
+            let application: Uuid = sqlx::query_scalar(
+                "INSERT INTO core.applications(tender_id,lot_id,participant_id,applicant_kind,applicant_details) \
+                 VALUES($1,$2,$3,'individual','{\"name\":\"Offline winner\"}') RETURNING id",
+            )
+            .bind(tender)
+            .bind(lot)
+            .bind(actor)
+            .fetch_one(&mut *tx)
             .await
             .unwrap();
-        applications.push(application);
-        decisions.push(json!({"lot_id":lot,"application_id":application,"price":"125.00"}));
+            sqlx::query("INSERT INTO core.price_proposals(application_id,amount) VALUES($1,125)")
+                .bind(application)
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            applications.push(application);
+            decisions.push(json!({
+                "lot_id":lot,
+                "application_id":application,
+                "price":"125.00",
+                "no_winner":false
+            }));
+        } else {
+            decisions.push(json!({
+                "lot_id":lot,
+                "application_id":null,
+                "price":null,
+                "no_winner":true
+            }));
+        }
     }
     sqlx::query(
         "UPDATE core.tenders SET submission_deadline=core.now()-interval '1 day' WHERE id=$1",
@@ -121,6 +135,9 @@ async fn admin_outcome_changes_only_tender_and_preserves_evidence() {
     assert!(stored["failure_ground"].is_null());
     assert_eq!(stored["protocol"], document.to_string());
     assert_eq!(stored["lots"].as_array().map(Vec::len), Some(2));
+    assert_eq!(stored["lots"][1]["outcome"], "no_winner");
+    assert!(stored["lots"][1]["application_id"].is_null());
+    assert!(stored["lots"][1]["price"].is_null());
 
     let unchanged_apps: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM core.applications WHERE id=ANY($1) AND status='submitted'",
@@ -129,7 +146,7 @@ async fn admin_outcome_changes_only_tender_and_preserves_evidence() {
     .fetch_one(&mut *tx)
     .await
     .unwrap();
-    assert_eq!(unchanged_apps, 2);
+    assert_eq!(unchanged_apps, 1);
     let old_protocol_exists: bool = sqlx::query_scalar(
         "SELECT EXISTS(SELECT 1 FROM core.protocols WHERE id=$1 AND kind='failed')",
     )

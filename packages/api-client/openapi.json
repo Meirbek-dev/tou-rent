@@ -9611,20 +9611,29 @@
         "type": "object",
         "required": [
           "lot_id",
-          "application_id",
-          "price"
+          "no_winner"
         ],
         "properties": {
           "application_id": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "uuid"
           },
           "lot_id": {
             "type": "string",
             "format": "uuid"
           },
+          "no_winner": {
+            "type": "boolean",
+            "description": "Лот завершен без победителя и без итоговой цены."
+          },
           "price": {
-            "type": "string",
+            "type": [
+              "string",
+              "null"
+            ],
             "description": "Итоговая цена в тенге, строкой без потери точности."
           }
         }

@@ -3354,11 +3354,13 @@ export interface components {
         };
         AdminOutcomeLotDecisionDto: {
             /** Format: uuid */
-            application_id: string;
+            application_id?: string | null;
             /** Format: uuid */
             lot_id: string;
+            /** @description Лот завершен без победителя и без итоговой цены. */
+            no_winner: boolean;
             /** @description Итоговая цена в тенге, строкой без потери точности. */
-            price: string;
+            price?: string | null;
         };
         AdminOutcomeLotDto: {
             applications: components["schemas"]["AdminOutcomeApplicationDto"][];

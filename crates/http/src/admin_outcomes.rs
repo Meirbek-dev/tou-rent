@@ -60,9 +60,11 @@ pub struct AdminSuccessfulOutcomeStateDto {
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AdminOutcomeLotDecisionDto {
     pub lot_id: Uuid,
-    pub application_id: Uuid,
+    pub application_id: Option<Uuid>,
     /// Итоговая цена в тенге, строкой без потери точности.
-    pub price: String,
+    pub price: Option<String>,
+    /// Лот завершен без победителя и без итоговой цены.
+    pub no_winner: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -130,19 +132,24 @@ pub async fn record(
     require_purge_enabled(&app)?;
 
     let reason = body.reason.trim();
-    let prices_valid = body.lots.iter().all(|lot| {
-        Decimal::from_str_exact(lot.price.trim()).is_ok_and(|price| price > Decimal::ZERO)
+    let decisions_valid = body.lots.iter().all(|lot| {
+        match (&lot.application_id, &lot.price, lot.no_winner) {
+            (None, None, true) => true,
+            (Some(_), Some(price), false) => Decimal::from_str_exact(price.trim())
+                .is_ok_and(|price| price > Decimal::ZERO),
+            _ => false,
+        }
     });
     if !body.confirmed_signed_protocol
         || reason.is_empty()
         || reason.chars().count() > 2000
         || body.lots.is_empty()
         || body.lots.len() > tou_db::MAX_ROWS as usize
-        || !prices_valid
+        || !decisions_valid
     {
         return Err(ApiError::rule(
             RuleViolation::TenderFailureGround,
-            "подтвердите подписанный протокол, основание и положительные цены по всем лотам",
+            "по каждому лоту выберите заявку с положительной ценой либо отметьте отсутствие победителя",
         ));
     }
 

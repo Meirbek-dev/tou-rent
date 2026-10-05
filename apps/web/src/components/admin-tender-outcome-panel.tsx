@@ -5,7 +5,13 @@ import { m } from "#/paraglide/messages"
 import { ConfirmAction } from "@/components/confirm-action"
 import { Panel } from "@/components/panel"
 import { Button } from "@/components/ui/button"
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field"
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
@@ -20,7 +26,11 @@ import { notifyError, notifySuccess } from "@/lib/toast"
 
 import type { AdminSuccessfulOutcomeStateDto } from "@/lib/admin"
 
-type Decision = { application_id: string; price: string }
+type Decision = {
+  application_id: string
+  price: string
+  no_winner: boolean
+}
 
 /**
  * Не универсальный редактор статуса, а одна auditable-операция:
@@ -126,6 +136,7 @@ function initialDecisions(state: AdminSuccessfulOutcomeStateDto) {
         {
           application_id: application?.id ?? "",
           price: application?.price ?? "",
+          no_winner: lot.applications.length === 0,
         },
       ]
     })
@@ -153,7 +164,10 @@ function OutcomeForm({
     state.lots.length > 0 &&
     state.lots.every((lot) => {
       const decision = decisions[lot.id]
-      return decision?.application_id !== "" && Number(decision?.price) > 0
+      return (
+        decision?.no_winner === true ||
+        (decision?.application_id !== "" && Number(decision?.price) > 0)
+      )
     })
 
   const save = useMutation({
@@ -162,11 +176,17 @@ function OutcomeForm({
         protocol_id: protocolId,
         reason: reason.trim(),
         confirmed_signed_protocol: true,
-        lots: state.lots.map((lot) => ({
-          lot_id: lot.id,
-          application_id: decisions[lot.id]?.application_id ?? "",
-          price: decisions[lot.id]?.price.trim() ?? "",
-        })),
+        lots: state.lots.map((lot) => {
+          const decision = decisions[lot.id]
+          return {
+            lot_id: lot.id,
+            application_id: decision?.no_winner
+              ? null
+              : (decision?.application_id ?? ""),
+            price: decision?.no_winner ? null : (decision?.price.trim() ?? ""),
+            no_winner: decision?.no_winner ?? false,
+          }
+        }),
       }),
     onSuccess: async () => {
       notifySuccess(m.admin_outcome_saved_toast({ title: state.title }))
@@ -228,14 +248,46 @@ function OutcomeForm({
             const decision = decisions[lot.id] ?? {
               application_id: "",
               price: "",
+              no_winner: lot.applications.length === 0,
             }
+            const noWinnerId = `outcome-no-winner-${lot.id}`
             return (
               <fieldset key={lot.id} className="rounded-lg border p-4">
                 <legend className="px-1 font-medium">
                   {m.admin_outcome_lot({ seq: lot.seq })}: {lot.purpose}
                 </legend>
+                <Field orientation="horizontal" className="mb-4">
+                  <Checkbox
+                    id={noWinnerId}
+                    checked={decision.no_winner}
+                    onCheckedChange={(noWinner) => {
+                      const application =
+                        lot.applications.length === 1
+                          ? lot.applications[0]
+                          : undefined
+                      setDecisions((current) => ({
+                        ...current,
+                        [lot.id]: {
+                          application_id: noWinner
+                            ? ""
+                            : (application?.id ?? ""),
+                          price: noWinner ? "" : (application?.price ?? ""),
+                          no_winner: noWinner,
+                        },
+                      }))
+                    }}
+                  />
+                  <FieldContent>
+                    <FieldLabel htmlFor={noWinnerId}>
+                      {m.admin_outcome_no_winner()}
+                    </FieldLabel>
+                    <FieldDescription>
+                      {m.admin_outcome_no_winner_hint()}
+                    </FieldDescription>
+                  </FieldContent>
+                </Field>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Field>
+                  <Field data-disabled={decision.no_winner || undefined}>
                     <FieldLabel htmlFor={`outcome-app-${lot.id}`}>
                       {m.admin_outcome_winner()}
                     </FieldLabel>
@@ -243,6 +295,7 @@ function OutcomeForm({
                       id={`outcome-app-${lot.id}`}
                       className="w-full"
                       value={decision.application_id}
+                      disabled={decision.no_winner}
                       onChange={(event) => {
                         const application = lot.applications.find(
                           (item) => item.id === event.target.value
@@ -252,6 +305,7 @@ function OutcomeForm({
                           [lot.id]: {
                             application_id: event.target.value,
                             price: application?.price ?? "",
+                            no_winner: false,
                           },
                         }))
                       }}
@@ -274,7 +328,7 @@ function OutcomeForm({
                       </FieldDescription>
                     )}
                   </Field>
-                  <Field>
+                  <Field data-disabled={decision.no_winner || undefined}>
                     <FieldLabel htmlFor={`outcome-price-${lot.id}`}>
                       {m.admin_outcome_price()}
                     </FieldLabel>
@@ -282,6 +336,7 @@ function OutcomeForm({
                       id={`outcome-price-${lot.id}`}
                       inputMode="decimal"
                       value={decision.price}
+                      disabled={decision.no_winner}
                       onChange={(event) =>
                         setDecisions((current) => ({
                           ...current,
