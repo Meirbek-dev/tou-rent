@@ -640,6 +640,138 @@
         }
       }
     },
+    "/api/v1/admin/tenders/{id}/successful-outcome": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "admin_successful_outcome_state",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Несостоявшийся тендер",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSuccessfulOutcomeStateDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "operationId": "record_admin_successful_outcome",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Несостоявшийся тендер",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecordAdminSuccessfulOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminSuccessfulOutcomeStateDto"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
@@ -9449,6 +9581,106 @@
           }
         }
       },
+      "AdminOutcomeApplicationDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "applicant",
+          "status"
+        ],
+        "properties": {
+          "applicant": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "price": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "AdminOutcomeLotDecisionDto": {
+        "type": "object",
+        "required": [
+          "lot_id",
+          "application_id",
+          "price"
+        ],
+        "properties": {
+          "application_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "lot_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "price": {
+            "type": "string",
+            "description": "Итоговая цена в тенге, строкой без потери точности."
+          }
+        }
+      },
+      "AdminOutcomeLotDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "seq",
+          "purpose",
+          "applications"
+        ],
+        "properties": {
+          "applications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminOutcomeApplicationDto"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "seq": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "AdminOutcomeProtocolDto": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "number",
+          "document_date"
+        ],
+        "properties": {
+          "document_date": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "number": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        }
+      },
       "AdminPurgeRequest": {
         "type": "object",
         "required": [
@@ -9563,6 +9795,64 @@
           "truncated": {
             "type": "boolean",
             "description": "Перечень обрезан потолком строк"
+          }
+        }
+      },
+      "AdminSuccessfulOutcomeStateDto": {
+        "type": "object",
+        "required": [
+          "tender_id",
+          "title",
+          "status",
+          "eligible",
+          "protocols",
+          "lots"
+        ],
+        "properties": {
+          "eligible": {
+            "type": "boolean"
+          },
+          "lots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminOutcomeLotDto"
+            }
+          },
+          "protocols": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminOutcomeProtocolDto"
+            }
+          },
+          "recorded_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recorded_lots": {},
+          "recorded_protocol_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "recorded_reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "tender_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
           }
         }
       },
@@ -14076,6 +14366,33 @@
           },
           "options": {
             "$ref": "#/components/schemas/RateOptionsDto"
+          }
+        }
+      },
+      "RecordAdminSuccessfulOutcomeRequest": {
+        "type": "object",
+        "required": [
+          "protocol_id",
+          "reason",
+          "confirmed_signed_protocol",
+          "lots"
+        ],
+        "properties": {
+          "confirmed_signed_protocol": {
+            "type": "boolean"
+          },
+          "lots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminOutcomeLotDecisionDto"
+            }
+          },
+          "protocol_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string"
           }
         }
       },

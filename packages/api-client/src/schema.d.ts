@@ -237,6 +237,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/tenders/{id}/successful-outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["admin_successful_outcome_state"];
+        put?: never;
+        post: operations["record_admin_successful_outcome"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/users": {
         parameters: {
             query?: never;
@@ -3329,6 +3345,36 @@ export interface components {
              */
             deactivated: number;
         };
+        AdminOutcomeApplicationDto: {
+            applicant: string;
+            /** Format: uuid */
+            id: string;
+            price?: string | null;
+            status: string;
+        };
+        AdminOutcomeLotDecisionDto: {
+            /** Format: uuid */
+            application_id: string;
+            /** Format: uuid */
+            lot_id: string;
+            /** @description Итоговая цена в тенге, строкой без потери точности. */
+            price: string;
+        };
+        AdminOutcomeLotDto: {
+            applications: components["schemas"]["AdminOutcomeApplicationDto"][];
+            /** Format: uuid */
+            id: string;
+            purpose: string;
+            /** Format: int32 */
+            seq: number;
+        };
+        AdminOutcomeProtocolDto: {
+            document_date: string;
+            /** Format: uuid */
+            id: string;
+            number: string;
+            title: string;
+        };
         AdminPurgeRequest: {
             /**
              * @description Слово подтверждения - ровно [`PURGE_CONFIRMATION`]
@@ -3370,6 +3416,20 @@ export interface components {
             items: components["schemas"]["AdminRecordDto"][];
             /** @description Перечень обрезан потолком строк */
             truncated: boolean;
+        };
+        AdminSuccessfulOutcomeStateDto: {
+            eligible: boolean;
+            lots: components["schemas"]["AdminOutcomeLotDto"][];
+            protocols: components["schemas"]["AdminOutcomeProtocolDto"][];
+            recorded_at?: string | null;
+            recorded_lots?: unknown;
+            /** Format: uuid */
+            recorded_protocol_id?: string | null;
+            recorded_reason?: string | null;
+            status: string;
+            /** Format: uuid */
+            tender_id: string;
+            title: string;
         };
         /**
          * @description Тендер со сроками глазами админа: заголовок, статус и все отметки,
@@ -5045,6 +5105,13 @@ export interface components {
             area_m2: string;
             options?: components["schemas"]["RateOptionsDto"];
         };
+        RecordAdminSuccessfulOutcomeRequest: {
+            confirmed_signed_protocol: boolean;
+            lots: components["schemas"]["AdminOutcomeLotDecisionDto"][];
+            /** Format: uuid */
+            protocol_id: string;
+            reason: string;
+        };
         RecordOfflineResults: {
             confirmed_signed_protocol: boolean;
             lots: components["schemas"]["OfflineLotDecision"][];
@@ -6018,6 +6085,102 @@ export interface operations {
                 };
             };
             /** @description Правка данных выключена (ALLOW_DATA_PURGE) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    admin_successful_outcome_state: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Несостоявшийся тендер */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSuccessfulOutcomeStateDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    record_admin_successful_outcome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Несостоявшийся тендер */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordAdminSuccessfulOutcomeRequest"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSuccessfulOutcomeStateDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             422: {
                 headers: {
                     [name: string]: unknown;

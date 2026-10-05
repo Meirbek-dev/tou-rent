@@ -12,6 +12,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 pub mod acts;
+pub mod admin_outcomes;
 pub mod admission;
 pub mod amendments;
 pub mod applications;

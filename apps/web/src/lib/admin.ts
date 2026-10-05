@@ -18,6 +18,10 @@ export type AdminTenderScheduleDto =
   components["schemas"]["AdminTenderScheduleDto"]
 export type AdminTenderScheduleRequest =
   components["schemas"]["AdminTenderScheduleRequest"]
+export type AdminSuccessfulOutcomeStateDto =
+  components["schemas"]["AdminSuccessfulOutcomeStateDto"]
+export type RecordAdminSuccessfulOutcomeRequest =
+  components["schemas"]["RecordAdminSuccessfulOutcomeRequest"]
 
 /** Роли, назначаемые админом (FR-1503): `guest` - аноним, он не хранится. */
 export const GRANTABLE_ROLES = [
@@ -220,6 +224,40 @@ export const setTenderSchedule = async (
   })
   if (error !== undefined || data === undefined) {
     throw (error as unknown) ?? new Error("tender schedule update failed")
+  }
+  return data
+}
+
+/** Данные подписанного основания, лотов и заявок для узкой корректировки. */
+export const adminSuccessfulOutcomeQuery = (id: string) =>
+  queryOptions({
+    queryKey: ["admin", "successful-outcome", id],
+    queryFn: async () => {
+      const { data, error } = await api.GET(
+        "/api/v1/admin/tenders/{id}/successful-outcome",
+        { params: { path: { id } } }
+      )
+      if (error !== undefined || data === undefined) {
+        throw (error as unknown) ?? new Error("failed to load outcome form")
+      }
+      return data
+    },
+  })
+
+/**
+ * Подтвержденная корректировка failed -> summed_up. Сервер повторно
+ * проверяет документ, заявки, цены и полноту всех лотов одной транзакцией.
+ */
+export const recordAdminSuccessfulOutcome = async (
+  id: string,
+  body: RecordAdminSuccessfulOutcomeRequest
+) => {
+  const { data, error } = await api.POST(
+    "/api/v1/admin/tenders/{id}/successful-outcome",
+    { params: { path: { id } }, body }
+  )
+  if (error !== undefined || data === undefined) {
+    throw (error as unknown) ?? new Error("outcome correction failed")
   }
   return data
 }

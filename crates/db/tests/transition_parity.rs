@@ -1,26 +1,28 @@
 //! Тест паритета typestate ↔ БД (INV-021, FR-302, арх. § 5).
 //!
 //! Сверяет `tou_domain::tender::TRANSITIONS` (порожден тем же макросом,
-//! что и typestate-методы) с seed-миграцией `refdata.tender_status_transitions`.
-//! Миграция - источник наполнения таблицы, поэтому паритет с файлом равен
-//! паритету с БД. Живой вариант против PostgreSQL добавит testkit (G8/G10-стенд).
+//! что и typestate-методы) со всеми миграциями, добавляющими строки в
+//! `refdata.tender_status_transitions`. Уже примененные миграции неизменяемы,
+//! поэтому новые переходы добавляются отдельным файлом.
 
 use std::collections::BTreeSet;
 
 use tou_domain::tender::TRANSITIONS;
 
 const SEED_SQL: &str = include_str!("../migrations/20260806100015_refdata_seed.sql");
+const ADMIN_OUTCOME_SQL: &str =
+    include_str!("../migrations/20260921120000_admin_successful_outcome.sql");
 
 /// Пары `('from', 'to')` из INSERT-блока таблицы переходов.
 fn seed_transitions() -> BTreeSet<(String, String)> {
-    let insert_block = SEED_SQL
-        .split("INSERT INTO refdata.tender_status_transitions")
-        .nth(1)
-        .and_then(|rest| rest.split("ON CONFLICT").next())
-        .unwrap_or_default();
-
-    insert_block
-        .lines()
+    [SEED_SQL, ADMIN_OUTCOME_SQL]
+        .into_iter()
+        .flat_map(|sql| {
+            sql.split("INSERT INTO refdata.tender_status_transitions")
+                .skip(1)
+                .filter_map(|rest| rest.split("ON CONFLICT").next())
+                .flat_map(str::lines)
+        })
         .filter_map(|line| {
             let mut quoted = line.split('\'');
             let from = quoted.nth(1)?;

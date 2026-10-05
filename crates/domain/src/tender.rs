@@ -306,6 +306,7 @@ transitions! {
     Accepting       -> Failed          = fail_no_bids:       "0 или 1 заявка (п. 81, FR-801)",
     Qualification   -> Failed          = fail_underadmitted: "Допущено менее двух (п. 81)",
     SummedUp        -> Failed          = fail_evasion:       "Уклонение победителя и № 2 (п. 81)",
+    Failed          -> SummedUp        = record_admin_outcome: "Подтвержденные офлайн-итоги администратора",
     Failed          -> RepeatAnnounced = announce_repeat:    "Повторный тендер (п. 82)",
     RepeatAnnounced -> Accepting       = open_acceptance:    "Прием заявок повторного тендера",
     Draft           -> Cancelled       = cancel:             "Отмена (FR-305, п. 78–79)",

@@ -5,6 +5,7 @@ import { m } from "#/paraglide/messages"
 import { getLocale } from "#/paraglide/runtime"
 import { ConfirmAction } from "@/components/confirm-action"
 import { AdminCommissionPanel } from "@/components/admin-commission-panel"
+import { AdminTenderOutcomePanel } from "@/components/admin-tender-outcome-panel"
 import { PageHeader } from "@/components/page-header"
 import { Panel } from "@/components/panel"
 import { TenderStatusBadge } from "@/components/tender-status-badge"
@@ -93,6 +94,7 @@ const TABS = [
   "mrp",
   "coefficients",
   "holidays",
+  "outcomes",
   "schedule",
   "data",
 ] as const
@@ -140,6 +142,7 @@ function AdminHome() {
             {m.admin_coefficients_title()}
           </TabsTrigger>
           <TabsTrigger value="holidays">{m.admin_holidays_title()}</TabsTrigger>
+          <TabsTrigger value="outcomes">{m.admin_outcome_tab()}</TabsTrigger>
           <TabsTrigger value="schedule">{m.admin_schedule_tab()}</TabsTrigger>
           <TabsTrigger value="data">{m.admin_data_tab()}</TabsTrigger>
         </TabsList>
@@ -153,6 +156,7 @@ function AdminHome() {
           {tab === "mrp" && <MrpPanel />}
           {tab === "coefficients" && <CoefficientsPanel />}
           {tab === "holidays" && <HolidaysPanel />}
+          {tab === "outcomes" && <AdminTenderOutcomePanel />}
           {tab === "schedule" && <TenderSchedulePanel />}
           {tab === "data" && <DataPanel />}
         </TabsContent>
