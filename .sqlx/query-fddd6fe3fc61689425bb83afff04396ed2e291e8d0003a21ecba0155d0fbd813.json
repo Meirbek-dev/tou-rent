@@ -6,37 +6,79 @@
       {
         "ordinal": 0,
         "name": "category_code",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_category_documents",
+            "name": "category_code"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "code",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_category_documents",
+            "name": "code"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "ordinal",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_category_documents",
+            "name": "ordinal"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "label_ru",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_category_documents",
+            "name": "label_ru"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "label_kk",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_category_documents",
+            "name": "label_kk"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "label_en",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_category_documents",
+            "name": "label_en"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "required",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_category_documents",
+            "name": "required"
+          }
+        }
       }
     ],
     "parameters": {

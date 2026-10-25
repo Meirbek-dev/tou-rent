@@ -6,7 +6,8 @@
       {
         "ordinal": 0,
         "name": "audited!",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": "Expression"
       }
     ],
     "parameters": {

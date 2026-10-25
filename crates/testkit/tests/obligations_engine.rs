@@ -120,6 +120,24 @@ async fn fr1702_overdue_is_escalated_once() {
     // Транзакция здесь не годится: воркер ходит своим подключением
     let mut setup = db.begin().await.expect("begin");
     let tender_id = tender(&mut setup).await.expect("тендер");
+    // Получатель - носитель роли исполнителя (секретарь, п. 57). На стенде его
+    // может не быть, а без получателя эскалация пуста - тест заводит своего
+    let secretary = sqlx::query_scalar!(
+        "INSERT INTO core.users (email, password_hash, full_name, email_confirmed_at)
+         VALUES ($1::citext, 'x', 'Т20 секретарь', now()) RETURNING id",
+        format!("t20-sec-{}@tou.test", Uuid::now_v7().simple())
+    )
+    .fetch_one(&mut *setup)
+    .await
+    .expect("секретарь");
+    sqlx::query!(
+        "INSERT INTO core.role_grants (user_id, role) VALUES ($1, 'secretary')
+         ON CONFLICT DO NOTHING",
+        secretary
+    )
+    .execute(&mut *setup)
+    .await
+    .expect("роль секретаря");
     obligations::schedule(
         &mut setup,
         ObligationAction::NotifyAdmitted,
@@ -165,6 +183,10 @@ async fn fr1702_overdue_is_escalated_once() {
     assert_eq!(status, "overdue");
 
     sqlx::query!("DELETE FROM core.tenders WHERE id = $1", tender_id)
+        .execute(&db)
+        .await
+        .ok();
+    sqlx::query!("DELETE FROM core.role_grants WHERE user_id = $1", secretary)
         .execute(&db)
         .await
         .ok();

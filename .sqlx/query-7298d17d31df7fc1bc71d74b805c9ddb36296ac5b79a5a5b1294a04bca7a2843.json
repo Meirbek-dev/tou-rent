@@ -6,52 +6,112 @@
       {
         "ordinal": 0,
         "name": "code",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "code"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "label_ru",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "label_ru"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "label_kk",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "label_kk"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "label_en",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "label_en"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "rule_ref",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "rule_ref"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "has_schedule",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "has_schedule"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "later_share_pct",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "later_share_pct"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "requires_council",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "requires_council"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "min_study_credits",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "min_study_credits"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "internship_quota",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "internship_quota"
+          }
+        }
       }
     ],
     "parameters": {

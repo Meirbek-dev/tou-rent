@@ -6,97 +6,206 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "lot_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "lot_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "tender_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "tender_id"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "lot_seq",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "seq"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "lot_purpose",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "purpose"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "status!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 6,
         "name": "starting_bid",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "starting_bid"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "bid_step_percent",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "bid_step_percent"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "bid_step",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "bid_step"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "started_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "started_at"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "ends_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "ends_at"
+          }
+        }
       },
       {
         "ordinal": 11,
         "name": "extended_once",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "extended_once"
+          }
+        }
       },
       {
         "ordinal": 12,
         "name": "finished_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "finished_at"
+          }
+        }
       },
       {
         "ordinal": 13,
         "name": "finished_early",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "finished_early"
+          }
+        }
       },
       {
         "ordinal": 14,
         "name": "winner_application_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "winner_application_id"
+          }
+        }
       },
       {
         "ordinal": 15,
         "name": "winner_amount",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "winner_amount"
+          }
+        }
       },
       {
         "ordinal": 16,
         "name": "runner_up_application_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "runner_up_application_id"
+          }
+        }
       },
       {
         "ordinal": 17,
         "name": "runner_up_amount",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "runner_up_amount"
+          }
+        }
       },
       {
         "ordinal": 18,
         "name": "current_turn_application_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.auctions",
+            "name": "current_turn_application_id"
+          }
+        }
       }
     ],
     "parameters": {

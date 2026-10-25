@@ -42,6 +42,11 @@ ignore = [
   "RUSTSEC-2024-0436", # paste
   "RUSTSEC-2026-0206", # rustybuzz
   "RUSTSEC-2026-0192", # ttf-parser
+  "RUSTSEC-2024-0449", # unsafe-libyaml (serde_yaml → hayagriva)
+  # crypto-bigint 0.5 (elliptic-curve → p256/p384 → openidconnect 4): тайминговые
+  # операции. Ключи EC - только открытые ключи провайдера при проверке подписи
+  # id_token; фикс лишь в 0.7, openidconnect 4.0.1 на 0.5. Аппрув владельца 2026-10-25.
+  "RUSTSEC-2026-0387",
 ]
 
 [bans]

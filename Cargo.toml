@@ -30,10 +30,10 @@ tou-testkit = { path = "crates/testkit" }
 anyhow = "1.0.104" # только в bin-крейтах (арх. § 5)
 axum = "0.8.9"
 axum-extra = { version = "0.12.6", features = ["cookie"] }
-jiff = { version = "0.2.35", features = ["serde"] }
+jiff = { version = "0.2.38", features = ["serde"] }
 rust_decimal = { version = "1.43.0", features = ["serde", "macros"] }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
+serde_json = "1.0.154"
 # Фича "macros" (query!/G3 `sqlx prepare`) включена: запросы проверяются
 # компилятором по живой схеме, а не `try_get` по строковому имени колонки.
 # Сборка идет в контейнере (A-003), поэтому VS Build Tools на Windows-хосте
@@ -49,18 +49,18 @@ sqlx = { version = "=0.9.0", default-features = false, features = [
   "json",
   "time",
 ] }
-thiserror = "2.0.20"
-tokio = { version = "1.53.1", features = ["full"] }
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["full"] }
 # BroadcastStream - SSE-доставка уведомлений (FR-1301)
 tokio-stream = { version = "0.1.19", features = ["sync"] }
 tower = "0.5.3"
 tower-http = { version = "0.7.1", features = ["trace", "timeout", "cors"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
-utoipa = { version = "5.5.0", features = ["axum_extras", "uuid", "decimal"] }
-utoipa-axum = "0.2.0"
-utoipa-swagger-ui = { version = "9.0.2", features = ["axum"] }
-uuid = { version = "1.26.0", features = ["v7", "serde"] }
+utoipa = { version = "6.0.0", features = ["axum_extras", "uuid", "decimal"] }
+utoipa-axum = "0.3.0"
+utoipa-swagger-ui = { version = "10.0.2", features = ["axum"] }
+uuid = { version = "1.29.0", features = ["v7", "serde"] }
 
 # --- Запинено заранее, крейты подключают через `workspace = true` ---
 # Валидация домена (паритет с Valibot, FR-401)
@@ -81,8 +81,8 @@ tower-sessions-redis-store = "0.16.0"
 # хранилище сессий, — иначе типы клиента разъедутся
 fred = { version = "10.1.0", features = ["subscriber-client"] }
 # Obligations engine и отложенные задачи (FR-1701, INV-076)
-apalis = "1.0.0-rc.9"
-apalis-cron = "1.0.0-rc.8"
+apalis = "1.0.0"
+apalis-cron = "1.0.0"
 deadpool-redis = "0.23.1"
 # Печатные формы PDF: объявление, протоколы, договор (Прил. 1–3, 5–12)
 typst = "0.15.1"
@@ -91,14 +91,14 @@ typst-pdf = "0.15.1"
 # Встроенные шрифты Libertinus (кириллица) - печать без файлов на диске
 typst-assets = { version = "0.15.1", features = ["fonts"] }
 # Типизация WS-сообщений аукциона для фронта (арх. § 7)
-schemars = "1.2.2"
+schemars = "1.2.3"
 # Файлы в RustFS (S3 API): сканы заявок, PDF-протоколы (арх. § 2, ADR-0006)
-object_store = { version = "0.14.1", features = ["aws"] }
+object_store = { version = "0.14.2", features = ["aws"] }
 # Выгрузка досье тендера архивом (FR-1602): только deflate, без шифрования
-zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
 # Hash-цепочка аудита INV-A01 (паритет с sha256() в БД)
-sha2 = "0.11.0"
-rand = "0.10.2"
+sha2 = "0.11.1"
+rand = "0.10.3"
 # Шифрование пакетов заявок до вскрытия: AES-256-GCM и отдельный ключ
 # каждой заявки, производный через HKDF-SHA256.
 aes-gcm = "0.11.1"
@@ -109,7 +109,7 @@ lettre = { version = "0.11.23", default-features = false, features = [
   "smtp-transport",
   "tokio1-rustls-tls",
 ] }
-reqwest = { version = "0.13.4", default-features = false, features = [
+reqwest = { version = "0.13.5", default-features = false, features = [
   "json",
   "rustls",
 ] }
@@ -120,8 +120,8 @@ openidconnect = { version = "4.0.1", default-features = false, features = [
   "rustls-tls",
 ] }
 # Тесты: golden (FR-201), property (FR-601), фикстуры БД (testkit)
-insta = { version = "1.48.0", features = ["json", "redactions"] }
-proptest = "1.11.0"
+insta = { version = "1.49.0", features = ["json", "redactions"] }
+proptest = "1.12.0"
 testcontainers-modules = { version = "0.15.0", features = [
   "postgres",
   "redis",

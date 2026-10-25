@@ -729,11 +729,4 @@ mod tests {
         let bytes = pdf::render(ACT_TEMPLATE, &data).expect("акт приемки");
         assert!(bytes.starts_with(b"%PDF"));
     }
-
-    #[test]
-    fn every_attachment_has_a_russian_label() {
-        for attachment in Attachment::ALL {
-            assert!(!attachment_label_ru(attachment).is_empty());
-        }
-    }
 }

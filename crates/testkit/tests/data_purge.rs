@@ -305,8 +305,9 @@ async fn purge_removes_a_tender_and_restores_the_guards() {
     let event = sqlx::query!(
         r#"SELECT actor_id, payload -> 'old' ->> 'scope' AS "scope!",
                   payload -> 'old' -> 'tender_ids' AS "tender_ids!"
-           FROM audit.log WHERE table_name = 'core.data_purge'
-           ORDER BY id DESC LIMIT 1"#
+           FROM audit.log WHERE table_name = 'core.data_purge' AND actor_id = $1
+           ORDER BY id DESC LIMIT 1"#,
+        target.actor
     )
     .fetch_one(&db)
     .await

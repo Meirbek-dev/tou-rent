@@ -66,6 +66,25 @@ TOU_DOMAIN="${TOU_DOMAIN:-$(env_value TOU_DOMAIN)}"
 
 compose() { $COMPOSE -f "$COMPOSE_FILE" "$@"; }
 
+# --- Формат данных Postgres -------------------------------------------------
+# Минорные релизы читают тот же том, но смена мажора или переход с бета/rc
+# меняет формат каталога: новый сервер на старом томе pg_data не стартует.
+# Такой переход - только через дамп и восстановление (README, «Обновление
+# Postgres»), а не через `compose up`. Вызывается после пулла: сравниваются
+# работающий сервер и образ, который сейчас подставит compose.
+pg_format_check() {
+  compose ps --status running --services 2>/dev/null | grep -qx postgres || return 0
+  local running target
+  running=$(compose exec -T postgres postgres -V | awk '{print $3}')
+  target=$(compose run --rm --no-deps -T --entrypoint postgres postgres -V | awk '{print $3}')
+  [ "$running" = "$target" ] && return 0
+  case "$running $target" in
+    *beta* | *rc*) ;;
+    *) [ "${running%%.*}" = "${target%%.*}" ] && return 0 ;;
+  esac
+  fail "Postgres $running -> $target меняет формат данных: сначала дамп и восстановление (README, «Обновление Postgres»)"
+}
+
 # --- Окно заморозки ---------------------------------------------------------
 freeze_check() {
   if [ "${DEPLOY_FORCE:-0}" = "1" ]; then
@@ -182,6 +201,7 @@ else
   log "пулл образов"
   compose pull
 fi
+pg_format_check
 
 log "миграции БД"
 compose run --rm api-migrate

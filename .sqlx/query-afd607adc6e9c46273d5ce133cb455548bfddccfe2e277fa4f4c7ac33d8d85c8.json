@@ -6,62 +6,124 @@
       {
         "ordinal": 0,
         "name": "code",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "code"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "ordinal",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "ordinal"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "label_ru",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "label_ru"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "label_kk",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "label_kk"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "label_en",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "label_en"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "rule_ref",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "rule_ref"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "review_days",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "review_days"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "review_term!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 8,
         "name": "benefit_scheme",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "benefit_scheme"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "publishable",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "publishable"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "competition!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 11,
         "name": "comparable_margin_pct",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "refdata.special_categories",
+            "name": "comparable_margin_pct"
+          }
+        }
       }
     ],
     "parameters": {

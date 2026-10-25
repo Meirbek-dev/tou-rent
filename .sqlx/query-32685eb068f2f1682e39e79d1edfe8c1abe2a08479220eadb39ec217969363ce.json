@@ -6,37 +6,74 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.bids",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "auction_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.bids",
+            "name": "auction_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "application_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.bids",
+            "name": "application_id"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "applicant_name!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 4,
         "name": "amount",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.bids",
+            "name": "amount"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "seq",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "core.bids",
+            "name": "seq"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "placed_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.bids",
+            "name": "placed_at"
+          }
+        }
       }
     ],
     "parameters": {

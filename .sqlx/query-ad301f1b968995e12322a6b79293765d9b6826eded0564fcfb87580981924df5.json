@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "amount",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.price_proposals",
+            "name": "amount"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "amount_enc",
-        "type_info": "Bytea"
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "core.price_proposals",
+            "name": "amount_enc"
+          }
+        }
       }
     ],
     "parameters": {

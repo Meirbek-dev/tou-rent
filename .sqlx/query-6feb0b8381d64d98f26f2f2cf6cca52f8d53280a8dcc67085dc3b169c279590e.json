@@ -6,37 +6,74 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.ledger_entries",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "occurred_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.ledger_entries",
+            "name": "occurred_at"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "account_kind!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 3,
         "name": "payer?",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.users",
+            "name": "full_name"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "amount",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.ledger_entries",
+            "name": "credit"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "rule_ref",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.ledger_entries",
+            "name": "rule_ref"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "recorded_by?",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.users",
+            "name": "full_name"
+          }
+        }
       }
     ],
     "parameters": {

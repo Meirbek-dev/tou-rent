@@ -132,14 +132,16 @@ pub async fn record(
     require_purge_enabled(&app)?;
 
     let reason = body.reason.trim();
-    let decisions_valid = body.lots.iter().all(|lot| {
-        match (&lot.application_id, &lot.price, lot.no_winner) {
-            (None, None, true) => true,
-            (Some(_), Some(price), false) => Decimal::from_str_exact(price.trim())
-                .is_ok_and(|price| price > Decimal::ZERO),
-            _ => false,
-        }
-    });
+    let decisions_valid =
+        body.lots.iter().all(
+            |lot| match (&lot.application_id, &lot.price, lot.no_winner) {
+                (None, None, true) => true,
+                (Some(_), Some(price), false) => {
+                    Decimal::from_str_exact(price.trim()).is_ok_and(|price| price > Decimal::ZERO)
+                }
+                _ => false,
+            },
+        );
     if !body.confirmed_signed_protocol
         || reason.is_empty()
         || reason.chars().count() > 2000

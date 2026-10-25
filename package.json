@@ -14,9 +14,9 @@
     "api:logs": "podman compose -f infra/compose/docker-compose.dev.yml logs -f api",
     "api:migrate": "podman compose -f infra/compose/docker-compose.dev.yml run --rm api-migrate",
     "api:seed": "podman compose -f infra/compose/docker-compose.dev.yml --profile api run --rm --no-deps -e SQLX_OFFLINE=true -e SEED_PASSWORD api cargo run -q -p api -- seed",
-    "cache:size": "podman run --rm -v tou-rent-target:/target alpine:3.24.1 du -sh /target /target/debug/deps /target/debug/incremental",
-    "cache:sweep": "podman run --rm -v tou-rent-target:/target alpine:3.24.1 rm -rf /target/debug/incremental",
-    "cache:clean": "podman run --rm -v tou-rent-target:/target alpine:3.24.1 sh -c \"rm -rf /target/debug /target/release\"",
+    "cache:size": "podman run --rm -v tou-rent-target:/target alpine:3.24.3 du -sh /target /target/debug/deps /target/debug/incremental",
+    "cache:sweep": "podman run --rm -v tou-rent-target:/target alpine:3.24.3 rm -rf /target/debug/incremental",
+    "cache:clean": "podman run --rm -v tou-rent-target:/target alpine:3.24.3 sh -c \"rm -rf /target/debug /target/release\"",
     "zitadel:up": "podman compose -f infra/compose/docker-compose.dev.yml --profile zitadel up -d",
     "zitadel:down": "podman compose -f infra/compose/docker-compose.dev.yml --profile zitadel down",
     "zitadel:provision": "podman compose -f infra/compose/docker-compose.dev.yml run --rm zitadel-init",
@@ -35,23 +35,23 @@
     "e2e:install": "bun run --cwd apps/e2e e2e:install"
   },
   "devDependencies": {
-    "turbo": "^2.10.12",
+    "turbo": "^2.11.10",
     "typescript": "catalog:",
-    "vite": "^0.3.0",
-    "vite-plus": "^0.3.0"
+    "vite": "catalog:",
+    "vite-plus": "catalog:"
   },
-  "packageManager": "bun@1.4.0",
+  "packageManager": "bun@1.4.4",
   "engines": {
-    "node": ">=24"
+    "node": ">=24.11.0"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "catalog": {
-    "vite": "npm:@voidzero-dev/vite-plus-core@latest",
-    "vitest": "4.1.9",
-    "vite-plus": "latest",
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+    "vite-plus": "1.4.0",
+    "vitest": "5.0.5",
     "typescript": "7.0.2"
   },
   "overrides": {
@@ -59,6 +59,7 @@
     "vitest": "catalog:",
     "typescript": "catalog:",
     "js-yaml": "^4.3.1",
-    "nanoid": "3.3.18"
+    "nanoid": "3.3.18",
+    "solid-js": "1.9.17"
   }
 }

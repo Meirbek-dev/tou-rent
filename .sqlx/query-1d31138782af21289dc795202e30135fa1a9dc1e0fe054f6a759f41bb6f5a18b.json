@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "present!",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.sessions_meetings",
+            "name": "quorum_present"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "required!",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.sessions_meetings",
+            "name": "quorum_required"
+          }
+        }
       }
     ],
     "parameters": {

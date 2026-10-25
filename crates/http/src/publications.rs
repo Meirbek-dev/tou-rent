@@ -609,7 +609,11 @@ mod tests {
         let archive = build_archive(manifest, &files).expect("архив");
         let mut zip = zip::ZipArchive::new(Cursor::new(archive)).expect("чтение архива");
 
-        let names: Vec<String> = zip.file_names().map(str::to_owned).collect();
+        let names: Vec<String> = zip
+            .file_names()
+            .map(|name| name.map(std::borrow::Cow::into_owned))
+            .collect::<Result<_, _>>()
+            .expect("имена файлов");
         assert!(names.contains(&"manifest.json".to_owned()));
         assert!(names.contains(&"03-protocols/01-abc.pdf".to_owned()));
 

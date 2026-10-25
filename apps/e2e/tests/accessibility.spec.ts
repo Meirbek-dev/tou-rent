@@ -4,6 +4,8 @@ import { expect, test } from "@playwright/test"
 import type { AxeResults, Result } from "axe-core"
 import type { Page } from "@playwright/test"
 
+import { provisionDemoTender } from "./helpers"
+
 /**
  * Гейт G17: доступность публичного контура (NFR-04, NFR-15).
  *
@@ -88,24 +90,9 @@ for (const theme of ["light", "dark"] as const) {
  * сроки, ссылки на PDF), поэтому проверяется на настоящем объявлении,
  * а не на пустой заготовке.
  */
-test("доступность: карточка опубликованного тендера", async ({
-  page,
-  request,
-}) => {
-  const response = await request.get("/api/v1/tenders?limit=1")
-  expect(response.status(), "реестр тендеров доступен гостю").toBe(200)
-  const page1 = (await response.json()) as { items: Array<{ id: string }> }
-
-  // Пропуск условный, а не глушитель: проверять карточку не на чем, пока
-  // на стенде нет ни одного опубликованного тендера. Прогон с пустым
-  // реестром - это отсутствие предмета проверки, а не зеленый результат.
-  // Условие и причина вынесены, чтобы вызов уместился в строку вместе
-  // с токеном: гейт G2 ищет токен именно на строке с `.skip(`
-  const nothingPublished = page1.items.length === 0
-  const reason = "на стенде нет опубликованных тендеров — нечего проверять"
-  test.skip(nothingPublished, reason) // ALLOWED-BY-ENGINEER:T60 предусловие
-
-  await page.goto(`/tenders/${page1.items[0]?.id}`)
+test("доступность: карточка опубликованного тендера", async ({ page }) => {
+  // Свой тендер на прогон: проверка не зависит от того, что осталось на стенде
+  await page.goto(`/tenders/${provisionDemoTender()}`)
   await expect(page.locator("h1")).toBeVisible()
 
   const results = await scan(page)

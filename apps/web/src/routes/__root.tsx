@@ -4,6 +4,7 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from "@tanstack/react-router"
+import type { ErrorComponentProps } from "@tanstack/react-router"
 import { Suspense, lazy, useSyncExternalStore } from "react"
 
 import PostHogProvider from "../integrations/posthog/provider"
@@ -220,7 +221,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
  * свежий манифест; ссылка «Главная» на этом экране тоже обычная, потому что
  * переход роутером уперся бы в тот же манифест.
  */
-function ErrorPage({ error, reset }: { error: Error; reset: () => void }) {
+function ErrorPage({ error, reset }: ErrorComponentProps) {
   const stale = isStaleChunkError(error)
   // Серверный снимок всегда false; после гидратации React перечитает
   // sessionStorage как внешний браузерный источник, не меняя state в effect.

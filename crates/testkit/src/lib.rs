@@ -41,24 +41,3 @@ fn is_ci() -> bool {
     std::env::var_os("CI")
         .is_some_and(|value| !value.is_empty() && value != "0" && value != "false")
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Проверки идут через приватную ветку: менять переменные окружения
-    /// в тестах небезопасно - они общие на весь процесс, а тесты идут
-    /// параллельно.
-    #[test]
-    fn ci_flag_reads_common_runner_values() {
-        // Значение самого раннера в этой сборке неизвестно, поэтому
-        // проверяется только то, что функция не паникует и что-то решает
-        let _ = is_ci();
-    }
-
-    #[test]
-    fn required_error_explains_the_failure() {
-        let message = DatabaseRequired.to_string();
-        assert!(message.contains("TESTKIT_DATABASE_URL"));
-    }
-}

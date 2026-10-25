@@ -6,82 +6,163 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "contract_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "contract_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "special_request_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "special_request_id"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "investment_amount",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "investment_amount"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "term_months",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "term_months"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "extended_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "extended_at"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "extension_months",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "extension_months"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "prolonged_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "prolonged_at"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "prolongation_months",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "prolongation_months"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "rate_calculation",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "core.investment_contracts",
+            "name": "rate_calculation"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "accepted_amount!",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": "Expression"
       },
       {
         "ordinal": 11,
         "name": "contract_status!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 12,
         "name": "monthly_rate",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "monthly_rate"
+          }
+        }
       },
       {
         "ordinal": 13,
         "name": "object_name?",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.objects",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 14,
         "name": "tenant_name?",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.users",
+            "name": "full_name"
+          }
+        }
       },
       {
         "ordinal": 15,
         "name": "attachments!",
-        "type_info": "TextArray"
+        "type_info": "TextArray",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -104,7 +185,7 @@
       null,
       false,
       false,
-      false,
+      true,
       null
     ]
   },

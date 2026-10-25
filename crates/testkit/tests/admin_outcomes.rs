@@ -105,10 +105,13 @@ async fn admin_outcome_changes_only_tender_and_preserves_evidence() {
     .fetch_one(&mut *tx)
     .await
     .unwrap();
-    let notifications_before: i64 = sqlx::query_scalar("SELECT count(*) FROM core.notifications")
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap();
+    let notifications_before: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.notifications WHERE payload->>'tender_id' = $1::uuid::text",
+    )
+    .bind(tender)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
 
     sqlx::query(
         "UPDATE core.tenders SET status='summed_up',failure_ground=NULL,consequence=NULL,failed_at=NULL, \
@@ -162,10 +165,13 @@ async fn admin_outcome_changes_only_tender_and_preserves_evidence() {
             .await
             .unwrap();
     assert_eq!(contracts, 0);
-    let notifications_after: i64 = sqlx::query_scalar("SELECT count(*) FROM core.notifications")
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap();
+    let notifications_after: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM core.notifications WHERE payload->>'tender_id' = $1::uuid::text",
+    )
+    .bind(tender)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
     assert_eq!(notifications_after, notifications_before);
     let audit: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM audit.log WHERE table_name='core.tenders' AND row_id=$1 AND actor_id=$2",

@@ -660,7 +660,6 @@
         ],
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -670,7 +669,6 @@
             }
           },
           "403": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -680,7 +678,6 @@
             }
           },
           "404": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -720,7 +717,6 @@
         },
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -730,7 +726,6 @@
             }
           },
           "403": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -740,7 +735,6 @@
             }
           },
           "404": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -750,7 +744,6 @@
             }
           },
           "409": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -760,7 +753,6 @@
             }
           },
           "422": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -2547,7 +2539,6 @@
         "operationId": "my_commission_documents",
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -2578,13 +2569,11 @@
         ],
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/pdf": {}
             }
           },
           "404": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -2625,7 +2614,6 @@
         },
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -4971,10 +4959,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/ObjectStatusDto"
                 },
                 {
-                  "$ref": "#/components/schemas/ObjectStatusDto"
+                  "type": "null"
                 }
               ]
             }
@@ -4987,10 +4975,10 @@
             "schema": {
               "oneOf": [
                 {
-                  "type": "null"
+                  "$ref": "#/components/schemas/ObjectKindDto"
                 },
                 {
-                  "$ref": "#/components/schemas/ObjectKindDto"
+                  "type": "null"
                 }
               ]
             }
@@ -7836,7 +7824,6 @@
         ],
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -7908,7 +7895,6 @@
         },
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -7918,7 +7904,6 @@
             }
           },
           "422": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -8690,7 +8675,6 @@
         ],
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -8700,7 +8684,6 @@
             }
           },
           "404": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -8739,7 +8722,6 @@
         },
         "responses": {
           "200": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -8749,7 +8731,6 @@
             }
           },
           "409": {
-            "description": "",
             "content": {
               "application/json": {
                 "schema": {
@@ -10660,11 +10641,11 @@
           "oidc": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/OidcProviderDto",
                 "description": "Внешний провайдер, если настроен (FR-1502)"
+              },
+              {
+                "type": "null"
               }
             ]
           }
@@ -13056,11 +13037,11 @@
           "member_role": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/MemberRoleDto",
                 "description": "null удаляет человека из состава; учетная запись сохраняется."
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -13742,10 +13723,10 @@
           "resolution": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/OfflineResolution"
               },
               {
-                "$ref": "#/components/schemas/OfflineResolution"
+                "type": "null"
               }
             ]
           },
@@ -13958,11 +13939,11 @@
           "rule": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/Rule",
                 "description": "Причина отказа по правилу - только у `rule_violation`"
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15093,20 +15074,20 @@
           "decision": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SpecialDecisionDto"
               },
               {
-                "$ref": "#/components/schemas/SpecialDecisionDto"
+                "type": "null"
               }
             ]
           },
           "review": {
             "oneOf": [
               {
-                "type": "null"
+                "$ref": "#/components/schemas/SpecialReviewDto"
               },
               {
-                "$ref": "#/components/schemas/SpecialReviewDto"
+                "type": "null"
               }
             ]
           }
@@ -15400,11 +15381,11 @@
           "chair_vote": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/VoteValueDto",
                 "description": "Голос председательствующего - решает при равенстве (п. 14)"
+              },
+              {
+                "type": "null"
               }
             ]
           },
@@ -15416,11 +15397,11 @@
           "outcome": {
             "oneOf": [
               {
-                "type": "null"
-              },
-              {
                 "$ref": "#/components/schemas/DecisionDto",
                 "description": "Итог, когда проголосовали все присутствующие; иначе причина ожидания"
+              },
+              {
+                "type": "null"
               }
             ]
           },

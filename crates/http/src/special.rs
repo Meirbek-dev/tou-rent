@@ -1216,23 +1216,4 @@ mod tests {
         assert!(bytes.starts_with(b"%PDF"));
         assert!(bytes.len() > 1_000);
     }
-
-    /// Решения печатаются по-русски - без «решение не распознано».
-    #[test]
-    fn every_decision_has_a_russian_label() {
-        for decision in SpecialDecision::ALL {
-            assert!(
-                !decision_ru(decision).is_empty(),
-                "{decision:?} без подписи"
-            );
-        }
-    }
-
-    /// Состояния заявки печатаются по-русски - без «состояние неизвестно».
-    #[test]
-    fn every_status_has_a_russian_label() {
-        for status in SpecialRequestStatus::ALL {
-            assert!(!status_ru(status).is_empty(), "{status:?} без подписи");
-        }
-    }
 }

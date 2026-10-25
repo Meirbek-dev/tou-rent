@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "initial_price",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.auction_participants",
+            "name": "initial_price"
+          }
+        }
       }
     ],
     "parameters": {

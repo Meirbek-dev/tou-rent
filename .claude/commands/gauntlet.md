@@ -156,7 +156,7 @@ critic the same boundary list from §3.
    against usage in `apps/web/src`; browser spot-check of kk and en on the
    main flows.
 5. **unfinished-work** — hunts TODO/FIXME/todo!()/unimplemented/`throw new
-Error("not implemented")`, dead routes, feature-flagged stubs, buttons with
+   Error("not implemented")`, dead routes, feature-flagged stubs, buttons with
    no handler, empty handlers, commented-out blocks, endpoints not wired into
    the router, migrations without corresponding UI, BACKLOG items claimed done
    but absent.

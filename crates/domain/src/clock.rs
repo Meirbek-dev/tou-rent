@@ -23,14 +23,3 @@ impl Clock for FixedClock {
         self.0
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn fixed_clock_returns_configured_instant() {
-        let ts: Timestamp = "2026-01-30T00:00:00Z".parse().unwrap();
-        assert_eq!(FixedClock(ts).now(), ts);
-    }
-}

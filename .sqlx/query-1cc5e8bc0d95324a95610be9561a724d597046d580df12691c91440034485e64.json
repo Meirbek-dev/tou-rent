@@ -6,32 +6,68 @@
       {
         "ordinal": 0,
         "name": "code",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.investment_attachments",
+            "name": "code"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "ordinal",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "refdata.investment_attachments",
+            "name": "ordinal"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "label_ru",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.investment_attachments",
+            "name": "label_ru"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "label_kk",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.investment_attachments",
+            "name": "label_kk"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "label_en",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.investment_attachments",
+            "name": "label_en"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "rule_ref",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.investment_attachments",
+            "name": "rule_ref"
+          }
+        }
       }
     ],
     "parameters": {

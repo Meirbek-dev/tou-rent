@@ -6,12 +6,24 @@
       {
         "ordinal": 0,
         "name": "requires_council",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "requires_council"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "min_study_credits",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "refdata.benefit_schemes",
+            "name": "min_study_credits"
+          }
+        }
       }
     ],
     "parameters": {

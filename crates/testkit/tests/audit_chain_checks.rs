@@ -38,11 +38,6 @@ macro_rules! require_db {
 async fn inv_a01_chain_check_is_recorded_and_readable() {
     let db = require_db!();
 
-    let before = sqlx::query_scalar!(r#"SELECT count(*) AS "count!" FROM audit.chain_checks"#)
-        .fetch_one(&db)
-        .await
-        .expect("счетчик сверок");
-
     let check = tou_db::audit::run_chain_check(&db)
         .await
         .expect("сверка цепочки");
@@ -56,13 +51,17 @@ async fn inv_a01_chain_check_is_recorded_and_readable() {
         "у целой цепочки места расхождения быть не может"
     );
 
-    let after = sqlx::query_scalar!(r#"SELECT count(*) AS "count!" FROM audit.chain_checks"#)
-        .fetch_one(&db)
-        .await
-        .expect("счетчик сверок");
+    // Своя запись по метке времени, а не разница общего счетчика: таблицу
+    // параллельно пишет и ежечасная сверка apps/jobs
+    let recorded = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "count!" FROM audit.chain_checks WHERE checked_at = $1"#,
+        check.checked_at
+    )
+    .fetch_one(&db)
+    .await
+    .expect("запись сверки");
     assert_eq!(
-        after,
-        before + 1,
+        recorded, 1,
         "каждая сверка обязана оставить ровно одну запись"
     );
 

@@ -6,32 +6,68 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.notifications",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "user_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.notifications",
+            "name": "user_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "kind",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.notifications",
+            "name": "kind"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "payload",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "core.notifications",
+            "name": "payload"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.notifications",
+            "name": "created_at"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "read_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.notifications",
+            "name": "read_at"
+          }
+        }
       }
     ],
     "parameters": {

@@ -6,27 +6,57 @@
       {
         "ordinal": 0,
         "name": "item_code",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.contract_checklists",
+            "name": "item_code"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "label_ru",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.checklist_items",
+            "name": "label_ru"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "rule_ref",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "refdata.checklist_items",
+            "name": "rule_ref"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "checked_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contract_checklists",
+            "name": "checked_at"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "checked_by_name?",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.users",
+            "name": "full_name"
+          }
+        }
       }
     ],
     "parameters": {

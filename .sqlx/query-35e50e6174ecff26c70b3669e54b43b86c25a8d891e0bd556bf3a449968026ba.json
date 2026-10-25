@@ -6,47 +6,101 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "tender_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "tender_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "version",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "version"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "summary",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "summary"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "previous_deadline",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "previous_deadline"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "new_deadline",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "new_deadline"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "doc_key",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "doc_key"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "created_by_name?",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.users",
+            "name": "full_name"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "created_at"
+          }
+        }
       }
     ],
     "parameters": {
@@ -62,7 +116,7 @@
       true,
       false,
       true,
-      false,
+      true,
       false
     ]
   },

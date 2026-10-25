@@ -6,57 +6,118 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "kind!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 2,
         "name": "special_request_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "special_request_id"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "contract_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "contract_id"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "acceptance_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "acceptance_id"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "title",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "title"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "file_key",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "file_key"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "payload",
-        "type_info": "Jsonb"
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "payload"
+          }
+        }
       },
       {
         "ordinal": 8,
         "name": "published_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "published_at"
+          }
+        }
       },
       {
         "ordinal": 9,
         "name": "unpublish_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "unpublish_at"
+          }
+        }
       },
       {
         "ordinal": 10,
         "name": "unpublished_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.public_records",
+            "name": "unpublished_at"
+          }
+        }
       }
     ],
     "parameters": {

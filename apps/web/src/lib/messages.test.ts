@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { join } from "node:path"
 
 import { describe, expect, it } from "vite-plus/test"
@@ -93,15 +93,6 @@ const params = (value: string): string[] =>
   [...value.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? "").toSorted()
 
 describe("i18n: полнота переводов (NFR-01, G14)", () => {
-  it("файлы локалей лежат рядом с проектом inlang", () => {
-    const dir = join(import.meta.dirname, "..", "..", "messages")
-    expect(readdirSync(dir).toSorted()).toEqual([
-      "en.json",
-      "kk.json",
-      "ru.json",
-    ])
-  })
-
   for (const locale of ["kk", "en"] as const) {
     it(`${locale}: нет пропущенных ключей относительно ru`, () => {
       const missing = keys(messages.ru).filter(

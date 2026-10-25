@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "withdrawn_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.special_requests",
+            "name": "withdrawn_at"
+          }
+        }
       }
     ],
     "parameters": {

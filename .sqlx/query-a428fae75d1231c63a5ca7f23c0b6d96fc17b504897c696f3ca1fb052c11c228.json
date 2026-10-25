@@ -6,122 +6,246 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "tender_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "tender_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "lot_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "lot_id"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "lot_seq?",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.lots",
+            "name": "seq"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "object_name",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.objects",
+            "name": "name"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "tenant_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "tenant_id"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "tenant_name",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.users",
+            "name": "full_name"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "status!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 8,
         "name": "place!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 9,
         "name": "evaded!",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": "Expression"
       },
       {
         "ordinal": 10,
         "name": "monthly_rate",
-        "type_info": "Numeric"
+        "type_info": "Numeric",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "monthly_rate"
+          }
+        }
       },
       {
         "ordinal": 11,
         "name": "lease_months",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "lease_months"
+          }
+        }
       },
       {
         "ordinal": 12,
         "name": "reg_number",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "reg_number"
+          }
+        }
       },
       {
         "ordinal": 13,
         "name": "registered_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "registered_at"
+          }
+        }
       },
       {
         "ordinal": 14,
         "name": "signed_scan_key",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "signed_scan_key"
+          }
+        }
       },
       {
         "ordinal": 15,
         "name": "pdf_key",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "pdf_key"
+          }
+        }
       },
       {
         "ordinal": 16,
         "name": "signature_status!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 17,
         "name": "drafted_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "drafted_at"
+          }
+        }
       },
       {
         "ordinal": 18,
         "name": "handed_to_tenant_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "handed_to_tenant_at"
+          }
+        }
       },
       {
         "ordinal": 19,
         "name": "tenant_signed_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "tenant_signed_at"
+          }
+        }
       },
       {
         "ordinal": 20,
         "name": "documents_received_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "documents_received_at"
+          }
+        }
       },
       {
         "ordinal": 21,
         "name": "checklist_done_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "checklist_done_at"
+          }
+        }
       },
       {
         "ordinal": 22,
         "name": "landlord_signed_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "landlord_signed_at"
+          }
+        }
       },
       {
         "ordinal": 23,
         "name": "copy_sent_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "copy_sent_at"
+          }
+        }
       }
     ],
     "parameters": {

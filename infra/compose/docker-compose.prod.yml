@@ -97,7 +97,7 @@ x-api-image: &api-image
 services:
   caddy:
     <<: [*logging, *hardening]
-    image: caddy:2.11.4
+    image: caddy:2.11.7
     restart: unless-stopped
     # Единственное сохраненное право: занять 80 и 443. Все остальное снято
     cap_add: [NET_BIND_SERVICE]
@@ -216,7 +216,7 @@ services:
 
   postgres:
     <<: [*logging, *hardening]
-    image: postgres:19beta2
+    image: postgres:19rc1
     restart: unless-stopped
     # Штатный вход образа поднимается root'ом и снимает права до `postgres`,
     # поправив владельца каталога данных, - на это и оставлен короткий список
@@ -247,7 +247,7 @@ services:
   # записей безобидна, потеря всех - нет
   redis:
     <<: [*logging, *hardening]
-    image: redis:8.10.1
+    image: redis:8.10.2
     restart: unless-stopped
     # Штатный вход образа снимает права до `redis` только если у него есть
     # SETUID и SETGID, а их снял cap_drop - и redis-server оставался root'ом.
@@ -285,7 +285,7 @@ services:
   # и консоль доступны только из сети стенда, снаружи файлы ходят через api.
   rustfs:
     <<: [*logging, *hardening]
-    image: rustfs/rustfs:1.0.0-rc.5
+    image: rustfs/rustfs:1.0.4
     restart: unless-stopped
     mem_limit: 2g
     environment:
@@ -311,7 +311,7 @@ services:
   # и шаг не зависит от клиента конкретного вендора (A-093).
   rustfs-init:
     <<: *hardening
-    image: amazon/aws-cli:2.36.37
+    image: amazon/aws-cli:2.38.5
     restart: "no"
     mem_limit: 256m
     depends_on:
@@ -342,7 +342,7 @@ services:
   # собственный клиент `rc` (A-093).
   rustfs-iam:
     <<: *hardening
-    image: rustfs/rc:v0.1.31
+    image: rustfs/rc:v0.1.36
     restart: "no"
     mem_limit: 256m
     depends_on:

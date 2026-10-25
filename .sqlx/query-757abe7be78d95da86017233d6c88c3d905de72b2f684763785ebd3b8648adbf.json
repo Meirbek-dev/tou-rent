@@ -6,22 +6,46 @@
       {
         "ordinal": 0,
         "name": "submission_deadline!",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "submission_deadline"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "opening_at!",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tenders",
+            "name": "opening_at"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "version",
-        "type_info": "Int4"
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "version"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "previous_deadline",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.tender_amendments",
+            "name": "previous_deadline"
+          }
+        }
       }
     ],
     "parameters": {

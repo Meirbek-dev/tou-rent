@@ -6,7 +6,13 @@
       {
         "ordinal": 0,
         "name": "checklist_done_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.contracts",
+            "name": "checklist_done_at"
+          }
+        }
       }
     ],
     "parameters": {

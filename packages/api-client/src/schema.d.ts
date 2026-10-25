@@ -3758,7 +3758,7 @@ export interface components {
             last_intact_at?: string | null;
         };
         AuthProvidersDto: {
-            oidc?: null | components["schemas"]["OidcProviderDto"];
+            oidc?: components["schemas"]["OidcProviderDto"] | null;
         };
         /** @description Льгота договора и расписание платы (FR-1205). */
         BenefitGrantDto: {
@@ -4626,7 +4626,7 @@ export interface components {
             viewing_terms?: string | null;
         };
         ManageMemberRequest: {
-            member_role?: null | components["schemas"]["MemberRoleDto"];
+            member_role?: components["schemas"]["MemberRoleDto"] | null;
             /** Format: uuid */
             user_id: string;
         };
@@ -4858,7 +4858,7 @@ export interface components {
             lot_id: string;
             note: string;
             price?: string | null;
-            resolution?: null | components["schemas"]["OfflineResolution"];
+            resolution?: components["schemas"]["OfflineResolution"] | null;
             /** Format: int32 */
             seq: number;
         };
@@ -4937,7 +4937,7 @@ export interface components {
         Problem: {
             code: components["schemas"]["ErrorCode"];
             detail?: string | null;
-            rule?: null | components["schemas"]["Rule"];
+            rule?: components["schemas"]["Rule"] | null;
             /** Format: int32 */
             status: number;
             title: string;
@@ -5334,8 +5334,8 @@ export interface components {
         };
         /** @description Ход рассмотрения заявки: заключение подразделения и решение Правления. */
         SpecialProgressDto: {
-            decision?: null | components["schemas"]["SpecialDecisionDto"];
-            review?: null | components["schemas"]["SpecialReviewDto"];
+            decision?: components["schemas"]["SpecialDecisionDto"] | null;
+            review?: components["schemas"]["SpecialReviewDto"] | null;
         };
         /** @description Заявка особого порядка (Прил. 3, п. 88). */
         SpecialRequestDto: {
@@ -5441,10 +5441,10 @@ export interface components {
             requested_months?: number | null;
         };
         TallyDto: {
-            chair_vote?: null | components["schemas"]["VoteValueDto"];
+            chair_vote?: components["schemas"]["VoteValueDto"] | null;
             /** @description Присутствующие с правом голоса по этому лоту (база большинства, п. 13) */
             eligible: number;
-            outcome?: null | components["schemas"]["DecisionDto"];
+            outcome?: components["schemas"]["DecisionDto"] | null;
             pending?: string | null;
             votes_against: number;
             votes_for: number;
@@ -9296,9 +9296,9 @@ export interface operations {
                 /** @description 1..=100, по умолчанию 50 */
                 limit?: number | null;
                 /** @description Витрина FR-102: статус объекта (вычисляемый, FR-103) */
-                status?: null | components["schemas"]["ObjectStatusDto"];
+                status?: components["schemas"]["ObjectStatusDto"] | null;
                 /** @description Витрина FR-102: вид имущества */
-                kind?: null | components["schemas"]["ObjectKindDto"];
+                kind?: components["schemas"]["ObjectKindDto"] | null;
                 /** @description Поиск по названию и адресу */
                 q?: string | null;
                 /**

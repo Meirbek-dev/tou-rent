@@ -174,6 +174,21 @@ vp run api:restart         # api подхватывает infra/compose/.zitadel
   отмены у них нет (A-100). Обратно совместимая миграция это переживает,
   несовместимая требует разбора вручную - о чем скрипт и сообщает.
 
+  **Обновление Postgres:** смена мажора или переход с бета/rc (19beta2 → 19rc1
+  поменял формат каталога) старый том не читает, и скрипт такой деплой
+  отклоняет до `compose up`. Переход - дамп и восстановление, в окно без торгов:
+
+  ```bash
+  F=docker-compose.prod.yml
+  podman compose -f $F stop api web jobs
+  podman compose -f $F exec -T postgres pg_dumpall -U tou_rent > pg-$(date +%F).sql
+  podman compose -f $F down
+  podman volume rm tou-rent_pg_data   # дамп выше - единственная копия, проверьте его размер
+  podman compose -f $F up -d postgres
+  podman compose -f $F exec -T postgres psql -U tou_rent -d postgres < pg-$(date +%F).sql
+  ./deploy.sh
+  ```
+
   Первое наполнение демо-данными (Прил. Б) после деплоя:
 
   ```bash

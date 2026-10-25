@@ -48,3 +48,4 @@ apps/e2e/results.xml
 # Свежесть слепка стережет `sqlx prepare --check` в job rust-test.
 
 **/__pycache__
+.vitest/

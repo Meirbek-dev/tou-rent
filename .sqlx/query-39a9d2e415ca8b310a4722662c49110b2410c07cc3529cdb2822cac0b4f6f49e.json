@@ -6,22 +6,46 @@
       {
         "ordinal": 0,
         "name": "checked_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit.chain_checks",
+            "name": "checked_at"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "intact",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "audit.chain_checks",
+            "name": "intact"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "entries",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.chain_checks",
+            "name": "entries"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "broken_at",
-        "type_info": "Int8"
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit.chain_checks",
+            "name": "broken_at"
+          }
+        }
       }
     ],
     "parameters": {

@@ -6,47 +6,91 @@
       {
         "ordinal": 0,
         "name": "id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.acts",
+            "name": "id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "contract_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.acts",
+            "name": "contract_id"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "kind!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 3,
         "name": "act_date",
-        "type_info": "Date"
+        "type_info": "Date",
+        "origin": {
+          "Table": {
+            "table": "core.acts",
+            "name": "act_date"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "note",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.acts",
+            "name": "note"
+          }
+        }
       },
       {
         "ordinal": 5,
         "name": "pdf_key",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.acts",
+            "name": "pdf_key"
+          }
+        }
       },
       {
         "ordinal": 6,
         "name": "signed_scan_key",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.acts",
+            "name": "signed_scan_key"
+          }
+        }
       },
       {
         "ordinal": 7,
         "name": "signature_status!",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": "Expression"
       },
       {
         "ordinal": 8,
         "name": "created_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.acts",
+            "name": "created_at"
+          }
+        }
       }
     ],
     "parameters": {

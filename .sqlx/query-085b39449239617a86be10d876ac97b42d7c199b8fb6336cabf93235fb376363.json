@@ -6,27 +6,57 @@
       {
         "ordinal": 0,
         "name": "member_id",
-        "type_info": "Uuid"
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "core.coi_declarations",
+            "name": "member_id"
+          }
+        }
       },
       {
         "ordinal": 1,
         "name": "full_name",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.users",
+            "name": "full_name"
+          }
+        }
       },
       {
         "ordinal": 2,
         "name": "has_conflict",
-        "type_info": "Bool"
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "core.coi_declarations",
+            "name": "has_conflict"
+          }
+        }
       },
       {
         "ordinal": 3,
         "name": "details",
-        "type_info": "Text"
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "core.coi_declarations",
+            "name": "details"
+          }
+        }
       },
       {
         "ordinal": 4,
         "name": "declared_at",
-        "type_info": "Timestamptz"
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "core.coi_declarations",
+            "name": "declared_at"
+          }
+        }
       }
     ],
     "parameters": {

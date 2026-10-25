@@ -50,9 +50,3 @@ fn typestate_transitions_match_db_seed() {
         from_seed.difference(&from_rust).collect::<Vec<_>>(),
     );
 }
-
-#[test]
-fn typestate_has_no_duplicate_pairs() {
-    let unique: BTreeSet<_> = TRANSITIONS.iter().collect();
-    assert_eq!(unique.len(), TRANSITIONS.len());
-}

@@ -1372,7 +1372,7 @@ function roleLabel(role: string): string {
 function MrpPanel() {
   const queryClient = useQueryClient()
   const { data: years } = useQuery(mrpQuery)
-  const [year, setYear] = useState(String(new Date().getFullYear()))
+  const [year, setYear] = useState(() => String(new Date().getFullYear()))
   const [amount, setAmount] = useState("")
 
   const save = useMutation({

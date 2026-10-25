@@ -6,7 +6,7 @@ name: tou-rent-dev
 # нативные бинарники (A-003). Кеш-тома разделяются с контейнерными cargo test.
 # Профиль api: `podman compose --profile api up -d` (или `vp run stack:up`).
 x-rust-workspace: &rust-workspace
-  image: rust:1.98.0
+  image: rust:1.99.1
   working_dir: /w
   profiles: [api]
   environment:
@@ -92,7 +92,7 @@ services:
   # а внутри сети стенда тот же адрес перехватывает алиас на сам Zitadel -
   # правка hosts на машине разработчика не нужна.
   zitadel:
-    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v4.17.2}
+    image: ghcr.io/zitadel/zitadel:${ZITADEL_VERSION:-v4.20.0}
     profiles: [zitadel]
     # Мастер-ключ Zitadel - ровно 32 байта (dev-значение; в проде - из SOPS)
     command: start-from-init --masterkey ${ZITADEL_MASTERKEY:-DevMasterkeyNeeds32Characters!!!} --tlsMode disabled
@@ -143,7 +143,7 @@ services:
   # Начиная с Zitadel v4 интерфейс входа поставляется отдельным контейнером.
   # Сам Zitadel направляет браузер на :3002/ui/v2/login; api остается на :8081.
   zitadel-login:
-    image: ghcr.io/zitadel/zitadel-login:${ZITADEL_VERSION:-v4.17.2}
+    image: ghcr.io/zitadel/zitadel-login:${ZITADEL_VERSION:-v4.20.0}
     profiles: [zitadel]
     environment:
       ZITADEL_API_URL: http://id.127.0.0.1.nip.io:8081
@@ -161,7 +161,7 @@ services:
   # Проект, роли и OIDC-клиент заводятся скриптом, а не руками в UI:
   # стенд воспроизводим с нуля. Результат - infra/compose/.zitadel/oidc.env
   zitadel-init:
-    image: alpine:3.24.1
+    image: alpine:3.24.3
     profiles: [zitadel]
     entrypoint: ["/bin/sh", "/provision.sh"]
     environment:
@@ -182,7 +182,7 @@ services:
         condition: service_healthy
 
   postgres:
-    image: postgres:19beta2
+    image: postgres:19rc1
     environment:
       POSTGRES_DB: tou_rent
       POSTGRES_USER: tou_rent
@@ -200,14 +200,14 @@ services:
       retries: 10
 
   redis:
-    image: redis:8.10.1
+    image: redis:8.10.2
     ports:
       - "6379:6379"
 
   # Объектное хранилище - RustFS (ADR-0006): тот же S3 API, что и раньше,
   # поэтому у приложения меняется только адрес. Одна нода, один диск.
   rustfs:
-    image: rustfs/rustfs:1.0.0-rc.5
+    image: rustfs/rustfs:1.0.4
     environment:
       RUSTFS_VOLUMES: /data
       RUSTFS_ADDRESS: ":9000"
@@ -243,7 +243,7 @@ services:
   # файл досье оставался бы на диске разработчика пять лет, и единственной
   # уборкой было бы удаление тома целиком. Прод-режим проверяется на проде.
   rustfs-init:
-    image: amazon/aws-cli:2.36.37
+    image: amazon/aws-cli:2.38.5
     depends_on:
       - rustfs
     environment:
