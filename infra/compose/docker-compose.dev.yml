@@ -42,7 +42,9 @@ x-rust-workspace: &rust-workspace
     # чужой api: web живет на :3000, а апгрейд идет прямо в api на :8080 -
     # dev-прокси его не проксирует (A-024). Поэтому в списке именно web,
     # а не сам api; уберите :3000 - и торги на стенде перестанут открываться
-    WS_ALLOWED_ORIGINS: http://localhost:${TOU_DEV_WEB_PORT:-3000},http://127.0.0.1:${TOU_DEV_WEB_PORT:-3000},http://localhost:${TOU_DEV_API_PORT:-8080}
+    # TOU_DEV_EXTRA_ORIGINS: comma-separated origins the web is also opened from
+    # (e.g. a Tailscale Serve URL of a remote dev host)
+    WS_ALLOWED_ORIGINS: http://localhost:${TOU_DEV_WEB_PORT:-3000},http://127.0.0.1:${TOU_DEV_WEB_PORT:-3000},http://localhost:${TOU_DEV_API_PORT:-8080}${TOU_DEV_EXTRA_ORIGINS:+,}${TOU_DEV_EXTRA_ORIGINS:-}
     # Очистка данных из кабинета админа (М15). На стенде включена всегда -
     # это и есть способ вернуть его в пустое состояние; на проде переменная
     # задается только на окно перед вводом в работу (см. .env.prod.example)
