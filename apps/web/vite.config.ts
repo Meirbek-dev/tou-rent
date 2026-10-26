@@ -56,6 +56,9 @@ const config = defineConfig({
     clearMocks: false,
   },
   resolve: { tsconfigPaths: true },
+  // TOU_DEV_WEB_PORT moves the dev server off :3000 where that port is taken;
+  // it must match the value given to infra/compose/docker-compose.dev.yml
+  server: { port: Number(process.env["TOU_DEV_WEB_PORT"] ?? 3000) },
   ...(plugins ? { plugins } : {}),
 })
 

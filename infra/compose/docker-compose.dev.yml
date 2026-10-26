@@ -1,5 +1,12 @@
 # Дев-стенд TOU.Rent (арх. § 2): все авторитетные данные - PostgreSQL,
 # Redis - только эфемерное, RustFS - файлы.
+#
+# Host ports: published on loopback only (TOU_DEV_BIND) and overridable from the
+# shell for hosts where the defaults are taken: TOU_DEV_API_PORT (8080),
+# TOU_DEV_WEB_PORT (3000, the web dev server - see apps/web/vite.config.ts),
+# TOU_DEV_ZITADEL_PORT (8081), TOU_DEV_ZITADEL_LOGIN_PORT (3002),
+# TOU_DEV_PG_PORT (5432), TOU_DEV_REDIS_PORT (6379), TOU_DEV_RUSTFS_PORT (9000),
+# TOU_DEV_RUSTFS_CONSOLE_PORT (9001).
 name: tou-rent-dev
 
 # Rust-сервисы собираются и работают в контейнере: Windows-хост не линкует
@@ -35,7 +42,7 @@ x-rust-workspace: &rust-workspace
     # чужой api: web живет на :3000, а апгрейд идет прямо в api на :8080 -
     # dev-прокси его не проксирует (A-024). Поэтому в списке именно web,
     # а не сам api; уберите :3000 - и торги на стенде перестанут открываться
-    WS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000,http://localhost:8080
+    WS_ALLOWED_ORIGINS: http://localhost:${TOU_DEV_WEB_PORT:-3000},http://127.0.0.1:${TOU_DEV_WEB_PORT:-3000},http://localhost:${TOU_DEV_API_PORT:-8080}
     # Очистка данных из кабинета админа (М15). На стенде включена всегда -
     # это и есть способ вернуть его в пустое состояние; на проде переменная
     # задается только на окно перед вводом в работу (см. .env.prod.example)
@@ -73,7 +80,7 @@ services:
     <<: *rust-workspace
     command: cargo run -p api
     ports:
-      - "8080:8080"
+      - "${TOU_DEV_BIND:-127.0.0.1}:${TOU_DEV_API_PORT:-8080}:8080"
     # Реквизиты OIDC-клиента (FR-1502) пишет провижининг Zitadel; файла нет -
     # api поднимается с локальным входом контура 1, как и раньше
     env_file:
@@ -108,8 +115,8 @@ services:
       ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
       # Порт совпадает снаружи и внутри: иначе issuer из id_token не совпал бы
       # с адресом, по которому api ходит за discovery
-      ZITADEL_PORT: 8081
-      ZITADEL_EXTERNALPORT: 8081
+      ZITADEL_PORT: ${TOU_DEV_ZITADEL_PORT:-8081}
+      ZITADEL_EXTERNALPORT: ${TOU_DEV_ZITADEL_PORT:-8081}
       ZITADEL_EXTERNALDOMAIN: id.127.0.0.1.nip.io
       ZITADEL_EXTERNALSECURE: "false"
       ZITADEL_TLS_ENABLED: "false"
@@ -123,7 +130,7 @@ services:
       ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2100-01-01T00:00:00Z"
       ZITADEL_FIRSTINSTANCE_PATPATH: /pat/pat.txt
     ports:
-      - "8081:8081"
+      - "${TOU_DEV_BIND:-127.0.0.1}:${TOU_DEV_ZITADEL_PORT:-8081}:${TOU_DEV_ZITADEL_PORT:-8081}"
     volumes:
       - zitadel_pat:/pat
     healthcheck:
@@ -146,12 +153,12 @@ services:
     image: ghcr.io/zitadel/zitadel-login:${ZITADEL_VERSION:-v4.20.0}
     profiles: [zitadel]
     environment:
-      ZITADEL_API_URL: http://id.127.0.0.1.nip.io:8081
+      ZITADEL_API_URL: http://id.127.0.0.1.nip.io:${TOU_DEV_ZITADEL_PORT:-8081}
       NEXT_PUBLIC_BASE_PATH: /ui/v2/login
       ZITADEL_SERVICE_USER_TOKEN_FILE: /pat/pat.txt
-      CUSTOM_REQUEST_HEADERS: Host:id.127.0.0.1.nip.io:8081,X-Forwarded-Proto:http
+      CUSTOM_REQUEST_HEADERS: Host:id.127.0.0.1.nip.io:${TOU_DEV_ZITADEL_PORT:-8081},X-Forwarded-Proto:http
     ports:
-      - "3002:3000"
+      - "${TOU_DEV_BIND:-127.0.0.1}:${TOU_DEV_ZITADEL_LOGIN_PORT:-3002}:3000"
     volumes:
       - zitadel_pat:/pat:ro
     depends_on:
@@ -165,13 +172,13 @@ services:
     profiles: [zitadel]
     entrypoint: ["/bin/sh", "/provision.sh"]
     environment:
-      ZITADEL_INTERNAL_URL: http://id.127.0.0.1.nip.io:8081
-      ZITADEL_ISSUER: http://id.127.0.0.1.nip.io:8081
+      ZITADEL_INTERNAL_URL: http://id.127.0.0.1.nip.io:${TOU_DEV_ZITADEL_PORT:-8081}
+      ZITADEL_ISSUER: http://id.127.0.0.1.nip.io:${TOU_DEV_ZITADEL_PORT:-8081}
       # Куда провайдер возвращает браузер: в dev это web-сервер (:3000),
       # он проксирует /api на api (см. apps/web/vite.config.ts)
-      OIDC_REDIRECT_URL: http://localhost:3000/api/v1/auth/oidc/callback
-      OIDC_EXTRA_REDIRECT_URL: http://localhost:8080/api/v1/auth/oidc/callback
-      OIDC_POST_LOGOUT_URL: http://localhost:3000/
+      OIDC_REDIRECT_URL: http://localhost:${TOU_DEV_WEB_PORT:-3000}/api/v1/auth/oidc/callback
+      OIDC_EXTRA_REDIRECT_URL: http://localhost:${TOU_DEV_API_PORT:-8080}/api/v1/auth/oidc/callback
+      OIDC_POST_LOGOUT_URL: http://localhost:${TOU_DEV_WEB_PORT:-3000}/
       DEMO_USER_PASSWORD: ${ZITADEL_DEMO_PASSWORD:-TouDevDemo2026!}
     volumes:
       - ../zitadel/provision.sh:/provision.sh:ro,z
@@ -188,7 +195,7 @@ services:
       POSTGRES_USER: tou_rent
       POSTGRES_PASSWORD: tou_rent_dev # dev-only
     ports:
-      - "5432:5432"
+      - "${TOU_DEV_BIND:-127.0.0.1}:${TOU_DEV_PG_PORT:-5432}:5432"
     # Образы 18+: том монтируется в /var/lib/postgresql (данные - в подкаталоге
     # с номером мажорной версии), это позволяет pg_upgrade --link при переходе 19beta→19
     volumes:
@@ -202,7 +209,7 @@ services:
   redis:
     image: redis:8.10.2
     ports:
-      - "6379:6379"
+      - "${TOU_DEV_BIND:-127.0.0.1}:${TOU_DEV_REDIS_PORT:-6379}:6379"
 
   # Объектное хранилище - RustFS (ADR-0006): тот же S3 API, что и раньше,
   # поэтому у приложения меняется только адрес. Одна нода, один диск.
@@ -216,8 +223,8 @@ services:
       RUSTFS_ACCESS_KEY: tou_rent
       RUSTFS_SECRET_KEY: tou_rent_dev # dev-only
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${TOU_DEV_BIND:-127.0.0.1}:${TOU_DEV_RUSTFS_PORT:-9000}:9000"
+      - "${TOU_DEV_BIND:-127.0.0.1}:${TOU_DEV_RUSTFS_CONSOLE_PORT:-9001}:9001"
     volumes:
       - rustfs_data:/data
 
