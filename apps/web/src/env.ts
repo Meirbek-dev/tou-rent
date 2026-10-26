@@ -24,7 +24,7 @@ export const env = createEnv({
     // и свой origin в браузере (`lib/api.ts`). Объявленная, но не читаемая
     // переменная хуже необъявленной: она создает уверенность, что значение
     // куда-то доедет.
-    /** Хост WS-комнаты торгов (FR-603); пусто - тот же origin */
+    /** Хост WS-комнаты торгов (FR-603); пусто - тот же origin, `:порт` - хост страницы */
     VITE_API_WS_HOST: v.optional(v.pipe(v.string(), v.minLength(1))),
     /** Пусто - Sentry не поднимается (см. instrument.server.mjs) */
     VITE_SENTRY_DSN: v.optional(v.pipe(v.string(), v.url())),

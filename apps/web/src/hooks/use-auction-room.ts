@@ -32,6 +32,8 @@ type RoomEvent =
 // прод-сборка web на :3000 и api на :8080 без обратного прокси, - и там
 // сокет на свой origin упирался в тот же nitro, который апгрейд не умеет.
 // Пустая переменная (прод-образ ее не задает) оставляет свой origin.
+// Значение с одним портом (`:25080`) берет хост страницы: так одна dev-сборка
+// работает и через SSH-туннель на localhost, и через имя tailnet.
 //
 // Доступ через точку, а не через скобки: в прод-сборке Vite подставляет
 // значение статически именно по `import.meta.env.ИМЯ`, а обращение по ключу
@@ -41,8 +43,10 @@ const WS_HOST: string | undefined = import.meta.env.VITE_API_WS_HOST
 
 function socketUrl(auctionId: string): string {
   const scheme = window.location.protocol === "https:" ? "wss:" : "ws:"
-  const host =
-    WS_HOST ?? (import.meta.env.DEV ? "localhost:8080" : window.location.host)
+  const host = WS_HOST?.startsWith(":")
+    ? `${window.location.hostname}${WS_HOST}`
+    : (WS_HOST ??
+      (import.meta.env.DEV ? "localhost:8080" : window.location.host))
   return `${scheme}//${host}/api/v1/auctions/${auctionId}/ws`
 }
 

@@ -18,7 +18,7 @@ interface ViteTypeOptions {
 }
 
 interface ImportMetaEnv {
-  /** Хост WS-комнаты торгов (FR-603); пусто - тот же origin */
+  /** Хост WS-комнаты торгов (FR-603); пусто - тот же origin, `:порт` - хост страницы */
   readonly VITE_API_WS_HOST?: string
   /** Пусто - Sentry не поднимается (см. instrument.server.mjs) */
   readonly VITE_SENTRY_DSN?: string
