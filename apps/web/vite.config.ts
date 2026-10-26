@@ -57,8 +57,16 @@ const config = defineConfig({
   },
   resolve: { tsconfigPaths: true },
   // TOU_DEV_WEB_PORT moves the dev server off :3000 where that port is taken;
-  // it must match the value given to infra/compose/docker-compose.dev.yml
-  server: { port: Number(process.env["TOU_DEV_WEB_PORT"] ?? 3000) },
+  // it must match the value given to infra/compose/docker-compose.dev.yml.
+  // Loopback and strictPort: a server that drifts to the next free port breaks
+  // the OIDC redirects and WebSocket origins tied to this one. An explicit host
+  // also lets it share the port with a listener on another address (Tailscale
+  // Serve binds the tailnet IP), which the default "localhost" probe refuses.
+  server: {
+    host: "127.0.0.1",
+    port: Number(process.env["TOU_DEV_WEB_PORT"] ?? 3000),
+    strictPort: true,
+  },
   ...(plugins ? { plugins } : {}),
 })
 
