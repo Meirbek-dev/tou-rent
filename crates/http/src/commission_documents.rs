@@ -68,7 +68,7 @@ fn page(rows: tou_db::Page<Document>) -> CommissionDocumentPage {
 }
 
 #[utoipa::path(get, path = "/api/v1/tenders/{id}/commission-documents", tag = "commission-documents",
-    params(("id" = Uuid, Path)), responses((status = 200, body = CommissionDocumentPage)))]
+    params(("id" = Uuid, Path)), responses((status = 200, description = "OK", body = CommissionDocumentPage)))]
 pub async fn list_commission_documents(
     user: CurrentUser,
     State(state): State<AppState>,
@@ -81,7 +81,7 @@ pub async fn list_commission_documents(
 }
 
 #[utoipa::path(get, path = "/api/v1/commission-documents/my", tag = "commission-documents",
-    responses((status = 200, body = CommissionDocumentPage)))]
+    responses((status = 200, description = "OK", body = CommissionDocumentPage)))]
 pub async fn my_commission_documents(
     user: CurrentUser,
     State(state): State<AppState>,
@@ -111,7 +111,7 @@ fn text(value: &str, max: usize) -> Result<&str, ApiError> {
 #[utoipa::path(post, path = "/api/v1/tenders/{id}/commission-documents", tag = "commission-documents",
     params(("id" = Uuid, Path), UploadCommissionDocument),
     request_body(content = String, content_type = "multipart/form-data"),
-    responses((status = 200, body = CommissionDocumentDto), (status = 422, body = crate::error::Problem)))]
+    responses((status = 200, description = "OK", body = CommissionDocumentDto), (status = 422, description = "Unprocessable Content", body = crate::error::Problem)))]
 pub async fn upload_commission_document(
     user: CurrentUser,
     State(state): State<AppState>,
@@ -180,7 +180,7 @@ pub struct ShareCommissionDocument {
 
 #[utoipa::path(put, path = "/api/v1/commission-documents/{id}/visibility", tag = "commission-documents",
     params(("id" = Uuid, Path)), request_body = ShareCommissionDocument,
-    responses((status = 200, body = CommissionDocumentDto)))]
+    responses((status = 200, description = "OK", body = CommissionDocumentDto)))]
 pub async fn share_commission_document(
     user: CurrentUser,
     State(state): State<AppState>,
@@ -198,7 +198,7 @@ pub async fn share_commission_document(
 }
 
 #[utoipa::path(get, path = "/api/v1/commission-documents/{id}/pdf", tag = "commission-documents",
-    params(("id" = Uuid, Path)), responses((status = 200, content_type = "application/pdf"), (status = 404, body = crate::error::Problem)))]
+    params(("id" = Uuid, Path)), responses((status = 200, description = "OK", content_type = "application/pdf"), (status = 404, description = "Not Found", body = crate::error::Problem)))]
 pub async fn commission_document_pdf(
     user: CurrentUser,
     State(state): State<AppState>,

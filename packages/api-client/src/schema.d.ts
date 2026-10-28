@@ -6109,6 +6109,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6117,6 +6118,7 @@ export interface operations {
                     "application/json": components["schemas"]["AdminSuccessfulOutcomeStateDto"];
                 };
             };
+            /** @description Forbidden */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6125,6 +6127,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Not Found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6151,6 +6154,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6159,6 +6163,7 @@ export interface operations {
                     "application/json": components["schemas"]["AdminSuccessfulOutcomeStateDto"];
                 };
             };
+            /** @description Forbidden */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6167,6 +6172,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Not Found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6175,6 +6181,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Conflict */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6183,6 +6190,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7546,6 +7554,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7567,6 +7576,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7575,6 +7585,7 @@ export interface operations {
                     "application/pdf": unknown;
                 };
             };
+            /** @description Not Found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7600,6 +7611,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -11422,6 +11434,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -11452,6 +11465,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -11460,6 +11474,7 @@ export interface operations {
                     "application/json": components["schemas"]["CommissionDocumentDto"];
                 };
             };
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -12010,6 +12025,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -12018,6 +12034,7 @@ export interface operations {
                     "application/json": components["schemas"]["OfflineResultsState"];
                 };
             };
+            /** @description Not Found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -12043,6 +12060,7 @@ export interface operations {
             };
         };
         responses: {
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -12051,6 +12069,7 @@ export interface operations {
                     "application/json": components["schemas"]["OfflineResultsState"];
                 };
             };
+            /** @description Conflict */
             409: {
                 headers: {
                     [name: string]: unknown;

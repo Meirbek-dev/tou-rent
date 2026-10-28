@@ -46,7 +46,7 @@ export default function LocaleSwitcher() {
             size="sm"
             className="gap-1.5 px-2"
             aria-label={m.language_switcher_label({
-              language: currentLanguage,
+              language: `${current.toUpperCase()} (${currentLanguage})`,
             })}
           />
         }

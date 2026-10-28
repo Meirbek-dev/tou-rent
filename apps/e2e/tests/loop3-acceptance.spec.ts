@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test"
 
+import type { components } from "../../../packages/api-client/src/schema"
+
 import { accounts, loginAsUi, provisionSpecialSite } from "./helpers"
 
 /**
@@ -245,7 +247,8 @@ test("особый порядок: инвестор - заявка, заключ
     await guest.request.get("/")
     const portal = await guest.request.get("/api/v1/public-records")
     expect(portal.status(), "реестр публикаций портала").toBe(200)
-    const records = (await portal.json()) as { kind: string; title: string }[]
+    const { items: records } =
+      (await portal.json()) as components["schemas"]["PublicRecordPage"]
     expect(
       records.some((record) => record.kind === "decision"),
       "результат особого порядка виден публично"

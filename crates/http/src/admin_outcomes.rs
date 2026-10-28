@@ -93,9 +93,9 @@ async fn load_state(
     tag="admin",
     params(("id"=Uuid,Path,description="Несостоявшийся тендер")),
     responses(
-        (status=200,body=AdminSuccessfulOutcomeStateDto),
-        (status=403,body=crate::error::Problem),
-        (status=404,body=crate::error::Problem)
+        (status = 200, description = "OK", body=AdminSuccessfulOutcomeStateDto),
+        (status = 403, description = "Forbidden", body=crate::error::Problem),
+        (status = 404, description = "Not Found", body=crate::error::Problem)
     )
 )]
 pub async fn state(
@@ -115,11 +115,11 @@ pub async fn state(
     params(("id"=Uuid,Path,description="Несостоявшийся тендер")),
     request_body=RecordAdminSuccessfulOutcomeRequest,
     responses(
-        (status=200,body=AdminSuccessfulOutcomeStateDto),
-        (status=403,body=crate::error::Problem),
-        (status=404,body=crate::error::Problem),
-        (status=409,body=crate::error::Problem),
-        (status=422,body=crate::error::Problem)
+        (status = 200, description = "OK", body=AdminSuccessfulOutcomeStateDto),
+        (status = 403, description = "Forbidden", body=crate::error::Problem),
+        (status = 404, description = "Not Found", body=crate::error::Problem),
+        (status = 409, description = "Conflict", body=crate::error::Problem),
+        (status = 422, description = "Unprocessable Content", body=crate::error::Problem)
     )
 )]
 pub async fn record(

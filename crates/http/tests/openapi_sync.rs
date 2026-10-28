@@ -21,3 +21,26 @@ fn committed_openapi_matches_code() {
         "G5: openapi.json разошелся с кодом - перегенерируй кодоген (см. заголовок файла)"
     );
 }
+
+/// OpenAPI 3.1 requires a description even when a response has no body.
+#[test]
+fn every_inline_response_has_a_description() {
+    let generated: serde_json::Value =
+        serde_json::from_str(&tou_http::openapi().to_json().expect("OpenAPI serializes"))
+            .expect("OpenAPI parses");
+    for (path, item) in generated["paths"].as_object().expect("paths") {
+        for (method, operation) in item.as_object().expect("path item") {
+            if let Some(responses) = operation
+                .get("responses")
+                .and_then(serde_json::Value::as_object)
+            {
+                for (status, response) in responses {
+                    assert!(
+                        response.get("$ref").is_some() || response["description"].is_string(),
+                        "{method} {path} {status} must describe its response"
+                    );
+                }
+            }
+        }
+    }
+}

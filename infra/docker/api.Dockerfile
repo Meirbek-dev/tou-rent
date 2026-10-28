@@ -1,6 +1,7 @@
 # Образ api (NFR-10): сборка в rust:1.99.1, запуск на debian-slim.
 # Миграции едут в образе - их накатывает сервис api-migrate той же версией.
 FROM rust:1.99.1 AS build
+ARG CARGO_BUILD_JOBS=8
 WORKDIR /w
 # Запросы проверяются макросами sqlx по схеме. В сборке образа БД нет,
 # поэтому проверка идет по слепку `.sqlx` (в репозитории, гейт G3):
@@ -22,7 +23,7 @@ RUN mkdir -p apps/api/src apps/jobs/src crates/application/src crates/db/src \
  && echo 'fn main() {}' > apps/api/src/main.rs \
  && echo 'fn main() {}' > apps/jobs/src/main.rs \
  && for lib in application db domain http ports testkit; do touch "crates/$lib/src/lib.rs"; done \
- && cargo build --release -p api \
+ && cargo build --release --locked -p api \
  && rm -rf apps crates
 
 COPY . .

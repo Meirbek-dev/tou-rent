@@ -48,17 +48,21 @@ test("сквозной путь без вставки состояния: пуб
       // Форма создания живет в диалоге - его сперва открывают кнопкой
       await page.getByTestId("open-create-object").click()
       await page.locator("#obj-name").fill(objectName)
+      await page.locator("#obj-name-kk").fill(`E2E үй-жай ${stamp}`)
       await page.locator("#obj-address").fill("г. Павлодар, ул. Ломова, 68")
+      await page.locator("#obj-address-kk").fill("Павлодар қ., Ломов көш., 64")
       await page.locator("#obj-area").fill("42")
       await page.getByTestId("create-object").click()
       await expect(page.getByText(objectName).first()).toBeVisible()
 
       await page.goto("/app/organizer/tenders/new")
       await page.locator("#tender-title").fill(tenderTitle)
+      await page.locator("#tender-title-kk").fill(`E2E тендер ${stamp}`)
       await page
         .locator("#lot-0-object")
         .selectOption({ label: `${objectName} - 42.00 м²` })
       await page.locator("#lot-0-purpose").fill("T68 назначение")
+      await page.locator("#lot-0-purpose-kk").fill("E2E мақсат")
       await page.getByTestId("create-tender").click()
       await expect(
         page.getByRole("heading", { name: tenderTitle })

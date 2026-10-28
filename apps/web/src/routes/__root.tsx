@@ -1,10 +1,10 @@
 import {
+  type ErrorComponentProps,
   HeadContent,
   Link,
   Scripts,
   createRootRouteWithContext,
 } from "@tanstack/react-router"
-import type { ErrorComponentProps } from "@tanstack/react-router"
 import { Suspense, lazy, useSyncExternalStore } from "react"
 
 import PostHogProvider from "../integrations/posthog/provider"

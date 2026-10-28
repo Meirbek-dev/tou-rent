@@ -12,6 +12,8 @@
 // живет alias `typescript-5`, а подмена делается крючком разрешения модулей.
 //
 // Запускается как `node --import ./scripts/ts5-register.mjs ...` (см. codegen).
-import { register } from "node:module"
+import { registerHooks } from "node:module"
 
-register("./ts5-hooks.mjs", import.meta.url)
+import { resolve } from "./ts5-hooks.mjs"
+
+registerHooks({ resolve })

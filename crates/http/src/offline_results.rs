@@ -65,7 +65,7 @@ pub struct OfflineResultsState {
 }
 
 #[utoipa::path(get, path="/api/v1/tenders/{id}/offline-results", tag="failure",
-    params(("id"=Uuid,Path)), responses((status=200,body=OfflineResultsState),(status=404,body=crate::error::Problem)))]
+    params(("id"=Uuid,Path)), responses((status = 200, description = "OK", body=OfflineResultsState),(status = 404, description = "Not Found", body=crate::error::Problem)))]
 pub async fn state(
     user: CurrentUser,
     State(state): State<AppState>,
@@ -82,7 +82,7 @@ pub async fn state(
 
 #[utoipa::path(post, path="/api/v1/tenders/{id}/offline-results", tag="failure",
     params(("id"=Uuid,Path)), request_body=RecordOfflineResults,
-    responses((status=200,body=OfflineResultsState),(status=409,body=crate::error::Problem)))]
+    responses((status = 200, description = "OK", body=OfflineResultsState),(status = 409, description = "Conflict", body=crate::error::Problem)))]
 pub async fn record(
     user: CurrentUser,
     State(app): State<AppState>,
