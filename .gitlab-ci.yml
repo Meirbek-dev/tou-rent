@@ -44,17 +44,17 @@ variables:
   S3_BUCKET_DOSSIERS: dossiers
   # Клиент RustFS: в CI им заводятся бакеты перед прогоном. Версия пиньована
   # по тем же соображениям, что и образы (T70)
-  RC_VERSION: "0.1.31"
+  RC_VERSION: "0.1.36"
   # Версии инструментов, которые пайплайн ставит сам. Пиньованы по той же
   # причине, что и образы (T70): иначе релиз у стороннего проекта краснит
   # гейт без единого коммита в этом репозитории, и отличить «сломали код»
   # от «сменилось окружение» нельзя
-  SQUAWK_VERSION: "2.64.0"
+  SQUAWK_VERSION: "2.71.0"
   SQLX_CLI_VERSION: "0.9.0"
   CARGO_MUTANTS_VERSION: "27.1.0"
   CARGO_DENY_VERSION: "0.20.2"
-  TRIVY_VERSION: "v0.74.0"
-  SCHEMATHESIS_VERSION: "4.25.2"
+  TRIVY_VERSION: "v0.76.1"
+  SCHEMATHESIS_VERSION: "4.32.7"
   # Тот же bun, что закреплен в package.json (packageManager)
   BUN_VERSION: "1.4.4"
   RUST_TOOLCHAIN: "1.99.1"
@@ -122,9 +122,9 @@ variables:
       alias: postgres
     # Та же версия, что на обоих стендах: пайплайн проверяет ту систему,
     # которая поедет в прод, а не соседнюю (T70)
-    - name: redis:8.10.2
+    - name: redis:8.10.3
       alias: redis
-    - name: rustfs/rustfs:1.0.3
+    - name: rustfs/rustfs:1.0.4
       alias: rustfs
   variables:
     RUSTFS_VOLUMES: /data
@@ -386,6 +386,8 @@ deps:
     - curl -fsSL https://bun.sh/install | bash -s "bun-v$BUN_VERSION"
     - export PATH="$HOME/.bun/bin:$PATH"
     - bun install --frozen-lockfile
-    - bun audit
+    # GHSA-gcqx-w48m-w2h4 (deepmerge <=4.3.1, low): исправленного релиза
+    # нет, тянет его только dev-CLI shadcn. Снять, как выйдет deepmerge 4.3.2+
+    - bun audit --ignore=GHSA-gcqx-w48m-w2h4
     - curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin "$TRIVY_VERSION"
     - trivy fs --scanners vuln,secret,misconfig --exit-code 1 --severity HIGH,CRITICAL .

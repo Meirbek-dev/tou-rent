@@ -247,7 +247,7 @@ services:
   # записей безобидна, потеря всех - нет
   redis:
     <<: [*logging, *hardening]
-    image: redis:8.10.2
+    image: redis:8.10.3
     restart: unless-stopped
     # Штатный вход образа снимает права до `redis` только если у него есть
     # SETUID и SETGID, а их снял cap_drop - и redis-server оставался root'ом.
@@ -311,7 +311,7 @@ services:
   # и шаг не зависит от клиента конкретного вендора (A-093).
   rustfs-init:
     <<: *hardening
-    image: amazon/aws-cli:2.38.5
+    image: amazon/aws-cli:2.39.3
     restart: "no"
     mem_limit: 256m
     depends_on:

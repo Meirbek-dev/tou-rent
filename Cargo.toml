@@ -95,7 +95,7 @@ schemars = "1.2.3"
 # Файлы в RustFS (S3 API): сканы заявок, PDF-протоколы (арх. § 2, ADR-0006)
 object_store = { version = "0.14.2", features = ["aws"] }
 # Выгрузка досье тендера архивом (FR-1602): только deflate, без шифрования
-zip = { version = "9.1.0", default-features = false, features = ["deflate"] }
+zip = { version = "9.2.0", default-features = false, features = ["deflate"] }
 # Hash-цепочка аудита INV-A01 (паритет с sha256() в БД)
 sha2 = "0.11.1"
 rand = "0.10.3"

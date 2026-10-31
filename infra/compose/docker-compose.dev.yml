@@ -209,7 +209,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:8.10.2
+    image: redis:8.10.3
     ports:
       - "${TOU_DEV_BIND:-127.0.0.1}:${TOU_DEV_REDIS_PORT:-6379}:6379"
 
@@ -252,7 +252,7 @@ services:
   # файл досье оставался бы на диске разработчика пять лет, и единственной
   # уборкой было бы удаление тома целиком. Прод-режим проверяется на проде.
   rustfs-init:
-    image: amazon/aws-cli:2.38.5
+    image: amazon/aws-cli:2.39.3
     depends_on:
       - rustfs
     environment:
